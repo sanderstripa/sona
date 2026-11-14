@@ -1,19 +1,19 @@
 {
-  "revision": 20261113,
-  "source": "ui/branding/sona-master.svg",
-  "source_sha256": "87bb9ce17e01fd0a2f45b86dba8aec3fa73143e4c74651343fada59d5b40aae4",
+  "revision": 20261114,
+  "source": "ui/branding/sona-master.png",
+  "source_sha256": "052aca48fa9d49f85109d5cbb3e4e59670744c70d30316e56aa853155a8e93cf",
   "png_sha256": {
-    "16": "37d9316276f51ac0295cde2ae092079a69899b373aed4284cef215172ada8e2a",
-    "20": "111f611827e97aa670cd3e3ef87c308f2a238e9626d5e8e963566317952843a3",
-    "24": "b578b8851516fb7f0b362ff104d2732f206e101470b749b47e549811e8e5e404",
-    "32": "4932f4f615a8eee4651a7a3dcc277d13b7da36586af0872c5f222c5494810272",
-    "40": "b54d07bebc737bf4ba19e21090e8ee9ec1ea1de2eb3a6bf1d1974bae58f0a83f",
-    "48": "df924bdcd8d642249c1920c1024d43cbc1ea3fcfa029dda00187ae804a8b7afd",
-    "64": "0fb3aa4b419db7badd2e0c7e71fcf3b3a05d299ae084486fea7e975ed1251bc0",
-    "128": "ee5d1be6faff9f4cc8f66dd47252eaacbe7d5c49c9dd623c7da1212de39368ac",
-    "256": "b2ff82e42ca503969165a3d79bea2bf2244d030611d83ff4c04c34a7ae86bd0c",
-    "512": "b3e78d6c4ee553a38e9ec64fb96474ac6611319e6ce712542430760cbad6be07",
-    "1024": "43001eb34da3db16516a6a6e01ac2f7c2e6fccef368559aa58816dfaa4bcec9a"
+    "16": "05ca313b0093f7d20ccd60e470c6f0dab669cd11ed79a089117267d351c2a895",
+    "20": "9960b2e905473483538315068e2f05fb1cc6fe7a55795fd04236820dd87d1144",
+    "24": "005bcac521105bd971cdb48dd94732c83ae223fa7a2a48131cd2f909c3bbc8b5",
+    "32": "a1223017385b34f3a3ee1d5f99a5b2d3cffcc327b0ea2e2ed4bdaeff31782404",
+    "40": "d7519522cba5f7c7b970f540a470e87890561f7abb17db586fbde31a9e18e5d9",
+    "48": "5355d229dbd2133eb02a20f3f40200c194d8a118e139ac6d6effc06e4c3e657f",
+    "64": "7672c5ad38e16092c3bb5d2f4fcd2ef9238e71df853719b9d47a7f6430b262c8",
+    "128": "089a6fec7fdab6ca6571210090b3b251c8a500caf2f77eacac1f7f432043f950",
+    "256": "454c969a06c63d22a34ebef3b0c086f2cb72341d11d4ff6a90765fa523a94fc9",
+    "512": "a2b8bc3cafc82af3a2bda936a20ac475aedddee80c5e8e381042566ce977c386",
+    "1024": "32ac56299c0457bfc56b0ae5b56c89f29c0ddb9aae470414b350a92099ebbf5a"
   },
   "sizes": [
     16,
@@ -40,7 +40,7 @@
     1024
   ],
   "margin": "0px; full optical diameter at every resolution",
-  "ico_sha256": "2b626aeb112cf3581bc8cf7a9ccad66319445ad82f6c58f5c6ec2c632e62de3a",
+  "ico_sha256": "1e6badbebfa8154296515087845d52bbd53cf5be10d0ac70b282d0910d7d0327",
   "aliases": [
     "sona-icon.png",
     "sona-icon-new.png",
@@ -53,6 +53,7 @@
     "browser-app-icon.ico",
     "sona-app-1.160.24.ico",
     "sona-app-1.160.29.ico",
-    "sona-app-1.160.31.ico"
+    "sona-app-1.160.31.ico",
+    "sona-app-1.160.32.ico"
   ]
 }

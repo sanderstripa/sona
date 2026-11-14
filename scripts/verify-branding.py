@@ -27,8 +27,8 @@ def frames(data):
 
 def verify_assets():
     manifest = json.loads((ROOT/'ui/branding/manifest.json').read_text())
-    source = (ROOT/'ui/branding/sona-master.svg').read_text(encoding='utf-8')
-    assert hashlib.sha256(source.encode('utf-8')).hexdigest() == manifest['source_sha256'], 'Master changed without re-exporting'
+    source = (ROOT/manifest['source']).read_bytes()
+    assert hashlib.sha256(source).hexdigest() == manifest['source_sha256'], 'Master changed without re-exporting'
     for size in manifest['png_sizes']:
         data = (ROOT/f'ui/branding/sona-{size}.png').read_bytes()
         assert hashlib.sha256(data).hexdigest() == manifest['png_sha256'][str(size)], f'Stale PNG at {size}px'
@@ -55,8 +55,9 @@ def verify_assets():
         assert not any(a > 32 and max(r,g,b) < 20 for r,g,b,a in im.getdata()), 'Black pixels'
         assert not any(a > 32 and min(r,g,b) > 245 for r,g,b,a in im.getdata()), 'White pixels'
     assert not (ROOT/'ui/sona-icon.jpg').exists(), 'Opaque legacy logo remains'
-    svg = (ROOT/'ui/branding/sona-master.svg').read_text()
-    assert '<image' not in svg and 'stroke=' not in svg and '<filter' not in svg
+    home = Image.open(ROOT/'ui/sona-home.png').convert('RGBA')
+    assert home.width > home.height and home.getpixel((0, 0))[3] == 0
+    assert 'src="sona-home.png"' in (ROOT/'ui/home.html').read_text()
     return expected
 
 def verify_binary(path, expected):

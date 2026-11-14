@@ -1,3 +1,9 @@
+# Sona Preview 1.160.32
+
+- Replace all application, installer, shortcut and Windows tile icons with the supplied dark circular watercolor mark.
+- Show the transparent blue dome on the home page.
+- Use a fresh shortcut icon path to refresh Windows icon caching after upgrade.
+
 # Sona Preview 1.160.26
 
 - Remove the reserved toolbar space and hide shell overlays during native DOM fullscreen, including iframe video players.

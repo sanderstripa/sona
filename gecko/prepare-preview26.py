@@ -39,12 +39,12 @@ for locale in ['ru','en-US']:
     shutil.copyfile(root/'gecko/chrome/locales'/locale/'branding/brand.ftl',chrome/'locales'/locale/'branding/brand.ftl')
 for name in ['browser.js','window-controls.sys.mjs','shell-host.js','build-info.sys.mjs','updates.js']:
     source = (root / 'gecko/chrome' / name).read_text(encoding='utf-8')
-    (chrome / name).write_text(re.sub(r'0\.(?:13|14)\.0 Preview','Preview 1.160.31',source),encoding='utf-8')
+    (chrome / name).write_text(re.sub(r'0\.(?:13|14)\.0 Preview','Preview 1.160.32',source),encoding='utf-8')
 for path in chrome.rglob('*'):
     if path.suffix in {'.js','.html','.mjs'} and 'third_party' not in path.parts:
         source = path.read_text(encoding='utf-8')
         if '0.17.0' in source:
-            path.write_text(source.replace('0.17.0','1.160.31'),encoding='utf-8')
+            path.write_text(source.replace('0.17.0','1.160.32'),encoding='utf-8')
 def patch(path, before, after):
     source = path.read_text(encoding='utf-8')
     if before not in source:
@@ -80,7 +80,7 @@ for path in (out/'engine').rglob('*.exe'):
 build = json.loads((out/'BUILD.json').read_text(encoding='utf-8'))
 assert build['name'] == 'Sona 0.17.0 Preview'
 build.update(firefox='160.0',mozilla_archive='https://archive.mozilla.org/pub/firefox/releases/160.0/win64/ru/Firefox Setup 160.0.exe',mozilla_sha256='9aca6af4a633546ce9908894d735b0518c36b6a54f108566e517225983cf5173')
-build.update(name='Sona Preview 1.160.31',base_preview=17,sona_source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip())
+build.update(name='Sona Preview 1.160.32',base_preview=17,sona_source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip())
 (out/'BUILD.json').write_text(json.dumps(build,indent=2),encoding='utf-8')
 
 patch(ui/'renderer.js','mattePanel:true','mattePanel:false,showExtensions:false,showHome:false')
@@ -201,3 +201,9 @@ with (ui/'home.css').open('a',encoding='utf-8') as css:
     css.write("\nbody.home-without-logo main{position:fixed;inset:0;width:auto;transform:none;display:grid;place-items:center;gap:0}body.home-without-logo .search-anchor{width:min(700px,calc(100vw - 48px))}body.home-without-logo #logo{display:none}\n")
 
 subprocess.run(["python",str(root/"gecko/brand-internal25.py")],check=True)
+
+# Home uses the transparent dome, independent of the Windows app disc.
+shutil.copyfile(root/"ui/sona-home.png", ui/"sona-home.png")
+patch(ui/"home.html", "browser-icon.png", "sona-home.png")
+with (ui/"home.css").open("a",encoding="utf-8") as css:
+    css.write("\n#logo{height:auto;aspect-ratio:2.45;object-fit:contain}\n")

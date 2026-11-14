@@ -7,7 +7,7 @@ source=root/'ui';target=root/'gecko-out/engine/sona/chrome/ui'
 if target.parent.exists():
  target.mkdir(exist_ok=True)
  for path in source.iterdir():
-  if path.is_file() and path.name in __import__('json').loads((source/'branding/manifest.json').read_text())['aliases'] + ['browser-icon.svg']:shutil.copyfile(path,target/path.name)
+  if path.is_file() and path.name in __import__('json').loads((source/'branding/manifest.json').read_text())['aliases'] + ['browser-icon.svg','sona-home.png']:shutil.copyfile(path,target/path.name)
  shutil.copytree(source/'branding',target/'branding',dirs_exist_ok=True)
  for name in ['sona-petals.png','sona-wave.png']:
   dst=target.parent/'branding'/name;dst.parent.mkdir(exist_ok=True)

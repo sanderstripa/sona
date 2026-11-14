@@ -1,23 +1,23 @@
-<p align="center"><img src="gecko/chrome/branding/sona-petals.png" width="150" alt="Sona"></p>
+<p align="center"><img src="ui/sona-icon.png" width="150" alt="Sona"></p>
 <h1 align="center">Sona</h1>
 
 Sona is a Windows browser with its own interface, built-in VPN and ad blocking.
 
-**Current release — Sona Preview 1.160.31**, powered by **Gecko 160.0**.
+**Current release — Sona Preview 1.160.32**, powered by **Gecko 160.0**.
 
-[Download for Windows x64](https://github.com/sanderstripa/soulu/releases/tag/sona-preview-1.160.31)
+[Download for Windows x64](https://github.com/sanderstripa/sona/releases/tag/sona-preview-1.160.32)
 
 ## Development
 
 Gecko is the primary implementation starting with Sona Preview 1.160.22.
 The default main branch contains the Gecko product. The gecko-preview branch preserves its development history.
 
-The Chromium/CEF implementation is preserved in [cef-archive](https://github.com/sanderstripa/soulu/tree/cef-archive), including source, build scripts and history. It remains available for future development and tests.
+The Chromium/CEF implementation is preserved in [cef-archive](https://github.com/sanderstripa/sona/tree/cef-archive), including source, build scripts and history. It remains available for future development and tests.
 
 ## Features
 
 - Adaptive tabs, tab overview, bookmarks, history and profiles.
-- Inter typography and the blue wave Sona icon throughout the product.
+- Inter typography and the watercolor dome Sona icon throughout the product.
 - Built-in Xray and Sudoku VPN components.
 - Native adblock-rust request filtering and cosmetic filtering.
 - Independently downloadable filter lists. The native blocker core is updated with a tested browser release.

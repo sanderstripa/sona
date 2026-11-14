@@ -113,7 +113,7 @@ def main():
                 check(s.evaluate(shell,'document.querySelector('+json.dumps(selector)+').value')=='','Home blur keeps the address empty: '+layout)
             call('setSettings',{'layout':'compact'})
             s.evaluate(h,"document.querySelector('#query').focus()")
-            check(s.evaluate(h,"document.querySelector('#logo').getAttribute('src')==='browser-icon.png' && typeof window.sonaHomeApply==='function'"),'Bundled logo and internal shell rendered')
+            check(s.evaluate(h,"document.querySelector('#logo').getAttribute('src')==='sona-home.png' && typeof window.sonaHomeApply==='function'"),'Bundled logo and internal shell rendered')
             wait(lambda:s.evaluate(h,"document.activeElement?.id==='query'"))
             check(home(h,'home.get')['homeProvider']=='google','Fresh Home provider is Google')
             check(home(h,'home.get')['favorites']==[],'Fresh favorites are not seeded with marketing links')

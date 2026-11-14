@@ -12,3 +12,11 @@ for size in manifest['png_sizes']:
 for path in [*ui.glob('*.ico'),*(out/'engine/chrome/icons/default').glob('*.ico'),*(out/'engine/browser/chrome/icons/default').glob('*.ico')]:
  assert path.read_bytes()==(root/'ui/sona-icon.ico').read_bytes(),str(path)
 print(json.dumps({'passed':True,'aliases':manifest['aliases'],'sizes':manifest['png_sizes']}))
+
+# The homepage must ship its own transparent dome, never the app disc.
+from PIL import Image
+assert (ui/"sona-home.png").read_bytes()==(root/"ui/sona-home.png").read_bytes()
+assert "sona-home.png" in (ui/"home.html").read_text(encoding="utf-8")
+home=Image.open(ui/"sona-home.png").convert("RGBA")
+assert home.width>home.height and home.getpixel((0,0))[3]==0
+assert (ui/"sona-home.png").read_bytes()!=(ui/"browser-icon.png").read_bytes()
