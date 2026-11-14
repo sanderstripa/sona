@@ -39,6 +39,7 @@ document.addEventListener('pointerdown',e=>{
  const r=n.getBoundingClientRect();
  invoke('browser.tabDrag.begin',{id:Number(n.dataset.tabId||n.dataset.activeTab),layout:tabLayout(),offsetX:e.clientX-r.x,offsetY:e.clientY-r.y,x:e.clientX,y:e.clientY}).catch(error);
 },true);
+document.addEventListener('dragstart',e=>{if(e.target.closest('[data-tab-id],[data-active-tab]'))e.preventDefault();},true);
 const originalEmit=window.__sonaEmit;
 window.__sonaEmit=(name,value)=>{
  originalEmit?.(name,value);

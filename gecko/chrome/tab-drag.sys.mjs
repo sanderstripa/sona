@@ -7,7 +7,7 @@ let gesture=null;
 function rows(win){return (win.Sona?.tabDragLayout||[]).filter(r=>Number.isFinite(r.x)&&r.width>0&&r.height>0);}
 function emit(win,value){if(!win.closed)win.Sona?.native.send('tabDrag',value);}
 function local(win,p){const f=win.document.getElementById('sona-shell-frame').getBoundingClientRect();return {x:p.x-win.mozInnerScreenX-f.x,y:p.y-win.mozInnerScreenY-f.y};}
-function bounds(win){const list=rows(win);if(!list.length)return null;return {left:Math.min(...list.map(r=>r.x)),right:Math.max(...list.map(r=>r.x+r.width)),top:Math.min(...list.map(r=>r.y)),bottom:Math.max(...list.map(r=>r.y+r.height))};}
+function bounds(win){const list=rows(win);if(!list.length)return null;return {left:Math.min(...list.map(r=>r.x)),right:Math.max(win.innerWidth-140,...list.map(r=>r.x+r.width)),top:Math.min(...list.map(r=>r.y)),bottom:Math.max(...list.map(r=>r.y+r.height))};}
 function compatible(a,b){return PrivateBrowsingUtils.isWindowPrivate(a)===PrivateBrowsingUtils.isWindowPrivate(b);}
 function preview(d,p){
  const win=d.owner,list=rows(win),point=local(win,p),id=win.Sona.native.tabID(d.tab),own=list.find(r=>r.id===id);
