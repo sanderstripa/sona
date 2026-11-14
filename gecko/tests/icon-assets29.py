@@ -3,6 +3,9 @@ from pathlib import Path
 import json,sys
 root=Path(__file__).resolve().parents[2]
 out=Path(sys.argv[1]);ui=out/'engine/sona/chrome/ui'
+import re
+shortcut_icon=re.search(r'"(sona-app-[0-9.]+\.ico)"',(root/'gecko/installer/adapter_windows.go').read_text()).group(1)
+assert (ui/shortcut_icon).read_bytes()==(root/'ui/sona-icon.ico').read_bytes(),shortcut_icon
 manifest=json.loads((root/'ui/branding/manifest.json').read_text())
 for name in manifest['aliases']:
  assert (ui/name).read_bytes()==(root/'ui'/name).read_bytes(),name

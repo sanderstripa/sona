@@ -210,3 +210,6 @@ with (ui/"home.css").open("a",encoding="utf-8") as css:
 
 shutil.copyfile(root/'gecko/chrome/integration-ui.js',ui/'integration-ui.js')
 with (ui/'gecko-frontend.css').open('a',encoding='utf-8') as css: css.write((root/'gecko/chrome/frontend.css').read_text(encoding='utf-8'))
+
+# Versioned shortcut resources must exist for every new installer version.
+shutil.copyfile(root/'ui/sona-icon.ico',ui/'sona-app-1.160.33.ico')
