@@ -28,11 +28,32 @@ new MutationObserver(regions).observe(document.body,{childList:true,subtree:true
 
 api.onState(value=>{if(!value.surfaceExpanded)lastRegions='';snapshot=value;regions();const back=document.getElementById('backButton');if(back&&!document.getElementById('geckoForward')){const b=back.cloneNode(true);b.id='geckoForward';b.title='Вперёд';b.dataset.tooltip='Вперёд';b.setAttribute('aria-label','Вперёд');b.style.transform='rotate(180deg)';b.onclick=()=>invoke('browser.forward').catch(error);back.after(b);}const forward=document.getElementById('geckoForward');if(forward){forward.hidden=forward.disabled=!value.page?.canGoForward;forward.style.display=value.page?.canGoForward?'':'none';}});
 document.addEventListener('contextmenu',async e=>{const n=e.target.closest('[data-tab-id]');if(!n)return;e.preventDefault();e.stopImmediatePropagation();const id=Number(n.dataset.tabId),tab=snapshot.tabs?.find(t=>t.id===id);if(!tab)return;const actions=['browser.pinTab','browser.reloadTab','browser.duplicateTab','browser.restoreTab','browser.closeOtherTabs','browser.closeTab'];const labels=[tab.pinned?'Открепить вкладку':'Закрепить вкладку','Обновить','Дублировать','Восстановить закрытую вкладку','Закрыть другие вкладки','Закрыть вкладку'];try{const choice=await api.showMenu(labels.map((label,i)=>({command:i+1,label})),e.clientX,e.clientY);if(choice)await invoke(actions[choice-1],id);}catch(e){error(e);}},true);
-document.addEventListener('pointerdown',e=>{const n=e.target.closest('[data-tab-id]');if(e.button!==0||!n||e.target.closest('[data-close-tab],[data-mute-tab],button,input'))return;drag={n,id:Number(n.dataset.tabId),x:e.clientX,pointer:e.pointerId,moved:false};});
-document.addEventListener('pointermove',e=>{if(!drag||drag.pointer!==e.pointerId)return;if(Math.abs(e.clientX-drag.x)>6){drag.moved=true;drag.n.classList.add('gecko-tab-dragging');}});
-document.addEventListener('pointerup',e=>{if(!drag)return;const d=drag;drag=null;d.n.classList.remove('gecko-tab-dragging');if(!d.moved)return;suppress=performance.now()+250;const target=document.elementFromPoint(e.clientX,e.clientY)?.closest('[data-tab-id]');if(target&&Number(target.dataset.tabId)!==d.id)invoke(e.clientX>target.getBoundingClientRect().x+target.getBoundingClientRect().width/2?'browser.moveTabAfter':'browser.moveTabBefore',{id:d.id,targetId:Number(target.dataset.tabId)}).catch(error);});
-document.addEventListener('pointercancel',()=>{drag?.n.classList.remove('gecko-tab-dragging');drag=null;});
-document.addEventListener('click',e=>{if(performance.now()<suppress&&e.target.closest('[data-tab-id]')){e.preventDefault();e.stopImmediatePropagation();}},true);
+// Geometry is reported in CSS pixels; native polling survives leaving this frame.
+const tabNodes=()=>[...document.querySelectorAll('[data-tab-id],[data-active-tab]')].filter(n=>!n.closest('.tab-overview')&&n.getBoundingClientRect().width);
+function tabLayout(){return tabNodes().map(n=>{const r=n.getBoundingClientRect();return {id:Number(n.dataset.tabId||n.dataset.activeTab),x:r.x-(parseFloat(n.style.translate)||0),y:r.y,width:r.width,height:r.height};});}
+let layoutKey='';
+setInterval(()=>{const rows=tabLayout(),key=JSON.stringify(rows);if(key!==layoutKey){layoutKey=key;invoke('browser.tabDrag.layout',rows).catch(error);}},80);
+document.addEventListener('pointerdown',e=>{
+ const n=e.target.closest('[data-tab-id],[data-active-tab]');
+ if(e.button!==0||!n||n.closest('.tab-overview')||e.target.closest('[data-close-tab],[data-close-active],[data-mute-tab],button,input'))return;
+ const r=n.getBoundingClientRect();
+ invoke('browser.tabDrag.begin',{id:Number(n.dataset.tabId||n.dataset.activeTab),layout:tabLayout(),offsetX:e.clientX-r.x,offsetY:e.clientY-r.y,x:e.clientX,y:e.clientY}).catch(error);
+},true);
+const originalEmit=window.__sonaEmit;
+window.__sonaEmit=(name,value)=>{
+ originalEmit?.(name,value);
+ if(name!=='tabDrag')return;
+ for(const n of tabNodes()){
+  n.classList.remove('gecko-tab-dragging');n.style.removeProperty('translate');
+ }
+ for(const n of tabNodes()){const shift=value?.shifts?.[Number(n.dataset.tabId||n.dataset.activeTab)];if(shift)n.style.translate=shift+'px 0';}
+ if(value?.id){
+  suppress=performance.now()+300;
+  const n=tabNodes().find(n=>Number(n.dataset.tabId||n.dataset.activeTab)===value.id);
+  if(n){n.classList.add('gecko-tab-dragging');n.style.translate=value.dx+'px 0';}
+ }
+};
+document.addEventListener('click',e=>{if(performance.now()<suppress&&e.target.closest('[data-tab-id],[data-active-tab]')){e.preventDefault();e.stopImmediatePropagation();}},true);
 let qrPanel;const emit=window.__sonaEmit;window.__sonaEmit=(name,value)=>{emit?.(name,value);if(name!=='geckoQR')return;qrPanel?.remove();const panel=qrPanel=document.createElement('section');panel.className='site-popover sona-gecko-qr';panel.style.cssText='position:fixed;top:100px;left:calc(50% - 150px);width:300px;padding:20px;z-index:100';const title=document.createElement('h3');title.textContent='QR-код страницы';const qr=qrcode(0,'M');qr.addData(value);qr.make();const count=qr.getModuleCount(),canvas=document.createElement('canvas'),scale=4,pad=4;canvas.width=canvas.height=(count+pad*2)*scale;canvas.style.cssText='width:100%;image-rendering:pixelated';const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#000';for(let y=0;y<count;y++)for(let x=0;x<count;x++)if(qr.isDark(y,x))ctx.fillRect((x+pad)*scale,(y+pad)*scale,scale,scale);panel.append(title,canvas,button('Закрыть',()=>{panel.remove();api.setPopover(false,'gecko-qr');}));document.body.append(panel);api.setPopover(true,'gecko-qr');regions();};
 let downloads=[];
 function renderActions(){const rows=[...document.querySelectorAll('#downloadsList .download-row')];rows.forEach((row,i)=>{const d=downloads[i];if(!d||row.querySelector('.gecko-download-actions'))return;const box=document.createElement('div');box.className='gecko-download-actions';const add=(label,operation)=>box.append(button(label,async()=>{downloads=await invoke('browser.downloads.action',{id:d.id,operation});}));if(d.state==='progressing')add('Отмена','cancel');else{if(d.state==='completed'){add('Открыть','open');add('Папка','reveal');}else add('Повторить','retry');add('Убрать','remove');}row.append(box);});}

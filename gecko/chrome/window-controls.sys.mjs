@@ -99,3 +99,17 @@ export function revealStartup(win) {
  };
  win.setTimeout(flush,0);
 }
+
+// Poll in the parent process: remote surface pointer capture ends on adoption.
+let dragInput;
+export function tabDragPointer(win) {
+ if(!dragInput){
+  const u=library('user32.dll'),abi=ctypes.winapi_abi||ctypes.default_abi;
+  const Point=ctypes.StructType('SonaDragPoint',[{x:ctypes.long},{y:ctypes.long}]);
+  const Rect=ctypes.StructType('SonaDragRect',[{left:ctypes.long},{top:ctypes.long},{right:ctypes.long},{bottom:ctypes.long}]);
+  dragInput={Point,Rect,position:u.declare('GetCursorPos',abi,ctypes.bool,Point.ptr),rect:u.declare('GetWindowRect',abi,ctypes.bool,ctypes.uintptr_t,Rect.ptr),key:u.declare('GetAsyncKeyState',abi,ctypes.int16_t,ctypes.int)};
+ }
+ const p=dragInput.Point(),r=dragInput.Rect();
+ if(!dragInput.position(p.address())||!dragInput.rect(handle(win),r.address()))throw Error('Cannot read tab drag pointer');
+ return {x:win.screenX+(p.x-r.left)/win.devicePixelRatio,y:win.screenY+(p.y-r.top)/win.devicePixelRatio,down:!!(dragInput.key(1)&0x8000),escape:!!(dragInput.key(27)&0x8000)};
+}

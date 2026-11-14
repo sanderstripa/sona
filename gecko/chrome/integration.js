@@ -22,6 +22,9 @@ Sona.dispatch=async(action,payload,source)=>{
  const browser=selected();
  if(action.startsWith('site.')&&payload?.tabId!==undefined&&(payload.tabId!==tabID(gBrowser.selectedTab)||payload.url!==browser.currentURI.spec||payload.generation!==undefined&&payload.generation!==(browser.browsingContext.currentWindowGlobal?.innerWindowId||0)))throw Error('Страница изменилась. Откройте меню заново.');
  switch(action){
+ case 'browser.tabDrag.layout':Sona.tabDragLayout=payload;return true;
+ case 'browser.tabDrag.begin':return ChromeUtils.importESModule('chrome://sona/content/tab-drag.sys.mjs').begin(window,checkedTab(payload.id),payload);
+
  case 'browser.adblock.status':return Sona.adblock?.status()||{ready:false};
  case 'browser.adblock.update':return Sona.adblock.update();
  case 'site.find':send('requestFind',null);return true;

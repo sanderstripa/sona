@@ -3,9 +3,9 @@
 
 Sona is a Windows browser with its own interface, built-in VPN and ad blocking.
 
-**Current release — Sona Preview 1.160.32**, powered by **Gecko 160.0**.
+**Current release — Sona Preview 1.160.33**, powered by **Gecko 160.0**.
 
-[Download for Windows x64](https://github.com/sanderstripa/sona/releases/tag/sona-preview-1.160.32)
+[Download for Windows x64](https://github.com/sanderstripa/sona/releases/tag/sona-preview-1.160.33)
 
 ## Development
 

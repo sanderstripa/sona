@@ -1,6 +1,6 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 const code=fs.readFileSync(require('node:path').join(__dirname,'../chrome/updates.js'),'utf8');
-const tag='sona-preview-1.160.32',name='Sona-1.160.32-Preview-x64.exe';
+const tag='sona-preview-1.160.33',name='Sona-1.160.33-Preview-x64.exe';
 const asset={id:1,name,size:100,digest:'sha256:'+'a'.repeat(64),browser_download_url:`https://github.com/sanderstripa/sona/releases/download/${tag}/${name}`};
 let metadata={id:1367247790,full_name:'sanderstripa/sona'};
 const calls=[],Sona={backend:{},dispatch:()=>{}};

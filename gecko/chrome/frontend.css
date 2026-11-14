@@ -35,3 +35,7 @@ html.cef-runtime body[data-native-page-glass][data-matte=true][data-page-glass-r
 
 /* Caption controls have display:grid rules; hidden must still remove the button. */
 #sona-extensions-menu[hidden]{display:none!important}
+
+.classic-tab,.compact-tab,.compact-active-tab{transition:translate 140ms ease;touch-action:none}
+.gecko-tab-dragging{opacity:1!important;position:relative;z-index:20;transition:none!important;pointer-events:none;cursor:grabbing!important}
+@media(prefers-reduced-motion:reduce){.classic-tab,.compact-tab{transition:none}}
