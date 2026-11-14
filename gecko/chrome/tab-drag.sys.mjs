@@ -42,7 +42,10 @@ async function detach(d,p){
   if(!win.Sona?.native||!win.Sona?.ready||!rows(win).length){d.wait=win.setTimeout(ready,16);return;}
   d.owner=win;d.tab=win.gBrowser.selectedTab;d.pending=false;d.previewed=false;
   if(win.windowState===win.STATE_MAXIMIZED)win.restore();
-  win.moveTo(p.x-d.windowOffsetX,p.y-d.windowOffsetY);win.focus();
+  const row=rows(win).find(r=>r.id===win.Sona.native.tabID(d.tab));
+  if(row){d.windowOffsetX=row.x+d.offsetX+(win.mozInnerScreenX-win.screenX);d.windowOffsetY=row.y+d.offsetY+(win.mozInnerScreenY-win.screenY);}
+  const current=tabDragPointer(win);
+  win.moveTo(current.x-d.windowOffsetX,current.y-d.windowOffsetY);win.focus();
  };
  ready();
 }

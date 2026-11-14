@@ -25,6 +25,8 @@ def verify_tab_drag(m,check,wait):
   point(row['x']+30,bottom+50)
   wait(lambda:m.execute_script('return [...Services.wm.getEnumerator("navigator:browser")].some(w=>w!==window&&w.Sona?.ready&&[...w.gBrowser.tabs].some(t=>t.linkedBrowser.browsingContext.id===__dragContext))'))
   check('native_detach_keeps_live_browsing_context',True)
+  wait(lambda:m.execute_script('''const w=[...Services.wm.getEnumerator("navigator:browser")].find(w=>w!==window&&w.Sona?.ready);if(!w)return false;const t=[...w.gBrowser.tabs].find(t=>t.linkedBrowser.browsingContext.id===__dragContext),r=w.Sona.tabDragLayout?.find(r=>r.id===w.Sona.native.tabID(t));if(!r)return false;const p=ChromeUtils.importESModule("chrome://sona/content/window-controls.sys.mjs").tabDragPointer(w);return Math.abs(p.x-w.mozInnerScreenX-r.x-20)<4&&Math.abs(p.y-w.mozInnerScreenY-r.y-20)<4;'''))
+  check('native_detach_preserves_cursor_grab_point',True)
   # Return to an existing source tab: the controller must adopt before release.
   row2=m.execute_script('return Sona.tabDragLayout[0]')
   point(row2['x']+20,row2['y']+20)
