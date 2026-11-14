@@ -51,7 +51,7 @@ function merge(d,target,p){
  const anchor=target.Sona.native.tabs.get(before?.id),index=anchor?anchor._tPos:target.gBrowser.tabs.length;
  // Do not close the source ourselves: adoptTab closes its empty window only
  // after the browser swap succeeds. Failed adoption leaves the source intact.
- const tab=target.gBrowser.adoptTab(d.tab,index,true);if(!tab)return;
+ const tab=target.gBrowser.adoptTab(d.tab,{tabIndex:index,selectTab:true});if(!tab)return;
  emit(old,null);d.owner=target;d.tab=tab;d.detached=false;d.before=null;
  target.focus();target.Sona.notify();if(!old.closed)old.Sona?.notify();preview(d,p);
 }
