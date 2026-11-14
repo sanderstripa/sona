@@ -21,3 +21,6 @@ pointer.down=false;interval();
 // Never merge private and ordinary windows; single-tab windows stay alive.
 windows=[];w=make('single',1);const privateWindow=make('private',1,true);pointer={x:40,y:20,down:true};assert.equal(context.api.beginWindow(w),true);interval();assert.equal(w.closed,false);assert.equal(privateWindow.gBrowser.tabs.length,1);pointer.down=false;interval();
 console.log('Tab drag: reorder, animated gap, deadzone, live detach, merge, privacy and last-tab checks passed');
+
+// A background window at the same position must not steal in-bar drags.
+windows=[];w=make('front');const back=make('back');pointer={x:40,y:20,down:true};context.api.begin(w,w.gBrowser.tabs[0],{layout:w.Sona.tabDragLayout,offsetX:40,offsetY:20});pointer.x=80;interval();assert.equal(w.gBrowser.tabs.length,3);assert.equal(back.gBrowser.tabs.length,3);pointer.down=false;interval();
