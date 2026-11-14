@@ -67,7 +67,9 @@ function tick(d){
  if(!d.active){if(Math.hypot(p.x-d.startX,p.y-d.startY)<6)return;d.active=true;}
  const ownerBounds=bounds(d.owner),ownerPoint=local(d.owner,p);
  const mayMerge=d.detached||ownerBounds&&(ownerPoint.y<ownerBounds.top-DETACH_MARGIN||ownerPoint.y>ownerBounds.bottom+DETACH_MARGIN);
- const candidates=Services.wm.getZOrderDOMWindowEnumerator?.('navigator:browser',true)||[...Services.wm.getEnumerator('navigator:browser')].reverse();
+ let candidates=[...Services.wm.getEnumerator('navigator:browser')].reverse();
+ // Some Gecko window-mediator backends do not implement Z-order enumeration.
+ try{candidates=[...Services.wm.getZOrderDOMWindowEnumerator('navigator:browser',true)];}catch{}
  for(const win of mayMerge?candidates:[]){
   if(win===d.owner||win.closed||!win.Sona?.ready||win.__sonaClosing||!compatible(d.owner,win)||win.windowState===win.STATE_MINIMIZED)continue;
   const b=bounds(win);if(!b)continue;const q=local(win,p);
@@ -87,7 +89,7 @@ export function begin(win,tab,payload){
  win.Sona.tabDragLayout=payload.layout;
  const p=tabDragPointer(win);if(!p.down)return false;
  const d=gesture={owner:win,tab,startX:p.x,startY:p.y,offsetX:payload.offsetX,offsetY:payload.offsetY,before:null,active:false,detached:false,pending:false};
- d.timer=setInterval(()=>{try{tick(d);}catch(error){console.error(error);finish(false);}},16);
+ d.timer=setInterval(()=>{try{tick(d);}catch(error){d.owner.Sona.lastTabDragError=String(error);console.error(error);finish(false);}},16);
  return true;
 }
 // Dragging the title area of a one-tab window uses the same merge session.
@@ -96,5 +98,5 @@ export function beginWindow(win){
  finish();const p=tabDragPointer(win);if(!p.down)return false;
  if(win.windowState===win.STATE_MAXIMIZED)return false;
  const d=gesture={owner:win,tab:tabs[0],startX:p.x,startY:p.y,offsetX:20,offsetY:20,windowOffsetX:p.x-win.screenX,windowOffsetY:p.y-win.screenY,before:null,active:true,detached:true,pending:false};
- d.timer=setInterval(()=>{try{tick(d);}catch(error){console.error(error);finish(false);}},16);return true;
+ d.timer=setInterval(()=>{try{tick(d);}catch(error){d.owner.Sona.lastTabDragError=String(error);console.error(error);finish(false);}},16);return true;
 }
