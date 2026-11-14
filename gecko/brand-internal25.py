@@ -6,6 +6,8 @@ root=Path(__file__).resolve().parents[1];engine=root/'gecko-out/engine'
 # Force policy on existing profiles as well as new installations.
 bootstrap=engine/'sona.cfg'
 s=bootstrap.read_text(encoding='utf-8')
+product_version=json.loads((engine.parent/'BUILD.json').read_text(encoding='utf-8'))['name'].rsplit(' ',1)[-1]
+assert re.fullmatch(r'\d+\.\d+\.\d+',product_version), 'Invalid Sona build version'
 inject='''
   // Sona starts only when explicitly opened, never at Windows sign-in/restart.
   for(const name of ['browser.startup.windowsLaunchOnLogin.defaultEnabled','browser.startup.windowsLaunchOnLogin.enabled','toolkit.winRegisterApplicationRestart']) {
@@ -21,9 +23,10 @@ inject='''
   // Site compatibility, not product branding. Retain standard Gecko tokens.
   for(const name of ['general.useragent.override','general.useragent.compatMode.firefox']){try{Services.prefs.unlockPref(name);}catch{}}
   Services.prefs.clearUserPref('general.useragent.compatMode.firefox');Services.prefs.getDefaultBranch('').setBoolPref('general.useragent.compatMode.firefox',true);
-  Services.prefs.clearUserPref('general.useragent.override');Services.prefs.getDefaultBranch('').setStringPref('general.useragent.override','Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:160.0) Gecko/20100101 Firefox/160.0 Sona/1.160.31');
+  Services.prefs.clearUserPref('general.useragent.override');Services.prefs.getDefaultBranch('').setStringPref('general.useragent.override','Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:160.0) Gecko/20100101 Firefox/160.0 Sona/__SONA_VERSION__');
   Services.prefs.lockPref('general.useragent.override');
 '''
+inject=inject.replace('__SONA_VERSION__',product_version)
 s=s.replace('  const app = Services.dirsvc.get',inject+'\n  const app = Services.dirsvc.get');bootstrap.write_text(s,encoding='utf-8')
 style=(root/'gecko/chrome/internal-theme25.css').read_text(encoding='utf-8')
 # At the native stylesheet sources so remote about: pages inherit the theme too.
