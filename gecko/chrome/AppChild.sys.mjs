@@ -16,7 +16,14 @@ export class SonaAppChild extends JSWindowActorChild{
    const win=this.contentWindow.wrappedJSObject,sandbox=Cu.Sandbox(win,{sandboxPrototype:win,wantXrays:false});return await Cu.evalInSandbox('(async()=>{'+message.data+'})()',sandbox);
   }
   if(message.name==='emit'||message.name==='home'){const data=message.name==='home'?{name:'home',value:message.data}:message.data;this.contentWindow.dispatchEvent(new this.contentWindow.CustomEvent('SonaEmit',{detail:JSON.stringify(data)}));}
-  if(message.name==='openSection'){const settings=this.contentWindow.wrappedJSObject.sonaSettings;if(settings){await settings.reload();settings.openSection(message.data);}}
+  if(message.name==='openSection'){
+   const settings=this.contentWindow.wrappedJSObject.sonaSettings;
+   if(settings){
+    await settings.reload();
+    if(message.data==='bookmarks')settings.openSection('interface','settings-bookmarksBarMode');
+    else settings.openSection(message.data);
+   }
+  }
  }
  respond(value){try{this.contentWindow.dispatchEvent(new this.contentWindow.CustomEvent('SonaResponse',{detail:JSON.stringify(value)}));}catch{}}
 }

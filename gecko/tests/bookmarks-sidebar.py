@@ -133,6 +133,13 @@ try:
     document.adoptedStyleSheets=document.adoptedStyleSheets.filter(s=>s!==sheet);
     tree.scrollTop=0;
   }"""))
+  open_actions()
+  click('#bookmarkSettingsAction')
+  wait(lambda: call('browser.state.get')['settingsOverlayReady'])
+  check('bookmark_settings_targets_bookmarks_controls', wait(lambda: ui(
+   'return document.querySelector("#control-settings-bookmarksBarMode")?.classList.contains("setting-highlight");', 'settings')))
+  chrome('Sona.closeSettings()')
+  wait(lambda: not call('browser.state.get')['settingsOverlayOpen'])
   click('.bookmark-header-button:first-of-type')
   wait(lambda: shell('return !!document.getElementById("bookmarkTitle")'))
   root_mark = save_mark('Начальная страница')
