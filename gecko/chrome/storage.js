@@ -68,6 +68,51 @@ async function changeBookmark({kind,id,parentId,beforeId,afterId,title,url,folde
  return (await bookmarks.insert({parentGuid,index,...fields,type:folder?bookmarks.TYPE_FOLDER:bookmarks.TYPE_BOOKMARK})).guid;
 }
 
+async function importChromiumBookmarks(roots) {
+ if(!roots||Array.isArray(roots)||typeof roots!=='object')throw Error('Нужен стандартный Chromium Bookmarks JSON.');
+ const bookmarks=PlacesUtils.bookmarks;
+ let count=0;
+ function normalize(nodes,depth=0){
+  if(depth>64)throw Error('Слишком глубокая вложенность закладок.');
+  return nodes.flatMap(node=>{
+   if(++count>20000)throw Error('Слишком много закладок.');
+   if(!node||typeof node!=='object')return [];
+   if(Array.isArray(node.children))
+    return [{title:String(node.name||'Импорт').slice(0,4096),children:normalize(node.children,depth+1)}];
+   if(node.type!=='url'||typeof node.url!=='string')return [];
+   let url;
+   try{url=webURL(node.url);}catch{return [];}
+   return [{url,title:String(node.name||url).slice(0,4096)}];
+  });
+ }
+ const items=normalize(Object.values(roots));
+ if(!items.some(item=>item.children))throw Error('Файл не содержит папок Chromium.');
+
+ let imported=0;
+ async function append(nodes,parentGuid){
+  if(!nodes.length)return;
+  const byKey=new Map();
+  const key=(title,url)=>JSON.stringify([title,url||'']);
+  await bookmarks.fetch({parentGuid},item=>{
+   if(item.type===bookmarks.TYPE_FOLDER||item.type===bookmarks.TYPE_BOOKMARK)
+    byKey.set(key(item.title,item.url?.href),item);
+  });
+  for(const node of nodes){
+   const id=key(node.title,node.url);
+   let item=byKey.get(id);
+   if(!item){
+    item=await bookmarks.insert({parentGuid,title:node.title,
+     ...(node.url?{url:node.url}:{type:bookmarks.TYPE_FOLDER})});
+    byKey.set(id,item);
+    imported++;
+   }
+   if(node.children)await append(node.children,item.guid);
+  }
+ }
+ await append(items,bookmarks.toolbarGuid);
+ return imported;
+}
+
 Sona.readingList=({kind,url,read},pageURL,title)=>{
  const path=PathUtils.join(profile,'sona-reading-list.json');
  const run=async()=>{
@@ -103,6 +148,10 @@ Sona.bookmarks=async(operation,payload)=>{
  const task=async()=>{
   if(operation==='invalidate'){cache=null;return true;}
   if(operation==='get'){if(!cache)cache=await read();hydrate(cache);return structuredClone(cache);}
+  if(operation==='importChromium'){
+   try{return await importChromiumBookmarks(payload);}
+   finally{cache=null;}
+  }
   if(operation==='change'){
    const guid=await changeBookmark(payload);
    cache=await read();

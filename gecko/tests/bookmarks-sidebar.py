@@ -153,6 +153,14 @@ try:
   html.write_text('<!DOCTYPE NETSCAPE-Bookmark-file-1><TITLE>Bookmarks</TITLE><DL><p><DT><H3>Imported folder</H3><DL><p><DT><A HREF="https://example.org/imported">Imported bookmark</A></DL><p></DL><p>',encoding='utf-8')
   run('return await Sona.importFile("bookmarks",'+json.dumps(str(html))+');')
   check('native_html_import', any(row['url']=='https://example.org/imported' and row['parentId'] for row in call('browser.bookmarks.get')))
+  chromium = root / 'Bookmarks'
+  chromium.write_text(json.dumps({'roots':{'bookmark_bar':{'type':'folder','name':'Chromium','children':[
+   {'type':'url','name':'Imported from Chromium','url':'https://example.org/chromium'},
+  ]}}}), encoding='utf-8')
+  import_chromium = 'return await Sona.importFile("chromium-bookmarks",'+json.dumps(str(chromium))+');'
+  check('native_chromium_import_and_duplicate_skip',run(import_chromium)['imported']==2 and run(import_chromium)['imported']==0)
+  check('chromium_import_preserves_existing_places_items', keyed[moved['id']]['guid'] in
+   [row['guid'] for row in call('browser.bookmarks.get')])
   call('browser.bookmarks.homeFavorite', {'id':moved['id'], 'selected':True})
   wait(lambda: shell('return [...document.querySelectorAll(".bookmark-group-label")].some(n=>n.textContent==="Избранное")'))
   call('browser.settings.set', {'theme':'dark'})

@@ -9,7 +9,13 @@ function checkedTab(id){const tab=tabs.get(Number(id));if(!tab||tab.closing)thro
 function profileFile(id){if(!/^[\w-]{1,64}$/.test(id))throw Error('Invalid profile');const file=Cc['@mozilla.org/file/local;1'].createInstance(Ci.nsIFile);file.initWithPath(PathUtils.join(PathUtils.parent(profile),id));if(!file.exists()||!file.isDirectory()||file.isSymlink())throw Error('Invalid profile directory');return file;}
 async function choose(mode,title,filter){const picker=Cc['@mozilla.org/filepicker;1'].createInstance(Ci.nsIFilePicker);picker.init(window.browsingContext,title,mode);if(filter)picker.appendFilter(filter[0],filter[1]);const result=await new Promise(resolve=>picker.open(resolve));return result===Ci.nsIFilePicker.returnOK||result===Ci.nsIFilePicker.returnReplace?picker.file.path:null;}
 async function importFile(kind,path){
- if(isPrivate)throw Error('Импорт недоступен в инкогнито.');if(!['bookmarks','passwords'].includes(kind))throw Error('Unknown import');const stat=await IOUtils.stat(path);if(stat.size>20*1024*1024)throw Error('Файл превышает 20 МБ.');
+ if(isPrivate)throw Error('Импорт недоступен в инкогнито.');if(!['bookmarks','chromium-bookmarks','passwords'].includes(kind))throw Error('Unknown import');const stat=await IOUtils.stat(path);if(stat.size>20*1024*1024)throw Error('Файл превышает 20 МБ.');
+ if(kind==='chromium-bookmarks'){
+  const data=await IOUtils.readJSON(path);
+  const imported=await Sona.bookmarks('importChromium',data?.roots);
+  await Sona.dispatch('browser.bookmarks.get');
+  return {imported};
+ }
  if(kind==='bookmarks'){const {BookmarkHTMLUtils}=ChromeUtils.importESModule('resource://gre/modules/BookmarkHTMLUtils.sys.mjs');const result=await BookmarkHTMLUtils.importFromFile(path,{replace:false});await Sona.bookmarks('invalidate');await Sona.dispatch('browser.bookmarks.get');return {imported:result};}
  const {LoginCSVImport}=ChromeUtils.importESModule('resource://gre/modules/LoginCSVImport.sys.mjs');const rows=await LoginCSVImport.importFromCSV(path);return {added:rows.filter(r=>r.result==='added').length,modified:rows.filter(r=>r.result==='modified').length,failed:rows.filter(r=>!['added','modified','no_change'].includes(r.result)).length};
 }
@@ -44,7 +50,12 @@ Sona.dispatch=async(action,payload,source)=>{
  case 'browser.profile.delete':{if(payload===shared.config.profile)throw Error('Нельзя удалить активный профиль.');const file=profileFile(payload),service=Cc['@mozilla.org/toolkit/profile-service;1'].getService(Ci.nsIToolkitProfileService);try{await service.removeProfileFilesByPath(file,file,0);}catch{throw Error('Профиль используется другим процессом или недоступен. Закройте его перед удалением.');}return true;}
  case 'browser.settings.siteSnapshot':{const tab=checkedTab(payload.tabId),b=tab.linkedBrowser;return {tabId:tabID(tab),url:b.currentURI.spec,generation:b.browsingContext.currentWindowGlobal?.innerWindowId||0};}
  case 'browser.settings.clearSite':{const tab=checkedTab(payload.tabId),b=tab.linkedBrowser;if(!payload.confirmed||b.currentURI.spec!==payload.url||b.browsingContext.currentWindowGlobal?.innerWindowId!==payload.generation)throw Error('Страница изменилась. Подтвердите очистку заново.');await new Promise((resolve,reject)=>Services.clearData.deleteDataFromPrincipal(b.contentPrincipal,false,Ci.nsIClearDataService.CLEAR_DOM_STORAGES,failed=>failed?reject(Error('Не удалось очистить данные.')):resolve()));return {cleared:true};}
- case 'browser.import.filePicker':{const kind=payload;if(!['bookmarks','passwords'].includes(kind))throw Error('Invalid import');const path=await choose(Ci.nsIFilePicker.modeOpen,kind==='bookmarks'?'Импорт закладок':'Импорт паролей',kind==='bookmarks'?['HTML','*.html;*.htm']:['CSV','*.csv']);return path?importFile(kind,path):{canceled:true};}
+ case 'browser.import.filePicker':{
+  const kind=payload,filters={bookmarks:['HTML','*.html;*.htm'],'chromium-bookmarks':['Chromium JSON','*.json;Bookmarks*'],passwords:['CSV','*.csv']};
+  if(typeof kind!=='string'||!Object.hasOwn(filters,kind))throw Error('Invalid import');
+  const path=await choose(Ci.nsIFilePicker.modeOpen,kind==='passwords'?'Импорт паролей':'Импорт закладок',filters[kind]);
+  return path?importFile(kind,path):{canceled:true};
+ }
  case 'browser.import.exportBookmarks':{if(isPrivate)throw Error('Экспорт недоступен в инкогнито.');const path=await choose(Ci.nsIFilePicker.modeSave,'Экспорт закладок',['HTML','*.html']);if(!path)return {canceled:true};const {BookmarkHTMLUtils}=ChromeUtils.importESModule('resource://gre/modules/BookmarkHTMLUtils.sys.mjs');await BookmarkHTMLUtils.exportToFile(path);return {ok:true};}
  case 'site.reader.toggle':case 'site.reader.enter':case 'site.reader.exit':{const url=browser.currentURI.spec;if(url.startsWith('about:reader?')){const original=new URL(url).searchParams.get('url');if(!/^https?:/.test(original||''))throw Error('Invalid reader URL');browser.loadURI(Services.io.newURI(original),{triggeringPrincipal:Services.scriptSecurityManager.getSystemPrincipal()});}else{if(!/^https?:/.test(url))throw Error('Режим чтения доступен для веб-страниц.');readerPrefs();browser.loadURI(Services.io.newURI('about:reader?url='+encodeURIComponent(url)),{triggeringPrincipal:Services.scriptSecurityManager.getSystemPrincipal()});}return true;}
  case 'site.get':case 'site.reader.probe':{const result=await base('browser.site.get',payload,source);return {...result,readerActive:browser.currentURI.spec.startsWith('about:reader?'),readerAvailable:!!browser.isArticle||browser.currentURI.spec.startsWith('about:reader?')};}
