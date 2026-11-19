@@ -1,6 +1,6 @@
 /* One process-wide gesture owns a live Gecko tab, even across remote frames. */
 const {setInterval,clearInterval}=ChromeUtils.importESModule('resource://gre/modules/Timer.sys.mjs');
-const {tabDragPointer}=ChromeUtils.importESModule('chrome://sona/content/window-controls.sys.mjs');
+const {tabDragPointer,moveTabDragWindow}=ChromeUtils.importESModule('chrome://sona/content/window-controls.sys.mjs');
 const {PrivateBrowsingUtils}=ChromeUtils.importESModule('resource://gre/modules/PrivateBrowsingUtils.sys.mjs');
 export const DETACH_MARGIN=26;
 let gesture=null;
@@ -35,7 +35,7 @@ function moveDetached(d,p){
   const row=rows(win).find(r=>r.id===win.Sona.native.tabID(d.tab));
   if(row){
    const point=local(win,p);
-   win.moveTo(win.screenX+point.x-row.x-d.offsetX,win.screenY+point.y-row.y-d.offsetY);
+   moveTabDragWindow(win,point.x-row.x-d.offsetX,point.y-row.y-d.offsetY);
    return;
   }
  }
@@ -102,6 +102,8 @@ export function begin(win,tab,payload){
  finish();if(Services.appinfo.OS!=='WINNT')return false;
  win.Sona.tabDragLayout=payload.layout;
  const p=tabDragPointer(win);if(!p.down)return false;
+ // A held mouse gesture is user input even before the remote actor reports it.
+ if(win.Sona.backend)win.Sona.backend.shared.initialUserInput=true;
  const d=gesture={owner:win,tab,startX:p.x,startY:p.y,offsetX:payload.offsetX,offsetY:payload.offsetY,before:null,active:false,detached:false,pending:false};
  d.timer=setInterval(()=>{try{tick(d);}catch(error){d.owner.Sona.lastTabDragError=String(error);console.error(error);finish(false);}},16);
  return true;
