@@ -120,6 +120,6 @@ export function moveTabDragWindow(win,dx,dy){
  const hwnd=handle(win),r=dragInput.Rect();
  if(!dragInput.rect(hwnd,r.address()))throw Error('Cannot read detached window bounds');
  const x=Math.round(dx*win.devicePixelRatio),y=Math.round(dy*win.devicePixelRatio);
- if((x||y)&&!dragInput.move(hwnd,0,r.left+x,r.top+y,0,0,0x15))
+ if((x||y)&&!dragInput.move(hwnd,0,Number(r.left)+x,Number(r.top)+y,0,0,0x15))
   throw Error('Cannot position detached window');
 }
