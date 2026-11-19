@@ -5,7 +5,20 @@ const {shared,Services,IOUtils,PathUtils,PlacesUtils,profile,isPrivate,save,appl
 const {appRoot}=ChromeUtils.importESModule('chrome://sona/content/AppParent.sys.mjs');const appURL=appRoot();
 const H='http://www.w3.org/1999/xhtml',homeURL=appURL+'home.html';
 const base=Sona.dispatch,ids=new WeakMap(),tabs=new Map();let nextId=1,frame,settingsFrame,shade,pending=0,expanded=false,side=false,bookmarksSide=false,overview=false,rightPanel=0,suggestions=0,popover=false,barAuto=false,toolbarHeight=68,marks=[],downloads=[],lastSnapshot='',lastTabCount=0,lastCosmeticGeneration=0,autoMuted=new WeakSet(),targetHeight=68,geometryToken=0,settingsReady=false,settingsAnimation=null,settingsEpoch=0,pendingSection=null,focusAfterHome=0;
-let bookmarkConfirmation=false;
+let bookmarkConfirmation=false, sidebarClosing=false, sidebarTimer=0;
+function setBookmarksSidebar(open) {
+ if(bookmarksSide===open)return;
+ clearTimeout(sidebarTimer);
+ bookmarksSide=open;
+ sidebarClosing=!open&&!matchMedia('(prefers-reduced-motion:reduce)').matches;
+ if(sidebarClosing)sidebarTimer=setTimeout(()=>{
+  sidebarClosing=false;
+  geometry();
+ },240);
+ document.documentElement.toggleAttribute('sona-bookmarks-open',open);
+ geometry();
+ notify();
+}
 const tabID=tab=>{if(!ids.has(tab)){ids.set(tab,nextId);tabs.set(nextId++,tab);}return ids.get(tab);};
 const selected=()=>gBrowser.selectedBrowser;
 const currentURL=browser=>browser.currentURI.spec===homeURL?'sona://home':browser.currentURI.spec;
@@ -15,15 +28,18 @@ function load(url,background=false){const tab=gBrowser.addTrustedTab(url,{inBack
 function rows(){return validTabs().map(tab=>({id:tabID(tab),active:tab===gBrowser.selectedTab,pinned:tab.pinned,title:tab.linkedBrowser.currentURI.spec===homeURL?'Sona':tab.label,label:tab.label,url:currentURL(tab.linkedBrowser),favicon:tab.image||'',loading:tab.linkedBrowser.currentURI.spec!==homeURL&&tab.hasAttribute('busy'),canGoBack:tab.linkedBrowser.canGoBack,canGoForward:tab.linkedBrowser.canGoForward,microphoneActive:!!tab._sharingState?.microphone,cameraActive:!!tab._sharingState?.camera,audible:tab.hasAttribute('soundplaying'),muted:tab.hasAttribute('muted'),generation:tab.linkedBrowser.browsingContext.currentWindowGlobal?.innerWindowId||0,incognito:isPrivate,thumbnail:overview?(Sona.thumbnails?.get(tab)||null):null}));}
 function barVisible(){const s=shared.config.settings;if(s.bookmarksBarPosition==='hidden'||s.bookmarksBarMode==='never')return false;return s.bookmarksBarMode==='always'||s.bookmarksBarMode==='auto'&&barAuto||['newTab','home'].includes(s.bookmarksBarMode)&&currentURL(selected())==='sona://home';}
 function geometry(){
- const isolatedSidebar=bookmarksSide&&!bookmarkConfirmation&&!popover&&!side&&!overview&&!rightPanel&&!suggestions;
- const full=bookmarkConfirmation||popover||side||bookmarksSide||overview||rightPanel>0||suggestions>0;if(isolatedSidebar&&frame)frame.style.clipPath=`polygon(0 0,100% 0,100% ${toolbarHeight}px,276px ${toolbarHeight}px,276px 100%,0 100%)`;else if(!full&&frame)frame.style.clipPath='none';else if(frame&&frame.style.clipPath==='none')frame.style.clipPath=`inset(0 0 calc(100% - ${toolbarHeight}px) 0)`;
- if(bookmarkConfirmation&&frame)frame.style.clipPath='none';
+ const full=bookmarkConfirmation||popover||side||bookmarksSide||sidebarClosing||overview||rightPanel>0||suggestions>0;
+ const overlays=popover||side||overview||rightPanel>0||suggestions>0;
+ if(frame){
+  frame.toggleAttribute('data-sona-overlay',overlays);
+  frame.toggleAttribute('data-sona-confirmation',bookmarkConfirmation);
+ }
  const height=(validTabs().length>1?88:68)+(barVisible()?28:0),root=document.documentElement;
  if(height!==targetHeight){targetHeight=height;const from=toolbarHeight,start=performance.now(),token=++geometryToken,duration=matchMedia('(prefers-reduced-motion:reduce)').matches?60:320;
   send('adaptiveGeometry',{animation:{startAt:Date.now(),duration,from:from-(barVisible()?28:0),to:height-(barVisible()?28:0)},expanded:validTabs().length>1});
-  const tick=now=>{if(token!==geometryToken)return;const p=Math.min(1,(now-start)/duration),e=1-Math.pow(1-p,3);toolbarHeight=from+(height-from)*e;root.style.setProperty('--sona-toolbar-height',toolbarHeight+'px');if(!popover&&!side&&!bookmarksSide&&!overview&&!rightPanel&&!suggestions)root.style.setProperty('--sona-surface-height',toolbarHeight+'px');if(p===1)notify();if(p<1)requestAnimationFrame(tick);};requestAnimationFrame(tick);
+  const tick=now=>{if(token!==geometryToken)return;const p=Math.min(1,(now-start)/duration),e=1-Math.pow(1-p,3);toolbarHeight=from+(height-from)*e;root.style.setProperty('--sona-toolbar-height',toolbarHeight+'px');if(!popover&&!side&&!bookmarksSide&&!sidebarClosing&&!overview&&!rightPanel&&!suggestions)root.style.setProperty('--sona-surface-height',toolbarHeight+'px');if(p===1)notify();if(p<1)requestAnimationFrame(tick);};requestAnimationFrame(tick);
  }
- root.style.setProperty('--sona-surface-height',(full?innerHeight:toolbarHeight)+'px');root.style.setProperty('--sona-right-panel',rightPanel+'px');root.style.setProperty('--sona-left-panel',bookmarksSide?'276px':'0px');root.toggleAttribute('sona-fullscreen',fullScreen);
+ root.style.setProperty('--sona-surface-height',(full?innerHeight:toolbarHeight)+'px');root.style.setProperty('--sona-right-panel',rightPanel+'px');root.toggleAttribute('sona-fullscreen',fullScreen);
 }
 function snapshot(){const list=rows(),page=list.find(t=>t.active);return {tabs:list,page,activeTabId:page?.id,update:{sona:'0.14.0 Preview',gecko:Services.appinfo.platformVersion,firefox:Services.appinfo.version,xray:Sona.components?.xray?.version||'—',sudoku:Sona.components?.sudoku?.version||'—',adblock:'adblock-rust 0.13.3'},settings:{...shared.config.settings,theme:ChromeUtils.importESModule('chrome://sona/content/theme.sys.mjs').resolveTheme(shared.config.settings.theme),layout:'adaptive'},incognito:isPrivate,fullscreen:fullScreen,maximized:windowState===STATE_MAXIMIZED,sidebarVisible:side,bookmarksSidebarVisible:bookmarksSide,overviewVisible:overview,bookmarksBarVisible:barVisible(),bookmarks:marks,clientHeight:innerHeight,clientWidth:innerWidth,activeProfileId:shared.config.profile,adaptiveToolbar:{expanded:list.length>1,progress:Math.max(0,Math.min(1,(toolbarHeight-(barVisible()?28:0)-68)/20)),height:toolbarHeight-(barVisible()?28:0),active:toolbarHeight!==targetHeight},pageGlassReady:document.documentElement.hasAttribute('sona-page-glass'),surfaceExpanded:!!(popover||side||bookmarksSide||overview||rightPanel||suggestions),settingsOverlayOpen:!!settingsFrame&&!settingsFrame.hidden,settingsOverlayReady:settingsReady};}
 function actorSend(browser,name,data){try{browser?.browsingContext?.currentWindowGlobal?.getActor('SonaApp').sendAsyncMessage(name,data);}catch{}}
@@ -76,7 +92,7 @@ async function siteAction(action,payload){const browser=selected();if(payload?.t
  else if(action.startsWith('reader.'))throw Error('Режим чтения Gecko будет подключён отдельным этапом.');
  else throw Error('Недоступное действие сайта: '+action);notify();return site();}
 async function menu(items,x,y){return new Promise(resolve=>{const popup=document.createXULElement('menupopup');let result=0;for(const item of items){const el=document.createXULElement(item.separator?'menuseparator':'menuitem');if(!item.separator){el.setAttribute('label',item.label||'');if(item.enabled===false)el.setAttribute('disabled','true');el.addEventListener('command',()=>{result=item.command;});}popup.append(el);}document.getElementById('mainPopupSet').append(popup);popup.addEventListener('popuphidden',()=>{popup.remove();resolve(result);},{once:true});popup.openPopupAtScreen(x,y,false);});}
-async function key(event){if(event.defaultPrevented)return;const code=event.key.toLowerCase();if(event.ctrlKey&&event.shiftKey&&code==='t')return;if(event.ctrlKey&&!event.shiftKey&&code==='j'){event.preventDefault();send('openDownloads',null);}else if(event.ctrlKey&&event.shiftKey&&code==='b'){event.preventDefault();await dispatch('browser.bookmarks.auto',!barVisible());}else if(event.ctrlKey&&(code==='b'||event.shiftKey&&code==='o')){event.preventDefault();bookmarksSide=!bookmarksSide;geometry();notify();}else if(event.ctrlKey&&code===','){event.preventDefault();settings();}else if(event.altKey&&['f','t'].includes(code)){event.preventDefault();await dispatch('window.toolbarMenu');}else if(event.ctrlKey&&code==='l'){event.preventDefault();send('focusAddress',null);frame.focus();}else if(event.ctrlKey&&code==='t'){event.preventDefault();await dispatch('browser.newTab');}else if(event.ctrlKey&&code==='w'){event.preventDefault();await dispatch('browser.closeTab',tabID(gBrowser.selectedTab));}else if(event.ctrlKey&&code==='h'){event.preventDefault();openHistory();}else if(event.key==='Escape'){popover=false;suggestions=0;overview=false;bookmarksSide=false;geometry();notify();}}
+async function key(event){if(event.defaultPrevented)return;const code=event.key.toLowerCase();if(event.ctrlKey&&event.shiftKey&&code==='t')return;if(event.ctrlKey&&!event.shiftKey&&code==='j'){event.preventDefault();send('openDownloads',null);}else if(event.ctrlKey&&event.shiftKey&&code==='b'){event.preventDefault();await dispatch('browser.bookmarks.auto',!barVisible());}else if(event.ctrlKey&&(code==='b'||event.shiftKey&&code==='o')){event.preventDefault();setBookmarksSidebar(!bookmarksSide);}else if(event.ctrlKey&&code===','){event.preventDefault();settings();}else if(event.altKey&&['f','t'].includes(code)){event.preventDefault();await dispatch('window.toolbarMenu');}else if(event.ctrlKey&&code==='l'){event.preventDefault();send('focusAddress',null);frame.focus();}else if(event.ctrlKey&&code==='t'){event.preventDefault();await dispatch('browser.newTab');}else if(event.ctrlKey&&code==='w'){event.preventDefault();await dispatch('browser.closeTab',tabID(gBrowser.selectedTab));}else if(event.ctrlKey&&code==='h'){event.preventDefault();openHistory();}else if(event.key==='Escape'){popover=false;suggestions=0;overview=false;setBookmarksSidebar(false);geometry();notify();}}
 function openHistory(clear=false){const id=load(appURL+'history.html'+(clear?'?clear=1':''));return id;}
 async function dispatch(action,payload,source){
  if(action.startsWith('home.')){
@@ -105,7 +121,7 @@ async function dispatch(action,payload,source){
  case 'browser.pinTab':{const t=tabs.get(Number(payload));if(t)t.pinned?gBrowser.unpinTab(t):gBrowser.pinTab(t);notify();return true;}
  case 'browser.tab.audio':{const t=tabs.get(Number(payload));if(t)t.toggleMuteAudio();notify();return true;}
  case 'browser.toggleSidebar':side=!side;geometry();notify();return snapshot();
- case 'browser.bookmarks.sidebar':bookmarksSide=!!payload;geometry();notify();return snapshot();
+ case 'browser.bookmarks.sidebar':setBookmarksSidebar(!!payload);return snapshot();
  case 'browser.overview':overview=!!payload;geometry();notify();return snapshot();
  case 'browser.bookmarks.auto':barAuto=!!payload;notify();return snapshot();
  case 'browser.setRightPanel':rightPanel=Math.max(0,Math.min(400,Number(payload)||0));geometry();return true;
@@ -113,13 +129,10 @@ async function dispatch(action,payload,source){
  case 'browser.bookmarks.confirmation':{if(!source?.appURI?.endsWith('/index.html')||typeof payload!=='boolean')throw Error('Trusted shell required');bookmarkConfirmation=payload;geometry();notify();return true;}
  case 'browser.surfaceRegions':{
   if(!source?.appURI?.endsWith('/index.html'))throw Error('Trusted shell required');
-  if(bookmarkConfirmation){frame.style.clipPath='none';return true;}
-  if(!(popover||side||bookmarksSide||overview||rightPanel||suggestions))return true;
-  if(bookmarksSide&&!popover&&!side&&!overview&&!rightPanel&&!suggestions){geometry();return true;}
   if(!Array.isArray(payload)||payload.length>24)throw Error('Invalid regions');
-  let path=`M0 0H${innerWidth}V${toolbarHeight}H0Z`;
+  let path="";
   for(const rect of payload){if(!Array.isArray(rect)||rect.length!==4||rect.some(n=>!Number.isFinite(n)))throw Error('Invalid rectangle');const [x,y,w,h]=rect,left=Math.max(0,x),top=Math.max(0,y),right=Math.min(innerWidth,x+w),bottom=Math.min(innerHeight,y+h);if(right>left&&bottom>top)path+=` M${left} ${top}H${right}V${bottom}H${left}Z`;}
-  frame.style.clipPath=`path('${path}')`;return true;
+  frame.style.setProperty('--sona-overlay-clip',`path('M0 0H${innerWidth}V${toolbarHeight}H0Z${path}')`);return true;
  }
  case 'browser.popover':popover=!!payload;geometry();return true;
  case 'browser.pageMenu':send('requestSiteMenu',null);return true;
@@ -127,7 +140,7 @@ async function dispatch(action,payload,source){
  case 'browser.find':selected().finder.fastFind(payload.text||'',false,false);return true;
  case 'browser.suggestions':{const q=String(payload||'').toLowerCase();const history=await Sona.history('query',{search:q,offset:0,limit:5});return [...rows().filter(t=>(t.title+' '+t.url).toLowerCase().includes(q)).map(t=>({...t,source:'tab'})),...marks.filter(r=>r.url&&(r.title+' '+r.url).toLowerCase().includes(q)).map(r=>({...r,source:'bookmark'})),...history.rows.map(r=>({...r,source:'history'}))].slice(0,9);}
  case 'browser.downloads.get':return downloads;
- case 'browser.menu.show':return menu(payload.items,source?.pointer?.screenX??(window.mozInnerScreenX+payload.x),source?.pointer?.screenY??(window.mozInnerScreenY+payload.y));
+ case 'browser.menu.show':return menu(payload.items,(!payload.keyboard&&source?.pointer?.screenX)||window.mozInnerScreenX+payload.x,(!payload.keyboard&&source?.pointer?.screenY)||window.mozInnerScreenY+payload.y);
  case 'browser.history.open':return openHistory(!!payload);
  case 'browser.settings.openWindow':settings(payload);return true;
  case 'settings.close':closeSettings();return true;
@@ -135,11 +148,35 @@ async function dispatch(action,payload,source){
  case 'settings.ready':settingsReady=true;if(settingsFrame&&Sona.settingsRequested)animateSettings(true);if(pendingSection)actorSend(settingsFrame,'openSection',pendingSection);notify();return true;
  case 'settings.capabilities':return {matteAvailable:Sona.material?.native===true,defaultBrowser:ChromeUtils.importESModule('chrome://sona/content/window-controls.sys.mjs').isDefault()};
  case 'window.frontendReady':if(source?.appURI?.endsWith('/index.html')){document.documentElement.setAttribute('sona-ui-ready','true');if(!Sona.settingsWarmupScheduled){Sona.settingsWarmupScheduled=true;window.requestIdleCallback(()=>prepareSettings(),{timeout:2500});}Sona.startupTimings??={};Sona.startupTimings.functionalFirstFrameProcessAge=Date.now()-Services.startup.getStartupInfo().process.getTime();ChromeUtils.importESModule('chrome://sona/content/window-controls.sys.mjs').revealStartup(window);notify();}return true;
+ case 'browser.bookmarks.manage':PlacesCommandHook.showPlacesOrganizer('AllBookmarks');return true;
+ case 'browser.bookmarks.change':{
+  if(!source?.appURI?.endsWith('/index.html'))throw Error('Trusted shell required');
+  const result=await Sona.bookmarks('change',payload);
+  marks=result.rows;
+  if(payload.kind==='remove'){
+   shared.config.settings.homeFavoriteIds=(shared.config.settings.homeFavoriteIds||[]).filter(id=>marks.some(row=>row.id===id));
+   await save();
+  }
+  notify();
+  return result;
+ }
+ case 'browser.readingList':{
+  if(!source?.appURI?.endsWith('/index.html'))throw Error('Trusted shell required');
+  const result=await Sona.readingList(payload,currentURL(selected()),gBrowser.selectedTab.label);
+  if(payload.kind!=='get')Services.obs.notifyObservers(null,'sona-reading-list-changed',profile);
+  return result;
+ }
  case 'browser.bookmarks.get':marks=await Sona.bookmarks('get');notify();return marks;
  case 'browser.bookmarks.add':marks=await Sona.bookmarks('add',{url:currentURL(selected()),title:gBrowser.selectedTab.label});notify();return marks;
  case 'browser.bookmarks.remove':marks=await Sona.bookmarks('remove',payload);shared.config.settings.homeFavoriteIds=(shared.config.settings.homeFavoriteIds||[]).filter(id=>marks.some(r=>r.id===id&&r.url));await save();notify();return marks;
  case 'browser.bookmarks.replace':marks=await Sona.bookmarks('replace',Array.isArray(payload)?payload:payload.rows);shared.config.settings.homeFavoriteIds=(shared.config.settings.homeFavoriteIds||[]).filter(id=>marks.some(r=>r.id===id&&r.url));await save();notify();return marks;
- case 'browser.bookmarks.open':navigate(payload);return true;
+ case 'browser.bookmarks.open':{
+  const uri=Services.io.newURI(payload);
+  if(!uri.schemeIs('http')&&!uri.schemeIs('https'))throw Error('Unsupported bookmark URL');
+  selected().loadURI(uri,{triggeringPrincipal:Services.scriptSecurityManager.getSystemPrincipal()});
+  notify();
+  return true;
+ }
  case 'browser.bookmarks.homeFavorite':{if(!Number.isSafeInteger(payload.id)||payload.selected&&!marks.some(r=>r.id===payload.id&&r.url))throw Error('Закладка изменилась. Откройте редактор заново.');const ids=new Set(shared.config.settings.homeFavoriteIds||[]);payload.selected?ids.add(payload.id):ids.delete(payload.id);shared.config.settings.homeFavoriteIds=[...ids];await save();notify();return true;}
  case 'browser.settings.set':{const c=structuredClone(shared.config);Object.assign(c.settings,payload);const r=await base('settings.save',c,source);notify();return r;}
  case 'settings.save':{const r=await base(action,payload,source);if(r.ok){Sona.adblock?.refresh?.();notify();for(const t of validTabs())if(t.linkedBrowser.currentURI.spec===homeURL)emitTo(t.linkedBrowser,homeState());}return r;}
@@ -157,6 +194,11 @@ Sona.native={tabID,tabs,load,navigate,site,settings,send,homeURL,homeState};Sona
 const css=document.createProcessingInstruction('xml-stylesheet','href="chrome://sona/content/host.css" type="text/css"');document.insertBefore(css,document.documentElement);
 document.documentElement.setAttribute('chromemargin','0,0,0,0');
 frame=document.getElementById('sona-shell-frame')||makeFrame('sona-shell-frame',appURL+'index.html');
+const readingListChanged=(_subject,_topic,path)=>{
+ if(path===profile)send('readingListChanged',null);
+};
+Services.obs.addObserver(readingListChanged,'sona-reading-list-changed');
+window.addEventListener('unload',()=>Services.obs.removeObserver(readingListChanged,'sona-reading-list-changed'),{once:true});
 const permissionAnchor=document.getElementById('notification-popup-box');if(permissionAnchor){document.documentElement.append(permissionAnchor);permissionAnchor.style.cssText='position:fixed;left:calc(50% - 285px);top:14px;width:22px;height:22px;opacity:.01;pointer-events:none;z-index:9999';}
 gBrowser.tabContainer.addEventListener('TabClose',event=>{const id=ids.get(event.target);if(id)tabs.delete(id);},true);
 for(const event of ['TabOpen','TabClose','TabSelect','TabPinned','TabUnpinned','TabAttrModified'])gBrowser.tabContainer.addEventListener(event,notify);

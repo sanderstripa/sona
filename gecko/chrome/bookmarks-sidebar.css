@@ -1,0 +1,182 @@
+/* The reserved column follows the native content margin. Caption controls keep
+   their existing right edge while the toolbar gets the remaining width. */
+@property --sona-bookmarks-width {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
+body.sona-bookmarks-layout {
+  --sona-bookmarks-width: 0px;
+  transition: --sona-bookmarks-width 220ms cubic-bezier(.22,1,.36,1);
+}
+body[data-bookmarks-sidebar] { --sona-bookmarks-width: min(276px, max(156px, calc(100vw - 510px)), 35vw); }
+body.sona-bookmarks-layout .browser-toolbar {
+  left: var(--sona-bookmarks-width);
+  width: calc(100% - var(--sona-bookmarks-width));
+  container-type: inline-size;
+}
+@container (max-width: 650px) {
+  body[data-bookmarks-sidebar] .classic-toolbar .classic-main-row {
+    grid-template-columns: minmax(66px, auto) minmax(0, 1fr) auto;
+  }
+  body[data-bookmarks-sidebar] .classic-toolbar .classic-address-pill { min-width: 0; }
+}
+@container (max-width: 540px) {
+  body[data-bookmarks-sidebar] .classic-toolbar .classic-address-pill {
+    gap: 1px;
+    padding-inline: 3px;
+  }
+  body[data-bookmarks-sidebar] .classic-address-pill > :is(.tab-action,.address-menu-button) {
+    min-width: 23px;
+    width: 23px;
+    flex: 0 0 23px;
+  }
+}
+body .sona-bookmarks-sidebar {
+  position: fixed;
+  inset: 0 auto 0 0 !important;
+  z-index: 90;
+  width: var(--sona-bookmarks-width);
+  padding: 0;
+  overflow: clip;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  gap: 0;
+  opacity: 1;
+  transform: none;
+  transition: none;
+  pointer-events: auto;
+  background: var(--solid);
+  border: 0;
+  box-shadow: inset -1px 0 var(--line);
+  color: var(--text);
+  line-height: 1.35;
+  font-size: 13px;
+}
+.sona-bookmarks-sidebar[inert] { pointer-events: none; }
+.sona-bookmarks-sidebar > .bookmark-actions,
+.sona-bookmarks-sidebar .bookmark-action-menu[hidden],
+.sona-bookmarks-sidebar > .bookmark-status:empty { display: none; }
+.sona-bookmarks-sidebar .bookmarks-heading-compact {
+  position: relative;
+  display: flex;
+  justify-content: start;
+  gap: 3px;
+  padding: 10px 9px 6px 12px;
+  font-family: inherit;
+  font-size: 13px;
+}
+.bookmarks-heading-compact strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.sona-bookmarks-sidebar .bookmarks-heading .bookmark-header-button {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 27px;
+  height: 27px;
+  min-width: 27px;
+  min-height: 27px;
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 19px;
+  line-height: 1;
+}
+.bookmark-header-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.bookmark-header-button:disabled { opacity: .45; cursor: default; }
+body .sona-bookmarks-sidebar > .navigation-search {
+  width: calc(100% - 20px);
+  margin: 0 10px 6px;
+  height: 29px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  font: inherit;
+}
+.sona-bookmarks-sidebar .bookmark-tree {
+  padding: 0 7px 6px;
+  scrollbar-width: thin;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.bookmark-branches { margin: 0; padding: 0; list-style: none; }
+.bookmark-branches .bookmark-branches { padding-inline-start: min(13px, 4%); }
+.sona-bookmarks-sidebar .bookmark-line > .bookmark-item {
+  position: relative;
+  min-width: 0;
+  min-height: 31px;
+  padding: 3px 6px;
+  gap: 5px;
+  border-radius: 7px;
+  font: inherit;
+}
+.sona-bookmarks-sidebar .bookmark-icon { background: transparent; color: var(--muted); margin: 0; }
+.bookmark-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.15; stroke-linejoin: round; }
+.bookmark-disclosure { flex: 0 0 9px; color: var(--muted); text-align: center; }
+.sona-bookmarks-sidebar .bookmark-item[aria-current=page],
+.bookmark-sections button[aria-pressed=true],
+.bookmark-action-menu button[aria-pressed=true] {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.bookmark-group-label, .bookmark-empty {
+  margin: 7px 6px 3px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+}
+.bookmark-group-label { font-weight: 600; }
+.bookmark-sections {
+  grid-row: 5;
+  display: flex;
+  justify-content: stretch;
+  gap: 4px;
+  padding: 6px 7px;
+  border-top: 1px solid var(--line);
+}
+.sona-bookmarks-sidebar .bookmark-sections button {
+  flex: 1;
+  min-width: 0;
+  padding: 4px;
+  font: inherit;
+  font-size: 12px;
+  text-align: center;
+}
+.bookmark-status {
+  grid-row: 4;
+  margin: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.bookmark-action-menu {
+  position: absolute;
+  z-index: 2;
+  inset: calc(100% - 4px) 5px auto;
+  display: grid;
+  gap: 1px;
+  max-height: calc(100vh - 54px);
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--solid);
+  box-shadow: 0 5px 16px var(--shadow);
+}
+.sona-bookmarks-sidebar .bookmark-action-menu .nav-action {
+  padding: 5px 7px;
+  min-height: 28px;
+  font: inherit;
+  overflow-wrap: anywhere;
+}
+.sona-bookmarks-sidebar :focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.sona-bookmarks-sidebar .bookmark-line[data-unread] .bookmark-label { font-weight: 600; }
+.sona-bookmarks-sidebar .bookmark-line > button:not(.bookmark-item) { padding: 3px 5px; min-height: 30px; font: inherit; }
+.sona-bookmarks-sidebar .bookmark-item[data-drop=before] { box-shadow: inset 0 2px var(--blue); }
+.sona-bookmarks-sidebar .bookmark-item[data-drop=after] { box-shadow: inset 0 -2px var(--blue); }
+.sona-bookmarks-sidebar .bookmark-item[data-drop=inside] { outline: 2px solid var(--blue); outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) { body.sona-bookmarks-layout { transition: none; } }

@@ -1,7 +1,7 @@
-name: Build and publish Sona Preview 1.160.34
+name: Build and publish Sona Preview 1.160.35
 on:
   push:
-    branches: [gecko-preview, main]
+    branches: [gecko-preview, main, codex/sona-bookmarks-sidebar]
     paths: ['.github/workflows/build-sona26.yml','gecko/**','ui/**','scripts/*branding.py']
 permissions:
   contents: write
@@ -52,7 +52,7 @@ jobs:
             gecko-cache/adblock/target
             speech-build
           key: sona-native-v1-${{ runner.os }}-${{ github.repository }}-${{ hashFiles('cef/sona/adblock/Cargo.lock', 'cef/sona/adblock/src/**', 'gecko/adblock-adapter.rs', 'gecko/speech/**') }}
-      - name: Restore published Preview 17 and apply requested Preview 28 fixes
+      - name: Restore pinned Preview 17 and assemble Sona
         id: assemble
         shell: pwsh
         run: |
@@ -111,19 +111,22 @@ jobs:
           if ($LASTEXITCODE) { throw "Packaged identity audit failed" }
           python gecko/tests/icon-assets29.py gecko-out
           if ($LASTEXITCODE) { throw 'Packaged icon alias audit failed' }
-      - name: Build Sona Preview 1.160.34 installer
+      - name: Build Sona Preview 1.160.35 installer
         id: installer
         if: ${{ !cancelled() && steps.assemble.outcome == 'success' }}
         shell: pwsh
         run: |
-          ./gecko/installer/build.ps1 -BuildDir gecko-out -OutFile Sona-1.160.34-Preview-x64.exe
+          ./gecko/installer/build.ps1 -BuildDir gecko-out -OutFile Sona-1.160.35-Preview-x64.exe
           if ($LASTEXITCODE) { throw 'Installer build failed' }
-          if ((Get-Item Sona-1.160.34-Preview-x64.exe).VersionInfo.ProductVersion -ne '1.160.34.0') { throw 'Installer version mismatch' }
+          if ((Get-Item Sona-1.160.35-Preview-x64.exe).VersionInfo.ProductVersion -ne '1.160.35.0') { throw 'Installer version mismatch' }
       - name: Verify installer executable icon
-        run: python scripts/verify-branding.py --binary Sona-1.160.34-Preview-x64.exe
+        run: python scripts/verify-branding.py --binary Sona-1.160.35-Preview-x64.exe
+      - name: Verify bookmarks sidebar in the Windows x64 runtime
+        if: ${{ !cancelled() && steps.assemble.outcome == 'success' }}
+        run: python gecko/tests/bookmarks-sidebar.py gecko-out/engine/SonaEngine.exe sona30-checks/sidebar
       - name: Verify installed toolbar, incognito, twelve restarts, upgrade and removal
         if: ${{ !cancelled() && steps.installer.outcome == 'success' }}
-        run: python gecko/tests/installer26.py Sona-1.160.34-Preview-x64.exe sona30-checks
+        run: python gecko/tests/installer26.py Sona-1.160.35-Preview-x64.exe sona30-checks
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -133,25 +136,22 @@ jobs:
         with:
           name: sona30-verified-installer
           path: |
-            Sona-1.160.34-Preview-x64.exe
-            Sona-1.160.34-Preview-x64.exe.build.json
-      - name: Publish tested Sona Preview 1.160.34 installer
+            Sona-1.160.35-Preview-x64.exe
+            Sona-1.160.35-Preview-x64.exe.build.json
+      - name: Publish tested Sona Preview 1.160.35 installer
+        if: github.ref == 'refs/heads/main'
         shell: pwsh
         run: |
-          python -c "import json,pathlib; paths=['restart18.json','installer26.json']; assert all(json.loads((pathlib.Path('sona30-checks')/p).read_text())['passed'] for p in paths)"
+          python -c "import json,pathlib; paths=['restart18.json','installer26.json','sidebar/bookmarks-sidebar.json']; assert all(json.loads((pathlib.Path('sona30-checks')/p).read_text())['passed'] for p in paths)"
           if ($LASTEXITCODE) { throw 'Acceptance reports not green' }
-          (Get-FileHash Sona-1.160.34-Preview-x64.exe -Algorithm SHA256).Hash.ToLowerInvariant() + '  Sona-1.160.34-Preview-x64.exe' | Set-Content SHA256SUMS.txt
+          (Get-FileHash Sona-1.160.35-Preview-x64.exe -Algorithm SHA256).Hash.ToLowerInvariant() + '  Sona-1.160.35-Preview-x64.exe' | Set-Content SHA256SUMS.txt
           $branchHead = gh api "repos/$env:GH_REPO/git/ref/heads/$env:GITHUB_REF_NAME" --jq '.object.sha'
           if ($branchHead.Trim() -ne $env:GITHUB_SHA) { throw 'A newer source revision superseded this build' }
-          gh release view sona-preview-1.160.34 --json tagName 2>$null
+          gh release view sona-preview-1.160.35 --json tagName 2>$null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload sona-preview-1.160.34 Sona-1.160.34-Preview-x64.exe SHA256SUMS.txt --clobber
-            if ($LASTEXITCODE) { throw 'Release asset replacement failed' }
-            gh api -X PATCH "repos/$env:GH_REPO/git/refs/tags/sona-preview-1.160.34" -f sha=$env:GITHUB_SHA -F force=true
-            if ($LASTEXITCODE) { throw 'Verified release tag update failed' }
-            gh release edit sona-preview-1.160.34 --latest
+            throw 'Preview 1.160.35 already exists. An existing release will not be overwritten.'
           } else {
-            gh release create sona-preview-1.160.34 Sona-1.160.34-Preview-x64.exe SHA256SUMS.txt --target $env:GITHUB_SHA --title 'Sona Preview 1.160.34' --notes 'Apply the approved graphite icon to application, installer, taskbar and shortcuts. Preserve the separate Home logo and existing browser behavior.'
+            gh release create sona-preview-1.160.35 Sona-1.160.35-Preview-x64.exe SHA256SUMS.txt --target $env:GITHUB_SHA --title 'Sona Preview 1.160.35' --notes 'Обновлена боковая панель закладок Gecko. Добавлены дерево папок, компактное управление и сохраняемый список для чтения.'
           }
           if ($LASTEXITCODE) { throw 'Release publication failed' }
 

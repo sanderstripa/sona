@@ -39,7 +39,10 @@ shutil.copy(ROOT/'gecko/sona.cfg',runtime/'sona.cfg')
 shutil.copy(ROOT/'gecko/defaults/pref/autoconfig.js',runtime/'defaults/pref/autoconfig.js')
 shutil.copy(ROOT/'gecko/chrome/bridge.js',runtime/'sona/chrome/ui/gecko-bridge.js')
 shutil.copy(ROOT/'gecko/chrome/translation-gecko-ui.js',runtime/'sona/chrome/ui/translation-gecko-ui.js')
-shutil.copy(ROOT/'gecko/chrome/frontend.css',runtime/'sona/chrome/ui/gecko-frontend.css')
+frontend=runtime/'sona/chrome/ui/gecko-frontend.css'
+shutil.copy(ROOT/'gecko/chrome/frontend.css',frontend)
+with frontend.open('a',encoding='utf-8') as css:
+ css.write((ROOT/'gecko/chrome/bookmarks-sidebar.css').read_text(encoding='utf-8'))
 shutil.copy(ROOT/'gecko/chrome/extensions-ui.js',runtime/'sona/chrome/ui/extension-toolbar.js')
 shutil.copy(ROOT/'gecko/chrome/integration-ui.js',runtime/'sona/chrome/ui/integration-ui.js')
 shutil.copy(ROOT/'gecko/chrome/tab-preview-ui.js',runtime/'sona/chrome/ui/tab-preview-ui.js')

@@ -37,14 +37,14 @@ chrome = out / 'engine/sona/chrome'
 ui = chrome / 'ui'
 for locale in ['ru','en-US']:
     shutil.copyfile(root/'gecko/chrome/locales'/locale/'branding/brand.ftl',chrome/'locales'/locale/'branding/brand.ftl')
-for name in ['tab-drag.sys.mjs','integration.js','AppChild.sys.mjs','browser.js','window-controls.sys.mjs','shell-host.js','build-info.sys.mjs','updates.js']:
+for name in ['tab-drag.sys.mjs','integration.js','AppChild.sys.mjs','browser.js','window-controls.sys.mjs','shell-host.js','storage.js','host.css','build-info.sys.mjs','updates.js']:
     source = (root / 'gecko/chrome' / name).read_text(encoding='utf-8')
-    (chrome / name).write_text(re.sub(r'0\.(?:13|14)\.0 Preview','Preview 1.160.34',source),encoding='utf-8')
+    (chrome / name).write_text(re.sub(r'0\.(?:13|14)\.0 Preview','Preview 1.160.35',source),encoding='utf-8')
 for path in chrome.rglob('*'):
     if path.suffix in {'.js','.html','.mjs'} and 'third_party' not in path.parts:
         source = path.read_text(encoding='utf-8')
         if '0.17.0' in source:
-            path.write_text(source.replace('0.17.0','1.160.34'),encoding='utf-8')
+            path.write_text(source.replace('0.17.0','1.160.35'),encoding='utf-8')
 def patch(path, before, after):
     source = path.read_text(encoding='utf-8')
     if before not in source:
@@ -80,12 +80,23 @@ for path in (out/'engine').rglob('*.exe'):
 build = json.loads((out/'BUILD.json').read_text(encoding='utf-8'))
 assert build['name'] == 'Sona 0.17.0 Preview'
 build.update(firefox='160.0',mozilla_archive='https://archive.mozilla.org/pub/firefox/releases/160.0/win64/ru/Firefox Setup 160.0.exe',mozilla_sha256='9aca6af4a633546ce9908894d735b0518c36b6a54f108566e517225983cf5173')
-build.update(name='Sona Preview 1.160.34',base_preview=17,sona_source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip())
+build.update(name='Sona Preview 1.160.35',base_preview=17,sona_source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip())
 (out/'BUILD.json').write_text(json.dumps(build,indent=2),encoding='utf-8')
 
 patch(ui/'renderer.js','mattePanel:true','mattePanel:false,showExtensions:false,showHome:false')
 patch(ui/'renderer.js','vpnToolbarVisible:true','vpnToolbarVisible:false')
-patch(ui/'navigation.js','Firefox: экспорт закладок HTML.','Для других браузеров — экспорт закладок в HTML.')
+# Ship the current sidebar and the keyed Gecko overview on the Preview base.
+navigation=(root/'ui/navigation.js').read_text(encoding='utf-8')
+start=navigation.index('  function renderOverview(){')
+end=navigation.index('  function render(){',start)
+overview=(root/'gecko/chrome/overview-renderer.inc.js').read_text(encoding='utf-8')
+(ui/'navigation.js').write_text(navigation[:start]+overview+navigation[end:],encoding='utf-8')
+patch(ui/'gecko-bridge.js',' let serial=0;', ' window.sonaGecko=true;\n let serial=0;')
+bridge=(root/'ui/cef-bridge.js').read_text(encoding='utf-8')
+sidebar_bridge=bridge[bridge.index('    ...(window.sonaGecko'):bridge.index('    getBookmarks:')]
+patch(ui/'cef-bridge.js','    getBookmarks:',sidebar_bridge+'    getBookmarks:')
+patch(ui/'cef-bridge.js','showMenu: (items,x,y) => invoke("browser.menu.show",{items,x:Math.round(x),y:Math.round(y)}),',
+      next(line.strip() for line in bridge.splitlines() if 'showMenu:' in line))
 patch(ui/'settings.js','[{opacity:.94},{opacity:1}]',"[{opacity:reduced?1:0.6,transform:reduced?'none':'translateY(5px)'},{opacity:1,transform:'none'}]")
 # Apply the product strings at their native resource locations before the first
 # window loads, including native dialogs opened outside the browser window.
@@ -122,10 +133,10 @@ patch(ui/'navigation.js','if(entered){closeEditor(false);closeMenu();}render();'
  }
 """)
 
-patch(ui/'navigation.js','renderMenu();menuSearch.focus();','renderMenu();')
 shutil.copyfile(root/'ui/settings-components.js',ui/'settings-components.js')
 with (ui/'gecko-frontend.css').open('a',encoding='utf-8') as css:
     css.write((root/'gecko/chrome/navigation-fixes.css').read_text(encoding='utf-8'))
+    css.write((root/'gecko/chrome/bookmarks-sidebar.css').read_text(encoding='utf-8'))
 
 # The new native tab briefly has about:blank before the home document commits.
 # Never populate address suggestions with this transient startup URI.
@@ -134,8 +145,6 @@ patch(ui/'renderer.js',"input.value=state.page?.url==='sona://home'?'':state.pag
 patch(ui/'renderer.js',"if(input&&state.page?.url==='sona://home'){",
       "if(input&&['sona://home','about:blank'].includes(state.page?.url)){")
 
-patch(ui/'navigation.js', 'menu.append(menuHeading,menuSearch,contents,actions);',
-      (root/'gecko/chrome/bookmark-scroll.inc.js').read_text(encoding='utf-8'))
 patch(ui/'navigation.js', 'caption.append(icon(tab),title,close);', '''
  close.innerHTML='<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 5L19 19M19 5L5 19"/></svg>';
  caption.append(icon(tab),title,close);''')
@@ -212,4 +221,4 @@ shutil.copyfile(root/'gecko/chrome/integration-ui.js',ui/'integration-ui.js')
 with (ui/'gecko-frontend.css').open('a',encoding='utf-8') as css: css.write((root/'gecko/chrome/frontend.css').read_text(encoding='utf-8'))
 
 # Versioned shortcut resources must exist for every new installer version.
-shutil.copyfile(root/'ui/sona-icon.ico',ui/'sona-app-1.160.34.ico')
+shutil.copyfile(root/'ui/sona-icon.ico',ui/'sona-app-1.160.35.ico')
