@@ -1,0 +1,29 @@
+name: Diagnose Sona Windows tab detachment
+on:
+  push:
+    branches: [codex/sona-drag-diagnostic]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUTF8: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          gh run download 44631267815 -n sona35-windows-x64-candidate -D candidate
+          if ($LASTEXITCODE) { throw 'Candidate download failed' }
+          python -m pip install marionette_driver pillow psutil websocket-client
+          python gecko/tests/installer26.py candidate/Sona-1.160.35-Preview-x64.exe diagnostic
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diagnostic
+          path: diagnostic/
