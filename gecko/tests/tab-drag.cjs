@@ -27,4 +27,6 @@ windows=[];w=make('front');const back=make('back');pointer={x:40,y:20,down:true}
 
 // The grab point follows the tab's NEW row, not its old ordinal position.
 windows=[];w=make('offset-source');w.gBrowser.replaceTabWithWindow=t=>{const next=make('new-position',0);next.gBrowser.tabs=[t];next.gBrowser.selectedTab=t;next.Sona.tabDragLayout=[{id:t.id,x:10,y:5,width:96,height:40}];w.gBrowser.tabs.splice(w.gBrowser.tabs.indexOf(t),1);return next;};
-pointer={x:240,y:20,down:true};context.api.begin(w,w.gBrowser.tabs[2],{layout:w.Sona.tabDragLayout,offsetX:40,offsetY:20});pointer.y=80;interval();const moved=windows.at(-1);assert.equal(moved.screenX,190);assert.equal(moved.screenY,55);pointer.down=false;interval();
+pointer={x:240,y:20,down:true};context.api.begin(w,w.gBrowser.tabs[2],{layout:w.Sona.tabDragLayout,offsetX:40,offsetY:20});pointer.y=80;interval();const moved=windows.at(-1);assert.equal(moved.screenX,190);assert.equal(moved.screenY,55);
+// A later layout report moves the row during the held gesture.
+moved.Sona.tabDragLayout[0].y=12;pointer.y=90;interval();assert.equal(moved.screenY,58);pointer.down=false;interval();
