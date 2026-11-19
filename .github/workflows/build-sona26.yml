@@ -48,9 +48,7 @@ jobs:
       - uses: actions/cache/restore@v4
         id: native-cache
         with:
-          path: |
-            gecko-cache/adblock/target
-            speech-build
+          path: gecko-cache/adblock/target
           key: sona-native-v1-${{ runner.os }}-${{ github.repository }}-${{ hashFiles('cef/sona/adblock/Cargo.lock', 'cef/sona/adblock/src/**', 'gecko/adblock-adapter.rs', 'gecko/speech/**') }}
       - name: Restore pinned Preview 17 and assemble Sona
         id: assemble
@@ -77,11 +75,11 @@ jobs:
           if ($LASTEXITCODE) { throw 'Sona blocker build failed' }
           Copy-Item gecko-out/runtime/sona/adblock/sona_adblock.dll gecko-out/engine/sona/adblock/ -Force
           Remove-Item gecko-out/runtime -Recurse -Force
-          cmake -S gecko/speech -B speech-build -A x64
+          cmake --fresh -S gecko/speech -B speech-build-clean -A x64
           if ($LASTEXITCODE) { throw 'Sona speech configuration failed' }
-          cmake --build speech-build --config Release --parallel 4
+          cmake --build speech-build-clean --config Release --parallel 4
           if ($LASTEXITCODE) { throw 'Sona speech build failed' }
-          Copy-Item speech-build/Release/SonaSpeech.exe gecko-out/engine/sona/speech/ -Force
+          Copy-Item speech-build-clean/Release/SonaSpeech.exe gecko-out/engine/sona/speech/ -Force
           python gecko/brand-engine.py
           if ($LASTEXITCODE) { throw 'Engine branding failed' }
           New-Item -ItemType Directory -Force sona30-checks | Out-Null
@@ -94,9 +92,7 @@ jobs:
       - uses: actions/cache/save@v4
         if: ${{ always() && steps.assemble.outcome == 'success' && steps.native-cache.outputs.cache-hit != 'true' }}
         with:
-          path: |
-            gecko-cache/adblock/target
-            speech-build
+          path: gecko-cache/adblock/target
           key: ${{ steps.native-cache.outputs.cache-primary-key }}
       - name: Verify all packaged executable and UI icon resources
         shell: pwsh
@@ -133,8 +129,9 @@ jobs:
           name: sona30-evidence
           path: sona30-checks/
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.installer.outcome == 'success' }}
         with:
-          name: sona30-verified-installer
+          name: sona35-windows-x64-candidate
           path: |
             Sona-1.160.35-Preview-x64.exe
             Sona-1.160.35-Preview-x64.exe.build.json
