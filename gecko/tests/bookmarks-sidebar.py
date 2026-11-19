@@ -115,10 +115,24 @@ try:
     await new Promise(requestAnimationFrame);
   }
   return samples;""")
-  check('animation_shares_workspace_geometry', any(20<page<256 and 20<toolbar<256 and abs(page-toolbar)<12 for page,toolbar in samples), samples)
+  check('animation_shares_workspace_geometry', any(0<page<after['page']['left'] and 0<toolbar<after['left'] and abs(page-toolbar)<12 for page,toolbar in samples), samples)
   check('document_and_zoom_preserved', identity==chrome('return gBrowser.selectedBrowser.browsingContext.currentWindowGlobal.innerWindowId') and after['page']['zoom']==before['page']['zoom'])
   check('page_receives_hits_outside_sidebar', chrome('return document.elementFromPoint(innerWidth-10,innerHeight-10)?.id!=="sona-shell-frame"'))
   check('old_action_grid_hidden', shell('return getComputedStyle(document.querySelector(".bookmark-actions")).display==="none"'))
+  check('scroll_thumb_tracks_tree_at_bottom', shell("""
+  const tree=document.querySelector('.bookmark-tree'),thumb=tree.parentElement.querySelector('.bookmark-scroll-thumb');
+  const sheet=new CSSStyleSheet();
+  sheet.replaceSync('.bookmark-tree::after{content:"";display:block;height:3000px}');
+  document.adoptedStyleSheets.push(sheet);
+  try{
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    tree.scrollTop=tree.scrollHeight;
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    return !thumb.hidden && thumb.offsetHeight>=24 && Math.abs(thumb.getBoundingClientRect().bottom-tree.getBoundingClientRect().bottom)<=1;
+  }finally{
+    document.adoptedStyleSheets=document.adoptedStyleSheets.filter(s=>s!==sheet);
+    tree.scrollTop=0;
+  }"""))
   click('.bookmark-header-button:first-of-type')
   wait(lambda: shell('return !!document.getElementById("bookmarkTitle")'))
   root_mark = save_mark('Начальная страница')

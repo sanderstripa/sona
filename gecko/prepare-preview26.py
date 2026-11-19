@@ -90,7 +90,9 @@ navigation=(root/'ui/navigation.js').read_text(encoding='utf-8')
 start=navigation.index('  function renderOverview(){')
 end=navigation.index('  function render(){',start)
 overview=(root/'gecko/chrome/overview-renderer.inc.js').read_text(encoding='utf-8')
-(ui/'navigation.js').write_text(navigation[:start]+overview+navigation[end:],encoding='utf-8')
+navigation=navigation[:start]+overview+navigation[end:]
+scroll=(root/'gecko/chrome/bookmark-scroll.inc.js').read_text(encoding='utf-8')
+(ui/'navigation.js').write_text(navigation.replace('  menu.append(menuHeading,menuSearch,contents,actions);',scroll),encoding='utf-8')
 patch(ui/'gecko-bridge.js',' let serial=0;', ' window.sonaGecko=true;\n let serial=0;')
 bridge=(root/'ui/cef-bridge.js').read_text(encoding='utf-8')
 sidebar_bridge=bridge[bridge.index('    ...(window.sonaGecko'):bridge.index('    getBookmarks:')]
