@@ -88,6 +88,7 @@
       changeBookmark: value => invoke("browser.bookmarks.change", value),
       manageBookmarks: () => invoke("browser.bookmarks.manage"),
       readingList: (kind, value = {}) => invoke("browser.readingList", { ...value, kind }),
+      onBookmarksMotion: callback => subscribe("bookmarksMotion", callback),
       onReadingListChanged: callback => subscribe("readingListChanged", callback)
     } : {}),
     getBookmarks: () => invoke("browser.bookmarks.get"),

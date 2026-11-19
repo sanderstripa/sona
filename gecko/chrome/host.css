@@ -15,15 +15,15 @@
   inherits: true;
   initial-value: 0px;
 }
-:root { --sona-left-panel: 0px; transition: --sona-left-panel 220ms cubic-bezier(.22,1,.36,1); }
+:root { --sona-left-panel: 0px; }
 :root[sona-bookmarks-open]:not([sona-fullscreen]) { --sona-left-panel: min(276px, max(156px, calc(100vw - 510px)), 35vw); }
 #browser { margin-left: var(--sona-left-panel)!important; }
+:root[sona-fullscreen] #browser { margin-left: 0!important; }
 #sona-shell-frame {
   clip-path: polygon(0 0,100% 0,100% var(--sona-toolbar-height),var(--sona-left-panel) var(--sona-toolbar-height),var(--sona-left-panel) 100%,0 100%);
 }
 #sona-shell-frame[data-sona-overlay] { clip-path: var(--sona-overlay-clip, none); }
 #sona-shell-frame[data-sona-confirmation] { clip-path: none; }
-@media (prefers-reduced-motion: reduce) { :root { transition: none; } }
 
 #tabbrowser-tabpanels,#appcontent,.browserStack,.browserContainer,.browserSidebarContainer{border:0!important;outline:none!important;box-shadow:none!important}
 :root{background:light-dark(#f6f6f8,#08090b)!important;color-scheme:light dark;}

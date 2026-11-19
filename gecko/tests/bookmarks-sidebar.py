@@ -101,6 +101,18 @@ try:
  else:
   screenshot('sona-sidebar-after.png')
   check('synchronous_layout_at_rest', abs(after['left']-after['page']['left'])<2 and after['address']>before['address'] and abs(after['caption']-before['caption'])<2, after)
+  call('browser.bookmarks.sidebar', False)
+  wait(lambda: geometry()['left']<1 and geometry()['page']['left']<1)
+  samples=run("""const actor=document.getElementById('sona-shell-frame').browsingContext.currentWindowGlobal.getActor('SonaApp');
+  await Sona.dispatch('browser.bookmarks.sidebar',true);
+  const started=performance.now(),samples=[];
+  while(performance.now()-started<300){
+    const toolbar=await actor.sendQuery('testing',"return document.querySelector('.classic-toolbar').getBoundingClientRect().left");
+    samples.push([gBrowser.selectedBrowser.getBoundingClientRect().left,toolbar]);
+    await new Promise(requestAnimationFrame);
+  }
+  return samples;""")
+  check('animation_shares_workspace_geometry', any(20<page<256 and 20<toolbar<256 and abs(page-toolbar)<12 for page,toolbar in samples), samples)
   check('document_and_zoom_preserved', identity==chrome('return gBrowser.selectedBrowser.browsingContext.currentWindowGlobal.innerWindowId') and after['page']['zoom']==before['page']['zoom'])
   check('page_receives_hits_outside_sidebar', chrome('return document.elementFromPoint(innerWidth-10,innerHeight-10)?.id!=="sona-shell-frame"'))
   check('old_action_grid_hidden', shell('return getComputedStyle(document.querySelector(".bookmark-actions")).display==="none"'))
@@ -159,7 +171,10 @@ try:
   check('narrow_caption_and_address_accessible', narrow['addressWidth']>20 and narrow['caption']<=narrow['right'] and abs(narrow['left']-narrow['page']['left'])<2,narrow)
   chrome('Services.prefs.setIntPref("ui.prefersReducedMotion",1)')
   wait(lambda: shell('return matchMedia("(prefers-reduced-motion:reduce)").matches'))
-  check('reduced_motion_disables_sidebar_transition', shell('return getComputedStyle(document.body).transitionDuration==="0s"'))
+  click('#sidebarButton')
+  wait(lambda: not call('browser.state.get')['bookmarksSidebarVisible'])
+  check('reduced_motion_disables_sidebar_transition', call('browser.state.get')['bookmarksSidebarMotion']['duration']==0
+   and shell('return !document.body.hasAttribute("data-bookmarks-moving")'))
   stop()
   start()
   check('reading_list_persists_after_restart', read_entries()[0]['read'])

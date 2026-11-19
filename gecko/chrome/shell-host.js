@@ -5,17 +5,34 @@ const {shared,Services,IOUtils,PathUtils,PlacesUtils,profile,isPrivate,save,appl
 const {appRoot}=ChromeUtils.importESModule('chrome://sona/content/AppParent.sys.mjs');const appURL=appRoot();
 const H='http://www.w3.org/1999/xhtml',homeURL=appURL+'home.html';
 const base=Sona.dispatch,ids=new WeakMap(),tabs=new Map();let nextId=1,frame,settingsFrame,shade,pending=0,expanded=false,side=false,bookmarksSide=false,overview=false,rightPanel=0,suggestions=0,popover=false,barAuto=false,toolbarHeight=68,marks=[],downloads=[],lastSnapshot='',lastTabCount=0,lastCosmeticGeneration=0,autoMuted=new WeakSet(),targetHeight=68,geometryToken=0,settingsReady=false,settingsAnimation=null,settingsEpoch=0,pendingSection=null,focusAfterHome=0;
-let bookmarkConfirmation=false, sidebarClosing=false, sidebarTimer=0;
+let bookmarkConfirmation=false, sidebarClosing=false, sidebarAnimation=null, sidebarMotion=null;
 function setBookmarksSidebar(open) {
  if(bookmarksSide===open)return;
- clearTimeout(sidebarTimer);
+ const root=document.documentElement;
+ const from=getComputedStyle(root).getPropertyValue('--sona-left-panel').trim();
+ sidebarAnimation?.cancel();
+ sidebarAnimation=null;
  bookmarksSide=open;
- sidebarClosing=!open&&!matchMedia('(prefers-reduced-motion:reduce)').matches;
- if(sidebarClosing)sidebarTimer=setTimeout(()=>{
-  sidebarClosing=false;
-  geometry();
- },240);
- document.documentElement.toggleAttribute('sona-bookmarks-open',open);
+ root.toggleAttribute('sona-bookmarks-open',open);
+ const duration=matchMedia('(prefers-reduced-motion:reduce)').matches||fullScreen?0:220;
+ // Give the remote toolbar one message turn before both document timelines start.
+ const startAt=performance.timeOrigin+performance.now()+(duration?50:0);
+ sidebarMotion={open,from,startAt,duration};
+ sidebarClosing=!open&&duration>0;
+ if(duration){
+  const to=getComputedStyle(root).getPropertyValue('--sona-left-panel').trim();
+  const animation=root.animate([{'--sona-left-panel':from},{'--sona-left-panel':to}],
+   {duration,easing:'cubic-bezier(.22,1,.36,1)',fill:'backwards'});
+  animation.startTime=startAt-performance.timeOrigin;
+  sidebarAnimation=animation;
+  animation.finished.then(()=>{
+   if(sidebarAnimation!==animation)return;
+   sidebarAnimation=null;
+   sidebarClosing=false;
+   geometry();
+  },()=>{});
+ }
+ send('bookmarksMotion',sidebarMotion);
  geometry();
  notify();
 }
@@ -41,7 +58,7 @@ function geometry(){
  }
  root.style.setProperty('--sona-surface-height',(full?innerHeight:toolbarHeight)+'px');root.style.setProperty('--sona-right-panel',rightPanel+'px');root.toggleAttribute('sona-fullscreen',fullScreen);
 }
-function snapshot(){const list=rows(),page=list.find(t=>t.active);return {tabs:list,page,activeTabId:page?.id,update:{sona:'0.14.0 Preview',gecko:Services.appinfo.platformVersion,firefox:Services.appinfo.version,xray:Sona.components?.xray?.version||'—',sudoku:Sona.components?.sudoku?.version||'—',adblock:'adblock-rust 0.13.3'},settings:{...shared.config.settings,theme:ChromeUtils.importESModule('chrome://sona/content/theme.sys.mjs').resolveTheme(shared.config.settings.theme),layout:'adaptive'},incognito:isPrivate,fullscreen:fullScreen,maximized:windowState===STATE_MAXIMIZED,sidebarVisible:side,bookmarksSidebarVisible:bookmarksSide,overviewVisible:overview,bookmarksBarVisible:barVisible(),bookmarks:marks,clientHeight:innerHeight,clientWidth:innerWidth,activeProfileId:shared.config.profile,adaptiveToolbar:{expanded:list.length>1,progress:Math.max(0,Math.min(1,(toolbarHeight-(barVisible()?28:0)-68)/20)),height:toolbarHeight-(barVisible()?28:0),active:toolbarHeight!==targetHeight},pageGlassReady:document.documentElement.hasAttribute('sona-page-glass'),surfaceExpanded:!!(popover||side||bookmarksSide||overview||rightPanel||suggestions),settingsOverlayOpen:!!settingsFrame&&!settingsFrame.hidden,settingsOverlayReady:settingsReady};}
+function snapshot(){const list=rows(),page=list.find(t=>t.active);return {tabs:list,page,activeTabId:page?.id,update:{sona:'0.14.0 Preview',gecko:Services.appinfo.platformVersion,firefox:Services.appinfo.version,xray:Sona.components?.xray?.version||'—',sudoku:Sona.components?.sudoku?.version||'—',adblock:'adblock-rust 0.13.3'},settings:{...shared.config.settings,theme:ChromeUtils.importESModule('chrome://sona/content/theme.sys.mjs').resolveTheme(shared.config.settings.theme),layout:'adaptive'},incognito:isPrivate,fullscreen:fullScreen,maximized:windowState===STATE_MAXIMIZED,sidebarVisible:side,bookmarksSidebarVisible:bookmarksSide,bookmarksSidebarMotion:sidebarMotion,overviewVisible:overview,bookmarksBarVisible:barVisible(),bookmarks:marks,clientHeight:innerHeight,clientWidth:innerWidth,activeProfileId:shared.config.profile,adaptiveToolbar:{expanded:list.length>1,progress:Math.max(0,Math.min(1,(toolbarHeight-(barVisible()?28:0)-68)/20)),height:toolbarHeight-(barVisible()?28:0),active:toolbarHeight!==targetHeight},pageGlassReady:document.documentElement.hasAttribute('sona-page-glass'),surfaceExpanded:!!(popover||side||bookmarksSide||overview||rightPanel||suggestions),settingsOverlayOpen:!!settingsFrame&&!settingsFrame.hidden,settingsOverlayReady:settingsReady};}
 function actorSend(browser,name,data){try{browser?.browsingContext?.currentWindowGlobal?.getActor('SonaApp').sendAsyncMessage(name,data);}catch{}}
 function send(name,value){const shellValue=name==='settings'?{...value,theme:ChromeUtils.importESModule('chrome://sona/content/theme.sys.mjs').resolveTheme(value.theme)}:value;actorSend(frame,'emit',{name,value:shellValue});if(settingsFrame&&!settingsFrame.hidden)actorSend(settingsFrame,'emit',{name,value});}
 function emitTo(browser,value){actorSend(browser,'home',value);}

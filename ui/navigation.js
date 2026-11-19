@@ -50,8 +50,8 @@
       }
     }else menu.hidden=true;
     pane='list';
-    await api.setBookmarksSidebar(false);
-    if(gecko&&epoch===menuEpoch)setSidebar(false);
+    const current=await api.setBookmarksSidebar(false);
+    if(gecko&&epoch===menuEpoch)setSidebar(false,current?.bookmarksSidebarMotion);
     if(!gecko){updatePopover();api.setSuggestionsHeight(0);}
   }
   async function openMenu(id=0,editor=false){
@@ -62,7 +62,7 @@
     if(gecko){
       section='bookmarks';
       const current=await api.setBookmarksSidebar(true);
-      if(epoch===menuEpoch)setSidebar(Boolean(current?.bookmarksSidebarVisible));
+      if(epoch===menuEpoch)setSidebar(Boolean(current?.bookmarksSidebarVisible),current?.bookmarksSidebarMotion);
       renderMenu();
       return;
     }
@@ -248,12 +248,32 @@
     if(status&&!menu.inert)status.textContent=error.message;
     else alert(error.message);
   }
-  function setSidebar(open){
+  let sidebarAnimation=null, lastMotion=-1;
+  function setSidebar(open,motion){
+    if(motion&&motion.startAt<lastMotion)return;
     document.body.toggleAttribute('data-bookmarks-sidebar',open);
     menu.inert=!open;
     menu.setAttribute('aria-hidden',String(!open));
     menu.hidden=false;
     if(!open)closeActions(false);
+    if(!motion||motion.startAt===lastMotion)return;
+    lastMotion=motion.startAt;
+    sidebarAnimation?.cancel();
+    sidebarAnimation=null;
+    const body=document.body;
+    body.removeAttribute('data-bookmarks-moving');
+    if(!motion.duration||motion.open!==open)return;
+    const to=getComputedStyle(body).getPropertyValue('--sona-bookmarks-width').trim();
+    const animation=body.animate([{'--sona-bookmarks-width':motion.from},{'--sona-bookmarks-width':to}],
+      {duration:motion.duration,easing:'cubic-bezier(.22,1,.36,1)',fill:'backwards'});
+    animation.startTime=motion.startAt-performance.timeOrigin;
+    sidebarAnimation=animation;
+    body.setAttribute('data-bookmarks-moving','');
+    animation.finished.then(()=>{
+      if(sidebarAnimation!==animation)return;
+      sidebarAnimation=null;
+      body.removeAttribute('data-bookmarks-moving');
+    },()=>{});
   }
   async function refreshReading(kind='get',payload){
     const epoch=++readingEpoch;
@@ -355,6 +375,10 @@
     tabs.append(bookmarkTab,readingTab);
     menu.append(status,tabs);
     setSidebar(false);
+    api.onBookmarksMotion(motion=>{
+      setSidebar(motion.open,motion);
+      if(motion.open)renderMenu();
+    });
     api.onReadingListChanged(()=>{if(section==='reading'&&!menu.inert)refreshReading().catch(report);});
     document.addEventListener('pointerdown',e=>{if(!menuHeading.contains(e.target))closeActions(false);});
     menu.addEventListener('focusout',e=>{
@@ -532,5 +556,5 @@
     await overview.animate([{opacity:1,transform:'none'},{opacity:0,transform:reduced?'none':'translateY(6px)'}],{duration:reduced?60:240,easing:'cubic-bezier(.4,0,.6,1)'}).finished.catch(()=>{});
   }};
   api.onEditBookmark?.(async id=>{rows=await api.getBookmarks();const row=rows.find(r=>r.id===id);if(row)edit(row);});
-  const apply=s=>{const changed=profileKey()!==String(s.activeProfileId)+':'+String(s.incognito),entered=s.overviewVisible&&!state.overviewVisible;state=s;if(changed)closeEditor(false);rows=s.bookmarks||rows;if(gecko)setSidebar(!!s.bookmarksSidebarVisible&&!s.fullscreen);else menu.hidden=!s.bookmarksSidebarVisible;if(entered){closeEditor(false);closeMenu();}render();document.querySelectorAll('#sidebarButton,#compactSidebarButton').forEach(n=>{n.title=s.settings?.language==='en'?'Bookmarks':'Закладки';n.setAttribute('aria-label',n.title);n.classList.toggle('active',!!s.bookmarksSidebarVisible);});document.querySelectorAll('#favoritesButton,[data-favorites]').forEach(n=>{n.title=s.settings?.language==='en'?'Save bookmark':'Сохранить закладку';const saved=rows.some(r=>r.url===s.page?.url);n.classList.toggle('bookmark-saved',saved);n.setAttribute('aria-pressed',String(saved));});if(entered){search.value='';renderOverview();search.focus();const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;overview.animate([{opacity:0,transform:reduced?'none':'translateY(8px)'},{opacity:1,transform:'none'}],{duration:reduced?60:320,easing:'cubic-bezier(.22,1,.36,1)'});}};api.onState(apply);api.getState().then(apply);
+  const apply=s=>{const changed=profileKey()!==String(s.activeProfileId)+':'+String(s.incognito),entered=s.overviewVisible&&!state.overviewVisible;state=s;if(changed)closeEditor(false);rows=s.bookmarks||rows;if(gecko)setSidebar(!!s.bookmarksSidebarVisible&&!s.fullscreen,s.bookmarksSidebarMotion);else menu.hidden=!s.bookmarksSidebarVisible;if(entered){closeEditor(false);closeMenu();}render();document.querySelectorAll('#sidebarButton,#compactSidebarButton').forEach(n=>{n.title=s.settings?.language==='en'?'Bookmarks':'Закладки';n.setAttribute('aria-label',n.title);n.classList.toggle('active',!!s.bookmarksSidebarVisible);});document.querySelectorAll('#favoritesButton,[data-favorites]').forEach(n=>{n.title=s.settings?.language==='en'?'Save bookmark':'Сохранить закладку';const saved=rows.some(r=>r.url===s.page?.url);n.classList.toggle('bookmark-saved',saved);n.setAttribute('aria-pressed',String(saved));});if(entered){search.value='';renderOverview();search.focus();const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;overview.animate([{opacity:0,transform:reduced?'none':'translateY(8px)'},{opacity:1,transform:'none'}],{duration:reduced?60:320,easing:'cubic-bezier(.22,1,.36,1)'});}};api.onState(apply);api.getState().then(apply);
 })();
