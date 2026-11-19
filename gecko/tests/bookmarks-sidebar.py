@@ -77,6 +77,9 @@ baseline = os.environ.get('SONA_SIDEBAR_BASELINE')=='1'
 report = {'passed': False, 'checks': {}}
 try:
  start()
+ if not baseline:
+  chrome('Services.prefs.setIntPref("ui.prefersReducedMotion",0)')
+  wait(lambda: shell('return !matchMedia("(prefers-reduced-motion:reduce)").matches'))
  call('browser.navigate', url)
  wait(lambda: content('return !!document.getElementById("v")'))
  call('browser.settings.set', {'theme': 'light'})
@@ -137,6 +140,9 @@ try:
   bridge('browser.bookmarks.change', {'kind': 'move', 'id': moved['id'], 'parentId': parent['id'], 'afterId': nested['id']})
   keyed = {row['id']: row for row in call('browser.bookmarks.get')}
   check('places_move_after', keyed[moved['id']]['order']>keyed[nested['id']]['order'])
+  wait(lambda: shell('const q=id=>[...document.querySelectorAll(".bookmarks-menu [data-bookmark-id]")].find(n=>Number(n.dataset.bookmarkId)===id);'
+   'const source=q('+str(moved['id'])+'),target=q('+str(nested['id'])+');'
+   'return source&&target&&source.getBoundingClientRect().top>target.getBoundingClientRect().top;'))
   drag_item(moved['id'], nested['id'])
   wait(lambda: any(row['id']==moved['id'] and row['parentId']==nested['id'] for row in call('browser.bookmarks.get')))
   check('pointer_drag_moves_to_folder', True)
