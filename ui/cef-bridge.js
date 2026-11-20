@@ -32,7 +32,7 @@
   // not shrink the OSR host while another still owns client-area content.
   const popovers = new Set();
   window.browserShell = {
-    showMenu: (items,x,y) => invoke("browser.menu.show",{items,x:Math.round(x),y:Math.round(y)}),
+    showMenu: (items,x,y,keyboard = false) => invoke("browser.menu.show",{items,x:Math.round(x),y:Math.round(y),...(keyboard?{keyboard}:{})}),
     translation: (action,payload) => invoke("browser.translate."+action,payload),
     translationCache: (operation,sha256) => invoke("browser.translate.cache."+operation,{sha256}),
     onTranslateRequest: callback => subscribe("translateRequest",callback),
@@ -84,6 +84,13 @@
     setBookmarksAuto: value => invoke("browser.bookmarks.auto", value),
     openTab: (url, background = false) => invoke("browser.openTab", {url, background}),
     replaceBookmarks: (rows, profile) => invoke("browser.bookmarks.replace", profile===undefined?rows:{rows,profile}),
+    ...(window.sonaGecko ? {
+      changeBookmark: value => invoke("browser.bookmarks.change", value),
+      manageBookmarks: () => invoke("browser.bookmarks.manage"),
+      readingList: (kind, value = {}) => invoke("browser.readingList", { ...value, kind }),
+      onBookmarksMotion: callback => subscribe("bookmarksMotion", callback),
+      onReadingListChanged: callback => subscribe("readingListChanged", callback)
+    } : {}),
     getBookmarks: () => invoke("browser.bookmarks.get"),
     addBookmark: () => invoke("browser.bookmarks.add"),
     setHomeFavorite: (id, selected, profile) => invoke("browser.bookmarks.homeFavorite", {id, selected, profile}),

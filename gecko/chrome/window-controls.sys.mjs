@@ -107,9 +107,19 @@ export function tabDragPointer(win) {
   const u=library('user32.dll'),abi=ctypes.winapi_abi||ctypes.default_abi;
   const Point=ctypes.StructType('SonaDragPoint',[{x:ctypes.long},{y:ctypes.long}]);
   const Rect=ctypes.StructType('SonaDragRect',[{left:ctypes.long},{top:ctypes.long},{right:ctypes.long},{bottom:ctypes.long}]);
-  dragInput={Point,Rect,position:u.declare('GetCursorPos',abi,ctypes.bool,Point.ptr),rect:u.declare('GetWindowRect',abi,ctypes.bool,ctypes.uintptr_t,Rect.ptr),key:u.declare('GetAsyncKeyState',abi,ctypes.int16_t,ctypes.int)};
+  dragInput={Point,Rect,position:u.declare('GetCursorPos',abi,ctypes.bool,Point.ptr),rect:u.declare('GetWindowRect',abi,ctypes.bool,ctypes.uintptr_t,Rect.ptr),key:u.declare('GetAsyncKeyState',abi,ctypes.int16_t,ctypes.int),move:u.declare('SetWindowPos',abi,ctypes.bool,ctypes.uintptr_t,ctypes.uintptr_t,ctypes.int,ctypes.int,ctypes.int,ctypes.int,ctypes.uint32_t)};
  }
  const p=dragInput.Point(),r=dragInput.Rect();
  if(!dragInput.position(p.address())||!dragInput.rect(handle(win),r.address()))throw Error('Cannot read tab drag pointer');
  return {x:win.screenX+(p.x-r.left)/win.devicePixelRatio,y:win.screenY+(p.y-r.top)/win.devicePixelRatio,down:!!(dragInput.key(1)&0x8000),escape:!!(dragInput.key(27)&0x8000)};
+}
+
+// Position the detached HWND in native screen pixels. Gecko's moveTo clamps
+// browser windows to the available desktop, unlike a held native window drag.
+export function moveTabDragWindow(win,dx,dy){
+ const hwnd=handle(win),r=dragInput.Rect();
+ if(!dragInput.rect(hwnd,r.address()))throw Error('Cannot read detached window bounds');
+ const x=Math.round(dx*win.devicePixelRatio),y=Math.round(dy*win.devicePixelRatio);
+ if((x||y)&&!dragInput.move(hwnd,0,Number(r.left)+x,Number(r.top)+y,0,0,0x15))
+  throw Error('Cannot position detached window');
 }

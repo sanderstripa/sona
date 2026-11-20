@@ -9,11 +9,15 @@ def verify_tab_drag(m,check,wait):
  Sona.config.settings.layout='classic';Sona.notify();
  window.__dragTabs=[gBrowser.addTrustedTab('about:blank',{skipAnimation:true}),gBrowser.addTrustedTab('about:blank',{skipAnimation:true})];
  gBrowser.selectedTab=__dragTabs[0];Sona.notify();
- return {hwnd:String(window.docShell.treeOwner.QueryInterface(Ci.nsIInterfaceRequestor).getInterface(Ci.nsIBaseWindow).nativeHandle),scale:devicePixelRatio};
+ const frame=document.getElementById('sona-shell-frame').getBoundingClientRect();
+ return {dx:mozInnerScreenX-screenX+frame.x,dy:mozInnerScreenY-screenY+frame.y,hwnd:String(window.docShell.treeOwner.QueryInterface(Ci.nsIInterfaceRequestor).getInterface(Ci.nsIBaseWindow).nativeHandle),scale:devicePixelRatio};
  ''')
  wait(lambda:m.execute_script('return Sona.tabDragLayout?.some(r=>r.id===Sona.native.tabID(__dragTabs[0]))'))
  rect=Rect();u.GetWindowRect(C.c_void_p(int(info['hwnd'],16)),C.byref(rect))
- def point(x,y):u.SetCursorPos(round(rect.left+x*info['scale']),round(rect.top+y*info['scale']))
+ # The HWND rect includes the invisible resize border. Tab coordinates do not.
+ def point(x,y):
+  u.SetCursorPos(round(rect.left+(x+info['dx'])*info['scale']),
+                 round(rect.top+(y+info['dy'])*info['scale']))
  row=m.execute_script('return Sona.tabDragLayout.find(r=>r.id===Sona.native.tabID(__dragTabs[0]))')
  try:
   point(row['x']+20,row['y']+20);u.mouse_event(2,0,0,0,0)
@@ -26,7 +30,7 @@ def verify_tab_drag(m,check,wait):
   point(row['x']+30,bottom+50)
   wait(lambda:m.execute_script('if(Sona.lastTabDragError)throw Error(Sona.lastTabDragError);return [...Services.wm.getEnumerator("navigator:browser")].some(w=>w!==window&&w.Sona?.ready&&[...w.gBrowser.tabs].some(t=>t.linkedBrowser.browsingContext.id===__dragContext))'))
   check('native_detach_keeps_live_browsing_context',True)
-  wait(lambda:m.execute_script('''const w=[...Services.wm.getEnumerator("navigator:browser")].find(w=>w!==window&&w.Sona?.ready);if(!w)return false;const t=[...w.gBrowser.tabs].find(t=>t.linkedBrowser.browsingContext.id===__dragContext),r=w.Sona.tabDragLayout?.find(r=>r.id===w.Sona.native.tabID(t));if(!r)return false;const p=ChromeUtils.importESModule("chrome://sona/content/window-controls.sys.mjs").tabDragPointer(w);return Math.abs(p.x-w.mozInnerScreenX-r.x-20)<4&&Math.abs(p.y-w.mozInnerScreenY-r.y-20)<4;'''))
+  wait(lambda:m.execute_script('''const w=[...Services.wm.getEnumerator("navigator:browser")].find(w=>w!==window&&w.Sona?.ready);if(!w)return false;const t=[...w.gBrowser.tabs].find(t=>t.linkedBrowser.browsingContext.id===__dragContext),r=w.Sona.tabDragLayout?.find(r=>r.id===w.Sona.native.tabID(t));if(!r)return false;const p=ChromeUtils.importESModule("chrome://sona/content/window-controls.sys.mjs").tabDragPointer(w);const f=w.document.getElementById('sona-shell-frame').getBoundingClientRect();return Math.abs(p.x-w.mozInnerScreenX-f.x-r.x-20)<4&&Math.abs(p.y-w.mozInnerScreenY-f.y-r.y-20)<4;'''))
   check('native_detach_preserves_cursor_grab_point',True)
   # Return to an existing source tab: the controller must adopt before release.
   row2=m.execute_script('return Sona.tabDragLayout[0]')

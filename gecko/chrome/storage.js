@@ -1,16 +1,163 @@
 /* Gecko's Places and NSS stores; the frontend receives no privileged objects. */
 (() => {
 const {shared,Services,IOUtils,PathUtils,PlacesUtils,profile,isPrivate,save}=Sona.backend;
-let cache=null,queue=Promise.resolve();shared.bookmarkSerial??=Math.max(0,...Object.values(shared.config.bookmarkIds||{}));
+let cache=null;shared.bookmarkSerial??=Math.max(0,...Object.values(shared.config.bookmarkIds||{}));
 const guidToId=guid=>{const map=shared.config.bookmarkIds??={};if(!map[guid])map[guid]=++shared.bookmarkSerial;return map[guid];};
 const hydrated=new WeakSet();
 function hydrate(rows){if(hydrated.has(rows))return;hydrated.add(rows);let index=0,changed=false;const worker=async()=>{while(index<rows.length){const row=rows[index++];if(!row.url||row.favicon)continue;try{const icon=await PlacesUtils.favicons.getFaviconForPage(Services.io.newURI(row.url),32);if(!icon?.rawData?.length||icon.rawData.length>65536)continue;let binary='';for(const byte of icon.rawData)binary+=String.fromCharCode(byte);row.favicon='data:'+icon.mimeType+';base64,'+btoa(binary);changed=true;}catch{}}};Promise.all(Array.from({length:8},worker)).then(()=>{if(changed&&cache===rows)Sona.dispatch('browser.bookmarks.get').catch(console.error);});}
 const idToGuid=id=>Object.keys(shared.config.bookmarkIds||{}).find(g=>shared.config.bookmarkIds[g]===Number(id));
-async function read(){const root=await PlacesUtils.promiseBookmarksTree(PlacesUtils.bookmarks.rootGuid);const output=[];function walk(nodes,parentId=0){for(const node of nodes||[]){const id=guidToId(node.guid);output.push({id,guid:node.guid,type:node.type===PlacesUtils.TYPE_X_MOZ_PLACE_CONTAINER?'folder':node.uri?'url':'folder',title:node.title||node.uri||'',url:node.uri||'',parentId,order:node.index||0,favicon:node.iconuri||'',createdAt:node.dateAdded/1000||Date.now()});walk(node.children,id);}}for(const nativeRoot of root.children||[])walk(nativeRoot.children);await save();return output;}
+async function read(){const root=await PlacesUtils.promiseBookmarksTree(PlacesUtils.bookmarks.rootGuid);const output=[];function walk(nodes,parentId=0){for(const node of nodes||[]){if(node.type===PlacesUtils.TYPE_X_MOZ_PLACE_SEPARATOR)continue;const id=guidToId(node.guid);output.push({id,guid:node.guid,type:node.type===PlacesUtils.TYPE_X_MOZ_PLACE_CONTAINER?'folder':node.uri?'url':'folder',title:node.title||node.uri||'',url:node.uri||'',parentId,order:node.index||0,favicon:node.iconuri||'',createdAt:node.dateAdded/1000||Date.now()});walk(node.children,id);}}for(const nativeRoot of root.children||[])walk(nativeRoot.children);await save();return output;}
+function webURL(value) {
+ const url=new URL(value);
+ if(!['http:','https:'].includes(url.protocol)||url.username||url.password)
+  throw Error('Введите адрес HTTP или HTTPS.');
+ return url.href;
+}
+
+async function changeBookmark({kind,id,parentId,beforeId,afterId,title,url,folder}){
+ const bookmarks=PlacesUtils.bookmarks;
+ const lookup=async key=>{
+  const guid=idToGuid(key);
+  const item=guid&&await bookmarks.fetch(guid);
+  if(!item)throw Error('Элемент закладок уже изменён или удалён.');
+  return item;
+ };
+ const item=id?await lookup(id):null;
+ if(kind==='remove'&&item){
+  await bookmarks.remove(item.guid);
+  return item.guid;
+ }
+ if(!['save','move'].includes(kind)||kind==='move'&&!item)throw Error('Неизвестное действие с закладкой.');
+
+ const before=beforeId||afterId?await lookup(beforeId||afterId):null;
+ const parent=parentId?await lookup(parentId):null;
+ if(parent&&parent.type!==bookmarks.TYPE_FOLDER)throw Error('Выберите папку.');
+ const roots=[bookmarks.toolbarGuid,bookmarks.menuGuid,bookmarks.unfiledGuid,bookmarks.mobileGuid];
+ const parentGuid=parent?.guid||before?.parentGuid||
+  (item&&roots.includes(item.parentGuid)?item.parentGuid:bookmarks.toolbarGuid);
+ if(before&&(before.guid===item?.guid||before.parentGuid!==parentGuid))
+  throw Error('Место назначения изменилось. Повторите перемещение.');
+ const index=before
+  ? before.index+Number(Boolean(afterId))-Number(item?.parentGuid===parentGuid&&item.index<before.index)
+  : bookmarks.DEFAULT_INDEX;
+
+ if(item?.type===bookmarks.TYPE_FOLDER&&parent){
+  let ancestor=parent;
+  while(ancestor){
+   if(ancestor.guid===item.guid)throw Error('Папку нельзя переместить внутрь неё самой.');
+   ancestor=ancestor.parentGuid?await bookmarks.fetch(ancestor.parentGuid):null;
+  }
+ }
+ if(kind==='move'){
+  await bookmarks.update({guid:item.guid,parentGuid,index});
+  return item.guid;
+ }
+ const fields={title:String(title||'').trim().slice(0,4096)};
+ if(!fields.title)throw Error('Введите название.');
+ if(!folder && (url!==item?.url?.href||item.parentGuid!==parentGuid)){
+  if(url!==item?.url?.href)fields.url=webURL(url);
+  let duplicate=false;
+  await bookmarks.fetch({url:fields.url||item.url},row=>{duplicate ||= row.parentGuid===parentGuid&&row.guid!==item?.guid;});
+  if(duplicate)throw Error('В этой папке уже есть закладка с таким адресом.');
+ }
+ if(item){
+  const placement=item.parentGuid===parentGuid?{}:{parentGuid,index};
+  await bookmarks.update({guid:item.guid,...placement,...fields});
+  return item.guid;
+ }
+ return (await bookmarks.insert({parentGuid,index,...fields,type:folder?bookmarks.TYPE_FOLDER:bookmarks.TYPE_BOOKMARK})).guid;
+}
+
+async function importChromiumBookmarks(roots) {
+ if(!roots||Array.isArray(roots)||typeof roots!=='object')throw Error('Нужен стандартный Chromium Bookmarks JSON.');
+ const bookmarks=PlacesUtils.bookmarks;
+ let count=0;
+ function normalize(nodes,depth=0){
+  if(depth>64)throw Error('Слишком глубокая вложенность закладок.');
+  return nodes.flatMap(node=>{
+   if(++count>20000)throw Error('Слишком много закладок.');
+   if(!node||typeof node!=='object')return [];
+   if(Array.isArray(node.children))
+    return [{title:String(node.name||'Импорт').slice(0,4096),children:normalize(node.children,depth+1)}];
+   if(node.type!=='url'||typeof node.url!=='string')return [];
+   let url;
+   try{url=webURL(node.url);}catch{return [];}
+   return [{url,title:String(node.name||url).slice(0,4096)}];
+  });
+ }
+ const items=normalize(Object.values(roots));
+ if(!items.some(item=>item.children))throw Error('Файл не содержит папок Chromium.');
+
+ let imported=0;
+ async function append(nodes,parentGuid){
+  if(!nodes.length)return;
+  const byKey=new Map();
+  const key=(title,url)=>JSON.stringify([title,url||'']);
+  await bookmarks.fetch({parentGuid},item=>{
+   if(item.type===bookmarks.TYPE_FOLDER||item.type===bookmarks.TYPE_BOOKMARK)
+    byKey.set(key(item.title,item.url?.href),item);
+  });
+  for(const node of nodes){
+   const id=key(node.title,node.url);
+   let item=byKey.get(id);
+   if(!item){
+    item=await bookmarks.insert({parentGuid,title:node.title,
+     ...(node.url?{url:node.url}:{type:bookmarks.TYPE_FOLDER})});
+    byKey.set(id,item);
+    imported++;
+   }
+   if(node.children)await append(node.children,item.guid);
+  }
+ }
+ await append(items,bookmarks.toolbarGuid);
+ return imported;
+}
+
+Sona.readingList=({kind,url,read},pageURL,title)=>{
+ const path=PathUtils.join(profile,'sona-reading-list.json');
+ const run=async()=>{
+  if(isPrivate){
+   if(kind==='get')return [];
+   throw Error('Список для чтения доступен в обычном окне.');
+  }
+  let rows;
+  try{rows=await IOUtils.readJSON(path);}catch(error){
+   if(error.name!=='NotFoundError')throw error;
+   rows=[];
+  }
+  if(!Array.isArray(rows))throw Error('Не удалось прочитать список для чтения.');
+  if(kind==='get')return rows;
+  url=webURL(kind==='add'?pageURL:url);
+  if(kind==='add'){
+   if(rows.some(row=>row.url===url))return rows;
+   rows.unshift({url,title:String(title||url).slice(0,4096),read:false});
+  }else if(kind==='remove'){
+   rows=rows.filter(row=>row.url!==url);
+  }else if(kind==='mark'){
+   rows=rows.map(row=>row.url===url?{...row,read:read===true}:row);
+  }else throw Error('Неизвестное действие со списком для чтения.');
+  await IOUtils.writeJSON(path,rows,{tmpPath:path+'.tmp',permissions:0o600});
+  return rows;
+ };
+ const result=(shared.readingQueue||Promise.resolve()).then(run);
+ shared.readingQueue=result.catch(()=>{});
+ return result;
+};
+
 Sona.bookmarks=async(operation,payload)=>{
  const task=async()=>{
   if(operation==='invalidate'){cache=null;return true;}
   if(operation==='get'){if(!cache)cache=await read();hydrate(cache);return structuredClone(cache);}
+  if(operation==='importChromium'){
+   try{return await importChromiumBookmarks(payload);}
+   finally{cache=null;}
+  }
+  if(operation==='change'){
+   const guid=await changeBookmark(payload);
+   cache=await read();
+   hydrate(cache);
+   return {id:cache.find(row=>row.guid===guid)?.id,rows:structuredClone(cache)};
+  }
   if(operation==='add'){const u=new URL(payload.url);if(!['http:','https:'].includes(u.protocol))throw Error('Закладки доступны для HTTP/HTTPS-страниц.');await PlacesUtils.bookmarks.insert({parentGuid:PlacesUtils.bookmarks.toolbarGuid,url:u.href,title:payload.title||u.hostname});}
   else if(operation==='remove'){const guid=idToGuid(payload);if(guid)await PlacesUtils.bookmarks.remove(guid);}
   else if(operation==='replace'){
@@ -22,7 +169,7 @@ Sona.bookmarks=async(operation,payload)=>{
   }else throw Error('Unknown bookmark operation');
   cache=await read();hydrate(cache);return structuredClone(cache);
  };
- const result=queue.then(task);queue=result.catch(()=>{});return result;
+ const result=(shared.bookmarkQueue||Promise.resolve()).then(task);shared.bookmarkQueue=result.catch(()=>{});return result;
 };
 Sona.history=async(operation,payload={},source)=>{
  if(operation==='state'){const s=shared.config.settings;return {language:s.language,resolvedTheme:s.theme==='system'?(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'):s.theme,incognito:isPrivate,profileName:shared.config.profile,saveHistory:s.saveHistory!==false,groupDays:s.historyGroupDays!==false,filter:'all',openClear:source?.location.search.includes('clear=1')};}

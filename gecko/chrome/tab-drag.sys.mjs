@@ -1,6 +1,6 @@
 /* One process-wide gesture owns a live Gecko tab, even across remote frames. */
 const {setInterval,clearInterval}=ChromeUtils.importESModule('resource://gre/modules/Timer.sys.mjs');
-const {tabDragPointer}=ChromeUtils.importESModule('chrome://sona/content/window-controls.sys.mjs');
+const {tabDragPointer,moveTabDragWindow}=ChromeUtils.importESModule('chrome://sona/content/window-controls.sys.mjs');
 const {PrivateBrowsingUtils}=ChromeUtils.importESModule('resource://gre/modules/PrivateBrowsingUtils.sys.mjs');
 export const DETACH_MARGIN=26;
 let gesture=null;
@@ -27,6 +27,20 @@ function commit(d){
  win.Sona.notify();
 }
 function finish(commitOrder=true){const d=gesture;if(!d)return;gesture=null;clearInterval(d.timer);if(commitOrder&&d.active&&d.previewed&&!d.detached)commit(d);emit(d.owner,null);}
+function moveDetached(d,p){
+ const win=d.owner;
+ if(d.followTab){
+  // A detached window starts with one tab. Its toolbar can finish laying
+  // out after adoption, so keep using the current row while the mouse is held.
+  const row=rows(win).find(r=>r.id===win.Sona.native.tabID(d.tab));
+  if(row){
+   const point=local(win,p);
+   moveTabDragWindow(win,point.x-row.x-d.offsetX,point.y-row.y-d.offsetY);
+   return;
+  }
+ }
+ win.moveTo(p.x-d.windowOffsetX,p.y-d.windowOffsetY);
+}
 async function detach(d,p){
  if(d.pending)return;d.pending=true;emit(d.owner,null);
  // Gecko swaps the live browser, preserving history, forms and media state.
@@ -40,12 +54,12 @@ async function detach(d,p){
   if(gesture!==d||win.closed)return;
   if(Date.now()>deadline){finish(false);return;}
   if(!win.Sona?.native||!win.Sona?.ready||!rows(win).length){d.wait=win.setTimeout(ready,16);return;}
-  d.owner=win;d.tab=win.gBrowser.selectedTab;d.pending=false;d.previewed=false;
+  d.owner=win;d.tab=win.gBrowser.selectedTab;d.pending=false;d.previewed=false;d.followTab=true;
   if(win.windowState===win.STATE_MAXIMIZED)win.restore();
   const row=rows(win).find(r=>r.id===win.Sona.native.tabID(d.tab));
   if(row){d.windowOffsetX=row.x+d.offsetX+(win.mozInnerScreenX-win.screenX);d.windowOffsetY=row.y+d.offsetY+(win.mozInnerScreenY-win.screenY);}
   const current=tabDragPointer(win);
-  win.moveTo(current.x-d.windowOffsetX,current.y-d.windowOffsetY);win.focus();
+  moveDetached(d,current);win.focus();
  };
  ready();
 }
@@ -75,7 +89,7 @@ function tick(d){
   const b=bounds(win);if(!b)continue;const q=local(win,p);
   if(q.x>=b.left-12&&q.x<=b.right+40&&q.y>=b.top&&q.y<=b.bottom){merge(d,win,p);return;}
  }
- if(d.detached){d.owner.moveTo(p.x-d.windowOffsetX,p.y-d.windowOffsetY);return;}
+ if(d.detached){moveDetached(d,p);return;}
  const b=bounds(d.owner),q=local(d.owner,p);if(!b)return;
  if(q.y<b.top-DETACH_MARGIN||q.y>b.bottom+DETACH_MARGIN){
   const own=rows(d.owner).find(r=>r.id===d.owner.Sona.native.tabID(d.tab));
@@ -88,6 +102,8 @@ export function begin(win,tab,payload){
  finish();if(Services.appinfo.OS!=='WINNT')return false;
  win.Sona.tabDragLayout=payload.layout;
  const p=tabDragPointer(win);if(!p.down)return false;
+ // A held mouse gesture is user input even before the remote actor reports it.
+ if(win.Sona.backend)win.Sona.backend.shared.initialUserInput=true;
  const d=gesture={owner:win,tab,startX:p.x,startY:p.y,offsetX:payload.offsetX,offsetY:payload.offsetY,before:null,active:false,detached:false,pending:false};
  d.timer=setInterval(()=>{try{tick(d);}catch(error){d.owner.Sona.lastTabDragError=String(error);console.error(error);finish(false);}},16);
  return true;

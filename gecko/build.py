@@ -39,7 +39,10 @@ shutil.copy(ROOT/'gecko/sona.cfg',runtime/'sona.cfg')
 shutil.copy(ROOT/'gecko/defaults/pref/autoconfig.js',runtime/'defaults/pref/autoconfig.js')
 shutil.copy(ROOT/'gecko/chrome/bridge.js',runtime/'sona/chrome/ui/gecko-bridge.js')
 shutil.copy(ROOT/'gecko/chrome/translation-gecko-ui.js',runtime/'sona/chrome/ui/translation-gecko-ui.js')
-shutil.copy(ROOT/'gecko/chrome/frontend.css',runtime/'sona/chrome/ui/gecko-frontend.css')
+frontend=runtime/'sona/chrome/ui/gecko-frontend.css'
+shutil.copy(ROOT/'gecko/chrome/frontend.css',frontend)
+with frontend.open('a',encoding='utf-8') as css:
+ css.write((ROOT/'gecko/chrome/bookmarks-sidebar.css').read_text(encoding='utf-8'))
 shutil.copy(ROOT/'gecko/chrome/extensions-ui.js',runtime/'sona/chrome/ui/extension-toolbar.js')
 shutil.copy(ROOT/'gecko/chrome/integration-ui.js',runtime/'sona/chrome/ui/integration-ui.js')
 shutil.copy(ROOT/'gecko/chrome/tab-preview-ui.js',runtime/'sona/chrome/ui/tab-preview-ui.js')
@@ -79,7 +82,7 @@ text=text.replace('Пароль скопирован. Пока Sona запуще
 text=text.replace("n.append(text,actionButton('Открыть'","n.dataset.profileId=p.id;n.append(text,actionButton('Открыть'")
 text=text.replace('let rows=await api.getPasswords()', 'let editing=null;let rows=await api.getPasswords()').replace('origin.n.value=item.origin;', 'editing=item.id;origin.n.value=item.origin;').replace('api.addPassword({origin:', 'api.addPassword({id:editing,origin:').replace("secret.n.value='';draw();message","editing=null;secret.n.value='';draw();message")
 data.write_text(text,encoding='utf-8')
-navigation=runtime/'sona/chrome/ui/navigation.js';text=navigation.read_text(encoding='utf-8').replace('renderOverview();search.focus();','renderOverview();search.blur();overview.tabIndex=-1;overview.focus({preventScroll:true});');start=text.index('  function renderOverview(){');end=text.index('  function render(){',start);text=text[:start]+(ROOT/'gecko/chrome/overview-renderer.inc.js').read_text(encoding='utf-8')+text[end:];navigation.write_text(text,encoding='utf-8')
+navigation=runtime/'sona/chrome/ui/navigation.js';text=navigation.read_text(encoding='utf-8').replace('renderOverview();search.focus();','renderOverview();search.blur();overview.tabIndex=-1;overview.focus({preventScroll:true});');start=text.index('  function renderOverview(){');end=text.index('  function render(){',start);text=text[:start]+(ROOT/'gecko/chrome/overview-renderer.inc.js').read_text(encoding='utf-8')+text[end:];text=text.replace('  menu.append(menuHeading,menuSearch,contents,actions);',(ROOT/'gecko/chrome/bookmark-scroll.inc.js').read_text(encoding='utf-8'));navigation.write_text(text,encoding='utf-8')
 home=runtime/'sona/chrome/ui/home.js';text=home.read_text(encoding='utf-8').replace("invoke('home.weather')","invoke('home.weather',{interactive:force})").replace('12000))','25000))').replace("el('p',t('unavailable'),'weather-note')","el('p',weather.error||t('unavailable'),'weather-note')");text=text.replace('await navigate(result.text);', "$('query').focus();");text+="\nwindow.sonaHomeVoicePhase=phase=>{document.getElementById('status').textContent=phase==='processing'?'Распознавание на этом компьютере…':'Говорите… Нажмите микрофон ещё раз для отмены.';};\n";home.write_text(text,encoding='utf-8')
 # Optional engine-specific features keep their sections and report availability explicitly.
 shutil.copy(ROOT/'gecko/chrome/settings-support.js',runtime/'sona/chrome/ui/settings-support.js')

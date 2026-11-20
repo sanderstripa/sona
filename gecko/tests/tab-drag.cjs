@@ -6,7 +6,7 @@ const make=(name,n=3,priv=false)=>{
  let id=1;w.gBrowser={tabs:Array.from({length:n},()=>({id:id++,pinned:false,closing:false})),moveTabBefore(t,a){this.tabs.splice(this.tabs.indexOf(t),1);this.tabs.splice(this.tabs.indexOf(a),0,t);},moveTabAfter(t,a){this.tabs.splice(this.tabs.indexOf(t),1);this.tabs.splice(this.tabs.indexOf(a)+1,0,t);},adoptTab(t,{tabIndex:i,selectTab}){assert.equal(selectTab,true);for(const s of windows){const at=s.gBrowser.tabs.indexOf(t);if(at>=0){s.gBrowser.tabs.splice(at,1);if(!s.gBrowser.tabs.length)s.closed=true;}}this.tabs.splice(i,0,t);return t;}};
  w.gBrowser.selectedTab=w.gBrowser.tabs[0];w.Sona={ready:true,notify(){},tabDragLayout:w.gBrowser.tabs.map((t,i)=>({id:t.id,x:i*100,y:0,width:96,height:40})),native:{tabID:t=>t.id,tabs:new Map(w.gBrowser.tabs.map(t=>[t.id,t])),send:(n,v)=>events.push([w,n,v])}};windows.push(w);return w;
 };
-const context={console,Services:{appinfo:{OS:'WINNT'},wm:{getEnumerator:()=>windows}},PrivateBrowsingUtils:{isWindowPrivate:w=>w.priv},tabDragPointer:()=>pointer,setInterval:fn=>(interval=fn,1),clearInterval:()=>{},Date};vm.createContext(context);vm.runInContext(source+';globalThis.api={begin,beginWindow,finish};',context);
+const context={console,Services:{appinfo:{OS:'WINNT'},wm:{getEnumerator:()=>windows}},PrivateBrowsingUtils:{isWindowPrivate:w=>w.priv},tabDragPointer:()=>pointer,moveTabDragWindow:(win,dx,dy)=>win.moveTo(win.screenX+dx,win.screenY+dy),setInterval:fn=>(interval=fn,1),clearInterval:()=>{},Date};vm.createContext(context);vm.runInContext(source+';globalThis.api={begin,beginWindow,finish};',context);
 let w=make('source');const tab=w.gBrowser.tabs[0];
 context.api.begin(w,tab,{layout:w.Sona.tabDragLayout,offsetX:40,offsetY:20});
 pointer={x:280,y:41,down:true};interval();assert.equal(w.gBrowser.tabs[0],tab);assert.equal(events.at(-1)[2].dx,240);assert.ok(events.at(-1)[2].shifts[2]<0);
@@ -27,4 +27,6 @@ windows=[];w=make('front');const back=make('back');pointer={x:40,y:20,down:true}
 
 // The grab point follows the tab's NEW row, not its old ordinal position.
 windows=[];w=make('offset-source');w.gBrowser.replaceTabWithWindow=t=>{const next=make('new-position',0);next.gBrowser.tabs=[t];next.gBrowser.selectedTab=t;next.Sona.tabDragLayout=[{id:t.id,x:10,y:5,width:96,height:40}];w.gBrowser.tabs.splice(w.gBrowser.tabs.indexOf(t),1);return next;};
-pointer={x:240,y:20,down:true};context.api.begin(w,w.gBrowser.tabs[2],{layout:w.Sona.tabDragLayout,offsetX:40,offsetY:20});pointer.y=80;interval();const moved=windows.at(-1);assert.equal(moved.screenX,190);assert.equal(moved.screenY,55);pointer.down=false;interval();
+pointer={x:240,y:20,down:true};context.api.begin(w,w.gBrowser.tabs[2],{layout:w.Sona.tabDragLayout,offsetX:40,offsetY:20});pointer.y=80;interval();const moved=windows.at(-1);assert.equal(moved.screenX,190);assert.equal(moved.screenY,55);
+// A later layout report moves the row during the held gesture.
+moved.Sona.tabDragLayout[0].y=12;pointer.y=90;interval();assert.equal(moved.screenY,58);pointer.down=false;interval();
