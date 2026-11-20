@@ -23,7 +23,7 @@ Copy-Item (Join-Path $PSScriptRoot 'payload_windows_test.go') $adapter
 Copy-Item (Join-Path $PSScriptRoot 'repair_windows_test.go') $adapter
 Copy-Item (Join-Path $PSScriptRoot 'migration_windows.go') $adapter
 $product=Get-Content (Join-Path $core 'products/sona.json') -Raw | ConvertFrom-Json
-$product.name='Sona';$product.version='1.160.35';$product.id='sona';$product.engine='Sona'
+$product.name='Sona';$product.version='1.160.36';$product.id='sona';$product.engine='Sona'
 $product | ConvertTo-Json | Set-Content (Join-Path $core 'products/sona.json') -Encoding utf8
 Copy-Item (Join-Path $repo 'ui/branding/sona-128.png') (Join-Path $core 'core/web/assets/icon.png') -Force
 python (Join-Path $PSScriptRoot 'prepare-theme23.py') $core $BuildDir
@@ -38,9 +38,9 @@ python (Join-Path $PSScriptRoot 'prepare-payload.py') $build
 if($LASTEXITCODE){throw 'Payload manifest failed'}
 Compress-Archive -Path (Join-Path $build '*') -DestinationPath (Join-Path $adapter 'payload.zip') -CompressionLevel Optimal
 $version=Get-Content (Join-Path $repo 'gecko/launcher/versioninfo.json') -Raw | ConvertFrom-Json
-$version.StringFileInfo.FileDescription='Sona Preview 1.160.35 Setup'
+$version.StringFileInfo.FileDescription='Sona Preview 1.160.36 Setup'
 $version.StringFileInfo.InternalName='SonaSetup'
-$version.StringFileInfo.OriginalFilename='Sona-1.160.35-Preview-x64.exe'
+$version.StringFileInfo.OriginalFilename='Sona-1.160.36-Preview-x64.exe'
 $version.IconPath=(Join-Path $repo 'ui/sona-installer-icon.ico')
 $version | Add-Member -NotePropertyName ManifestPath -NotePropertyValue (Join-Path $core 'products/sona.manifest')
 $version | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $core 'versioninfo.json') -Encoding utf8NoBOM
@@ -50,13 +50,13 @@ Push-Location $core
 try{
  gofmt -w adapters/sona/adapter_windows.go adapters/sona/payload_windows_test.go
  $oldTest=$env:CONNECT_INSTALLER_CI_TEST;$env:CONNECT_INSTALLER_CI_TEST='1'
- go test -ldflags '-X connect-installer.local/core/products.VersionOverride=1.160.35' ./core ./installprefs ./products ./adapters/sona
+ go test -ldflags '-X connect-installer.local/core/products.VersionOverride=1.160.36' ./core ./installprefs ./products ./adapters/sona
  $testExit=$LASTEXITCODE;$env:CONNECT_INSTALLER_CI_TEST=$oldTest
  if($testExit){throw 'Installer component tests failed'}
  go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.5.0 -64 -o cmd/sona/resources_windows_amd64.syso
  if($LASTEXITCODE){throw 'Installer version/icon resources failed'}
- go build -tags production -trimpath -buildvcs=false -ldflags '-s -w -H windowsgui -X connect-installer.local/core/products.VersionOverride=1.160.35' -o $output ./cmd/sona
+ go build -tags production -trimpath -buildvcs=false -ldflags '-s -w -H windowsgui -X connect-installer.local/core/products.VersionOverride=1.160.36' -o $output ./cmd/sona
  if($LASTEXITCODE){throw 'Installer compilation failed'}
- [ordered]@{name='Sona Preview 1.160.35';version='1.160.35';coreCommit=$coreCommit;sourceCommit=(git -C $repo rev-parse HEAD).Trim();installerSHA256=(Get-FileHash $output -Algorithm SHA256).Hash.ToLowerInvariant();payloadSHA256=(Get-FileHash adapters/sona/payload.zip -Algorithm SHA256).Hash.ToLowerInvariant()} | ConvertTo-Json | Set-Content "$output.build.json" -Encoding utf8
+ [ordered]@{name='Sona Preview 1.160.36';version='1.160.36';coreCommit=$coreCommit;sourceCommit=(git -C $repo rev-parse HEAD).Trim();installerSHA256=(Get-FileHash $output -Algorithm SHA256).Hash.ToLowerInvariant();payloadSHA256=(Get-FileHash adapters/sona/payload.zip -Algorithm SHA256).Hash.ToLowerInvariant()} | ConvertTo-Json | Set-Content "$output.build.json" -Encoding utf8
 }finally{Pop-Location}
 
