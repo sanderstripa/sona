@@ -37,10 +37,13 @@ def verify_toolbar(m, check, wait):
         return user32.SendMessageW(hwnd, 0x84, 0, C.c_ssize_t(coordinates))
 
     check('windows_snap_maximize_hit_target', wait(lambda: maximize_hit_test() == 9))
-    check('caption_highlight_covers_entire_button', shell("""
+    check('caption_highlight_reaches_window_edges', shell("""
         return ['windowMinimize','windowMaximize','windowClose'].every(id=>{
           const button=document.getElementById(id), style=getComputedStyle(button,'::before');
-          return style.borderRadius==='0px' && style.top==='0px' && style.right==='0px'
+          const rect=button.getBoundingClientRect();
+          const right=id==='windowClose' ? innerWidth-rect.right : 0;
+          return style.borderRadius==='0px' && Math.abs(rect.top+parseFloat(style.top))<1
+            && Math.abs(right+parseFloat(style.right))<1
             && style.bottom==='0px' && style.left==='0px';
         });
     """))
