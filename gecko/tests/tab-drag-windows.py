@@ -9,6 +9,17 @@ def verify_tab_drag(m,check,wait):
  Sona.config.settings.layout='classic';Sona.notify();
  window.__dragTabs=[gBrowser.addTrustedTab('about:blank',{skipAnimation:true}),gBrowser.addTrustedTab('about:blank',{skipAnimation:true})];
  gBrowser.selectedTab=__dragTabs[0];Sona.notify();
+ window.focus();
+ window.__dragBegin=null;
+ const original=Sona.dispatch;
+ window.__dragOriginalDispatch=original;
+ Sona.dispatch=async function(action,payload,source){
+  const result=await original.call(this,action,payload,source);
+  if(action==='browser.tabDrag.begin'&&source){
+   window.__dragBegin={accepted:result,offsetX:payload.offsetX,offsetY:payload.offsetY};
+  }
+  return result;
+ };
  const frame=document.getElementById('sona-shell-frame').getBoundingClientRect();
  return {dx:mozInnerScreenX-screenX+frame.x,dy:mozInnerScreenY-screenY+frame.y,hwnd:String(window.docShell.treeOwner.QueryInterface(Ci.nsIInterfaceRequestor).getInterface(Ci.nsIBaseWindow).nativeHandle),scale:devicePixelRatio};
  ''')
@@ -21,7 +32,9 @@ def verify_tab_drag(m,check,wait):
  row=m.execute_script('return Sona.tabDragLayout.find(r=>r.id===Sona.native.tabID(__dragTabs[0]))')
  try:
   point(row['x']+20,row['y']+20);u.mouse_event(2,0,0,0,0)
-  check('native_tab_drag_started',m.execute_async_script('const done=arguments[arguments.length-1];Sona.dispatch("browser.tabDrag.begin",{id:Sona.native.tabID(__dragTabs[0]),layout:Sona.tabDragLayout,offsetX:20,offsetY:20}).then(done,e=>done(String(e)));') is True)
+  started=wait(lambda:m.execute_script('return window.__dragBegin'))
+  check('native_tab_drag_started',started['accepted'] is True,started)
+  check('native_tab_drag_starts_at_requested_grab_point',abs(started['offsetX']-20)<4 and abs(started['offsetY']-20)<4,started)
   bottom=m.execute_script('return Math.max(...Sona.tabDragLayout.map(r=>r.y+r.height))')
   point(row['x']+30,bottom+25);time.sleep(.25)
   status=m.execute_script('''const t=__dragTabs[0];return {inSource:[...gBrowser.tabs].includes(t),closing:!!t.closing,windows:[...Services.wm.getEnumerator("navigator:browser")].length,pointer:ChromeUtils.importESModule("chrome://sona/content/window-controls.sys.mjs").tabDragPointer(window),rows:Sona.tabDragLayout,error:Sona.lastTabDragError||null};''')
@@ -39,4 +52,4 @@ def verify_tab_drag(m,check,wait):
   check('native_reattach_before_mouseup',True)
  finally:
   u.mouse_event(4,0,0,0,0);time.sleep(.15)
-  m.execute_script('''for(const w of [...Services.wm.getEnumerator('navigator:browser')])for(const t of [...w.gBrowser.tabs])if(t===__dragTabs[1]||t.linkedBrowser.browsingContext.id===window.__dragContext)w.gBrowser.removeTab(t,{animate:false});Sona.config.settings.layout=__dragSaved.layout;Sona.notify();''')
+  m.execute_script('''Sona.dispatch=__dragOriginalDispatch;for(const w of [...Services.wm.getEnumerator('navigator:browser')])for(const t of [...w.gBrowser.tabs])if(t===__dragTabs[1]||t.linkedBrowser.browsingContext.id===window.__dragContext)w.gBrowser.removeTab(t,{animate:false});Sona.config.settings.layout=__dragSaved.layout;Sona.notify();''')
