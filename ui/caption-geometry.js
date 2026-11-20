@@ -17,7 +17,7 @@
   function schedule() { if (!pending) { pending = true; requestAnimationFrame(update); } }
   new MutationObserver(schedule).observe(document.body,{attributes:true});
   const observer = new ResizeObserver(schedule);
-  document.querySelectorAll('.browser-toolbar').forEach(node => observer.observe(node));
+  document.querySelectorAll('.browser-toolbar,.classic-main-row').forEach(node => observer.observe(node));
   window.addEventListener('resize',schedule);
   schedule();
 })();

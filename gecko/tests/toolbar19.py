@@ -1,4 +1,5 @@
 """Exercise controls inside the installed Gecko shell through its test-only actor."""
+import ctypes as C
 import json
 
 
@@ -12,6 +13,42 @@ def verify_toolbar(m, check, wait):
         if isinstance(value, dict) and 'error' in value:
             raise AssertionError(value['error'])
         return value
+
+    user32 = C.windll.user32
+    class Point(C.Structure):
+        _fields_ = [('x', C.c_long), ('y', C.c_long)]
+
+    def maximize_hit_test():
+        geometry = m.execute_script("""
+            const region=document.getElementById('sona-native-maximize');
+            if(!region)return null;
+            const r=region.getBoundingClientRect();
+            return {x:r.x+r.width/2,y:r.y+r.height/2,scale:devicePixelRatio,
+              hwnd:String(window.docShell.treeOwner.QueryInterface(Ci.nsIInterfaceRequestor)
+                .getInterface(Ci.nsIBaseWindow).nativeHandle)};
+        """)
+        if not geometry:
+            return None
+        hwnd = C.c_void_p(int(geometry['hwnd'], 16))
+        point = Point(round(geometry['x'] * geometry['scale']), round(geometry['y'] * geometry['scale']))
+        if not user32.ClientToScreen(hwnd, C.byref(point)):
+            return None
+        coordinates = (point.x & 0xffff) | ((point.y & 0xffff) << 16)
+        return user32.SendMessageW(hwnd, 0x84, 0, C.c_ssize_t(coordinates))
+
+    check('windows_snap_maximize_hit_target', wait(lambda: maximize_hit_test() == 9))
+    check('caption_highlight_covers_entire_button', shell("""
+        return ['windowMinimize','windowMaximize','windowClose'].every(id=>{
+          const button=document.getElementById(id), style=getComputedStyle(button,'::before');
+          return style.borderRadius==='0px' && style.top==='0px' && style.right==='0px'
+            && style.bottom==='0px' && style.left==='0px';
+        });
+    """))
+    check('tab_overview_precedes_new_tab', shell("""
+        const plus=document.getElementById('newTabButton'), overview=plus.previousElementSibling;
+        return overview?.classList.contains('navigation-toolbar-button')
+          && overview.getBoundingClientRect().right<=plus.getBoundingClientRect().left;
+    """))
 
     count = "return document.querySelectorAll('#tabStrip > [data-tab-id]').length;"
     wait(lambda: shell(count) == 1)
@@ -43,14 +80,17 @@ def verify_toolbar(m, check, wait):
         """ % json.dumps(selector))
 
     check('tab_close_glyph_centered', wait(lambda: centered('#tabStrip .active [data-close-tab]')))
-    shell("await window.browserShell.setOverview(true);")
+    shell("document.querySelector('.classic-address-wrap .navigation-toolbar-button').click();")
     check('overview_close_glyph_centered', wait(lambda: centered('.overview-caption > button')))
     shell("await window.browserShell.setOverview(false);")
     for expected in [3, 2, 1]:
         shell("document.querySelector('#tabStrip > :last-child [data-close-tab]').click();")
         wait(lambda: shell(count) == expected)
     check('close_tabs_from_strip', m.execute_script('return gBrowser.tabs.length') == 1)
+    sidebar_fill = "return getComputedStyle(document.querySelector('#sidebarButton .sidebar-icon-fill')).fill;"
+    check('sidebar_icon_outline_when_closed', shell(sidebar_fill) == 'none')
     shell("document.getElementById('sidebarButton').click();")
+    check('sidebar_icon_filled_when_open', wait(lambda: shell(sidebar_fill) != 'none'))
     check('bookmark_search_inside_panel_without_autofocus',wait(lambda: shell("""
         const panel=document.querySelector('.bookmarks-menu'), search=panel.querySelector('.navigation-search');
         const r=search.getBoundingClientRect(), p=panel.getBoundingClientRect();
@@ -75,3 +115,4 @@ def verify_toolbar(m, check, wait):
     check('rounded_bookmark_thumb_tracks_scrolling', g['size']>=24 and not g['hidden'] and
           g['top']>0 and g['radius']>0 and abs(g['delta'])<=1, g)
     shell("document.getElementById('sidebarButton').click();")
+    check('sidebar_icon_returns_to_outline', wait(lambda: shell(sidebar_fill) == 'none'))
