@@ -53,3 +53,14 @@ menupopup[data-sona-extensions] .menu-iconic-icon{width:18px;height:18px}
 :root[sona-dark]{--sona-bg:#08090b;--sona-text:#eeeeef}
 
 #sona-page-glass { left: var(--sona-left-panel); }
+
+/* Gecko registers caption hit targets from parent-process layout. The actual
+   button stays in the remote toolbar and receives Gecko's mouse events. */
+#sona-native-maximize {
+  position: fixed;
+  z-index: 10001;
+  appearance: none;
+  -moz-default-appearance: -moz-window-button-maximize;
+  background: rgb(0 0 0 / .004);
+  pointer-events: none;
+}
