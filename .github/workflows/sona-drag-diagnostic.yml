@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: |
-          gh run download 44679200727 -n sona35-windows-x64-candidate -D candidate
+          gh run download 44680656964 -n sona35-windows-x64-candidate -D candidate
           if ($LASTEXITCODE) { throw 'Candidate download failed' }
           python -m pip install marionette_driver pillow psutil websocket-client
           python gecko/tests/installer26.py candidate/Sona-1.160.35-Preview-x64.exe diagnostic
