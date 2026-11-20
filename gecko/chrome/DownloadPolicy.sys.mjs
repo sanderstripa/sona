@@ -12,5 +12,9 @@ export function install(){if(installed)return;installed=true;Integration.downloa
  const message=host
   ? (english?'Allow this file download from '+host+'?':'Разрешить загрузку файла с сайта '+host+'?')
   : (english?'Allow this file download?':'Разрешить загрузку этого файла?');
- return !Services.prompt.confirm(win,title,message);
+ const prompt=Ci.nsIPromptService;
+ const flags=prompt.BUTTON_POS_0*prompt.BUTTON_TITLE_IS_STRING+
+  prompt.BUTTON_POS_1*prompt.BUTTON_TITLE_CANCEL;
+ const confirm=english?'Allow download':'Разрешить';
+ return Services.prompt.confirmEx(win,title,message,flags,confirm,null,null,null,{})!==0;
 }}));}

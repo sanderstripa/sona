@@ -62,3 +62,20 @@
   margin:0!important;padding:0!important;border-radius:0!important;
  }
 }
+
+@-moz-document url("chrome://global/content/commonDialog.xhtml") {
+  :root:is([headertitle*="Sona — загрузка файла"], [headertitle*="Sona — File download"]) {
+    --color-accent-primary: light-dark(#34363c, #d9dbe0) !important;
+    --color-accent-primary-hover: light-dark(#464951, #eeeef1) !important;
+    --color-accent-primary-active: light-dark(#26282c, #cbcdd3) !important;
+    --button-background-color-primary: var(--color-accent-primary) !important;
+    --button-background-color-primary-hover: var(--color-accent-primary-hover) !important;
+    --button-text-color-primary: light-dark(#fff, #22242a) !important;
+    --in-content-primary-button-background: var(--color-accent-primary) !important;
+    --in-content-primary-button-background-hover: var(--color-accent-primary-hover) !important;
+  }
+  :root:is([headertitle*="Sona — загрузка файла"], [headertitle*="Sona — File download"]) #infoBody {
+    font: 13px/1.45 Onest, "Segoe UI", sans-serif;
+    overflow-wrap: anywhere;
+  }
+}
