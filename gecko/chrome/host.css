@@ -68,3 +68,16 @@ menupopup[data-sona-extensions] .menu-iconic-icon{width:18px;height:18px}
   background: rgb(0 0 0 / .004);
   pointer-events: none;
 }
+
+/* Isolate the upper material from the desktop acrylic under bookmarks.
+   Scrolled content above it is sampled in grayscale. */
+:root[sona-page-glass]::after {
+  content:"";
+  position:fixed;
+  inset:0 0 auto var(--sona-left-panel);
+  height:var(--sona-toolbar-height);
+  background:light-dark(#f5f5f5,#212121);
+  z-index:9998;
+  pointer-events:none;
+}
+:root:is([sona-fullscreen],[inDOMFullscreen])::after { display:none; }

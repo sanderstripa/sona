@@ -120,6 +120,42 @@ try:
     return document.body.hasAttribute('data-desktop-glass') &&
       style.backgroundColor.includes('0.43');
   """)))
+  # Windows compositor screenshots distinguish live desktop acrylic from a
+  # transparent CSS layer painted over a solid application background.
+  import ctypes as C
+  from ctypes import wintypes as W
+  from PIL import ImageGrab
+  import tkinter as tk
+  user32=C.windll.user32
+  user32.SetProcessDpiAwarenessContext(C.c_void_p(-4))
+  user32.ClientToScreen.argtypes=[W.HWND,C.POINTER(W.POINT)]
+  user32.GetAncestor.argtypes=[W.HWND,W.UINT]
+  user32.GetAncestor.restype=W.HWND
+  user32.SetWindowPos.argtypes=[W.HWND,W.HWND,C.c_int,C.c_int,C.c_int,C.c_int,W.UINT]
+  hwnd=int(chrome('return String(window.docShell.treeOwner.QueryInterface(Ci.nsIInterfaceRequestor).getInterface(Ci.nsIBaseWindow).nativeHandle)'),16)
+  origin=W.POINT()
+  assert user32.ClientToScreen(hwnd,C.byref(origin))
+  backing=tk.Tk()
+  try:
+   backing.overrideredirect(True)
+   backing.configure(background='#000000')
+   backing.geometry('270x480')
+   backing.update()
+   assert user32.SetWindowPos(user32.GetAncestor(backing.winfo_id(),2),hwnd,
+                              origin.x+1,origin.y+110,270,480,0x50)
+   backing.update()
+   time.sleep(.65)
+   point=(origin.x+130,origin.y+365)
+   dark_pixel=ImageGrab.grab().getpixel(point)
+   backing.configure(background='#ffffff')
+   backing.update()
+   time.sleep(.65)
+   light_pixel=ImageGrab.grab().getpixel(point)
+   check('sidebar_backdrop_tracks_window_behind_sona',
+         sum(light_pixel[:3])-sum(dark_pixel[:3])>=24,
+         {'dark':dark_pixel,'light':light_pixel})
+  finally:
+   backing.destroy()
   screenshot('sona-sidebar-matte.png')
   content('scrollTo(0,140);return true;')
   check('page_fixture_scrolled',wait(lambda: content('return scrollY>=139')))
