@@ -280,6 +280,7 @@ try:
       const view=await test(`const toolbar=document.querySelector('.compact-toolbar');
         const bar=toolbar.getBoundingClientRect();
         const address=toolbar.querySelector('.compact-active-tab').getBoundingClientRect();
+        console.log('Sona compact geometry',bar.toJSON(),address.toJSON());
         return bar.height===58 && Math.abs(address.left+address.width/2-bar.left-bar.width/2)<65 &&
           Math.abs(address.top+address.height/2-bar.top-bar.height/2)<2 &&
           !!toolbar.querySelector('.navigation-toolbar-button') &&

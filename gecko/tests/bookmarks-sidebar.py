@@ -111,15 +111,21 @@ try:
         wait(lambda: chrome(f"""return document.documentElement.hasAttribute('sona-page-glass')
            && Math.abs(gBrowser.selectedBrowser.getBoundingClientRect().top-{page_top})<1
            && document.getElementById('sona-page-glass').hidden""")))
+  backdrop=chrome("""
+    return {mica:document.documentElement.hasAttribute('windowsmica'),
+      desktop:document.documentElement.hasAttribute('sona-desktop-glass'),
+      background:getComputedStyle(document.documentElement).backgroundColor,
+      material:Sona.material};
+  """)
+  print('Windows acrylic state',backdrop,flush=True)
   check('sidebar_uses_windows_desktop_backdrop', wait(lambda: chrome("""
-    return document.documentElement.hasAttribute('windowsmica') &&
-      document.documentElement.hasAttribute('sona-desktop-glass') &&
+    return document.documentElement.hasAttribute('sona-desktop-glass') &&
       getComputedStyle(document.documentElement).backgroundColor==='rgba(0, 0, 0, 0)';
   """) and shell("""
     const style=getComputedStyle(document.querySelector('.sona-bookmarks-sidebar'));
     return document.body.hasAttribute('data-desktop-glass') &&
       style.backgroundColor.includes('0.43');
-  """)))
+  """)),backdrop)
   # Windows compositor screenshots distinguish live desktop acrylic from a
   # transparent CSS layer painted over a solid application background.
   import ctypes as C

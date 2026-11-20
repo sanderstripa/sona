@@ -28,13 +28,21 @@ export function material(win,enabled){
  let state=backdropWindows.get(win);
  if(!state){
   const abi=ctypes.winapi_abi||ctypes.default_abi;
-  const set=library('dwmapi.dll').declare('DwmSetWindowAttribute',abi,ctypes.long,
+  const dwm=library('dwmapi.dll');
+  const set=dwm.declare('DwmSetWindowAttribute',abi,ctypes.long,
    ctypes.uintptr_t,ctypes.uint32_t,ctypes.int.ptr,ctypes.uint32_t);
+  const margins=ctypes.StructType('SonaAcrylicMargins',[
+   {left:ctypes.int},{right:ctypes.int},{top:ctypes.int},{bottom:ctypes.int},
+  ]);
+  const extend=dwm.declare('DwmExtendFrameIntoClientArea',abi,ctypes.long,ctypes.uintptr_t,margins.ptr);
   const apply=()=>{
    if(win.closed)return;
-   const type=ctypes.int(state.enabled?3:0); // DWMSBT_TRANSIENTWINDOW: Desktop Acrylic
-   const ok=set(handle(win),38,type.address(),4)===0;
-   root.toggleAttribute('sona-desktop-glass',state.enabled&&ok);
+   const hwnd=handle(win),type=ctypes.int(state.enabled?3:1);
+   const result=Number(set(hwnd,38,type.address(),4));
+   const edge=state.enabled&&result===0?-1:0;
+   const frame=Number(extend(hwnd,margins(edge,edge,edge,edge).address()));
+   state.dwm={result,frame};
+   root.toggleAttribute('sona-desktop-glass',state.enabled&&result===0&&frame===0);
   };
   state={enabled:false,apply};backdropWindows.set(win,state);
   win.addEventListener('activate',()=>win.requestAnimationFrame(apply));
@@ -45,7 +53,7 @@ export function material(win,enabled){
  root.removeAttribute('sona-matte');
  state.apply();
  win.requestAnimationFrame(()=>win.requestAnimationFrame(state.apply));
- return {enabled:!!enabled,native:true,desktop:root.hasAttribute('sona-desktop-glass')};
+ return {enabled:!!enabled,native:true,desktop:root.hasAttribute('sona-desktop-glass'),dwm:state.dwm};
 }
 
 export function isDefault(){
