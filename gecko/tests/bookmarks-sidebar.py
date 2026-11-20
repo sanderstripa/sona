@@ -134,6 +134,15 @@ try:
     tree.scrollTop=0;
   }"""))
   open_actions()
+  rows = shell("""const menu=document.querySelector('.bookmark-action-menu');
+  return [...menu.children].map(button=>{
+    const rect=button.getBoundingClientRect();
+    return {width:rect.width,height:rect.height,top:rect.top,bottom:rect.bottom,
+      menuWidth:menu.clientWidth,clipped:button.scrollHeight>button.clientHeight};
+  });""")
+  check('action_menu_labels_fit_distinct_full_width_rows', len(rows)>1 and all(
+   row['width']>=row['menuWidth']-12 and row['height']>=28 and not row['clipped']
+   and (i==0 or row['top']>=rows[i-1]['bottom']) for i,row in enumerate(rows)), rows)
   click('#bookmarkSettingsAction')
   wait(lambda: call('browser.state.get')['settingsOverlayReady'])
   check('bookmark_settings_targets_bookmarks_controls', wait(lambda: ui(
