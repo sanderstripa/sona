@@ -21,60 +21,14 @@ export function brand(win){
  try{library('shell32.dll').declare('SetCurrentProcessExplicitAppUserModelID',(ctypes.winapi_abi||ctypes.default_abi),ctypes.long,(ctypes.char16_t||ctypes.jschar).ptr)('Sona.Preview');}catch(error){result.processError=String(error);}
  return result;
 }
-const backdropWindows=new WeakMap();
 export function material(win,enabled){
  const root=win.document.documentElement;
- if(Services.appinfo.OS!=='WINNT')return {enabled:false,native:false};
- let state=backdropWindows.get(win);
- if(!state){
-  const abi=ctypes.winapi_abi||ctypes.default_abi;
-  const dwm=library('dwmapi.dll');
-  const set=dwm.declare('DwmSetWindowAttribute',abi,ctypes.long,
-   ctypes.uintptr_t,ctypes.uint32_t,ctypes.int.ptr,ctypes.uint32_t);
-  const margins=ctypes.StructType('SonaAcrylicMargins',[
-   {left:ctypes.int},{right:ctypes.int},{top:ctypes.int},{bottom:ctypes.int},
-  ]);
-  const extend=dwm.declare('DwmExtendFrameIntoClientArea',abi,ctypes.long,ctypes.uintptr_t,margins.ptr);
-  const accentPolicy=ctypes.StructType('SonaAccentPolicy',[
-   {state:ctypes.int},{flags:ctypes.uint32_t},{color:ctypes.uint32_t},{animation:ctypes.int},
-  ]);
-  const compositionData=ctypes.StructType('SonaCompositionData',[
-   {attribute:ctypes.int},{data:ctypes.voidptr_t},{size:ctypes.size_t},
-  ]);
-  let compose;
-  try{
-   compose=library('user32.dll').declare('SetWindowCompositionAttribute',abi,
-    ctypes.int,ctypes.uintptr_t,compositionData.ptr);
-  }catch{}
-  const apply=()=>{
-   if(win.closed)return;
-   const hwnd=handle(win),type=ctypes.int(state.enabled?3:1);
-   let result=Number(set(hwnd,38,type.address(),4));
-   const edge=state.enabled?-1:0;
-   const frame=Number(extend(hwnd,margins(edge,edge,edge,edge).address()));
-   const dark=root.hasAttribute('sona-dark');
-   const policy=accentPolicy(state.enabled?4:0,0,dark?0x55212121:0x55f5f5f5,0);
-   const data=compositionData(19,ctypes.cast(policy.address(),ctypes.voidptr_t),accentPolicy.size);
-   let acrylic=false;
-   if(compose){
-    const none=ctypes.int(1);
-    set(hwnd,38,none.address(),4);
-    acrylic=Number(compose(hwnd,data.address()))!==0;
-    if(state.enabled&&!acrylic)result=Number(set(hwnd,38,type.address(),4));
-   }
-   state.dwm={result,frame,acrylic};
-   root.toggleAttribute('sona-desktop-glass',state.enabled&&frame===0&&(acrylic||result===0));
-  };
-  state={enabled:false,apply};backdropWindows.set(win,state);
-  win.addEventListener('activate',()=>win.requestAnimationFrame(apply));
-  win.addEventListener('sizemodechange',()=>win.requestAnimationFrame(apply));
- }
- state.enabled=!!enabled;
- root.toggleAttribute('windowsmica',state.enabled);
+ const desktop=!!enabled&&Services.appinfo.OS==='WINNT'
+  && Services.prefs.getBoolPref('widget.windows.mica',false);
+ root.toggleAttribute('windowsmica',desktop);
+ root.toggleAttribute('sona-desktop-glass',desktop);
  root.removeAttribute('sona-matte');
- state.apply();
- win.requestAnimationFrame(()=>win.requestAnimationFrame(state.apply));
- return {enabled:!!enabled,native:true,desktop:root.hasAttribute('sona-desktop-glass'),dwm:state.dwm};
+ return {enabled:!!enabled,native:true,desktop};
 }
 
 export function isDefault(){

@@ -115,6 +115,8 @@ try:
     return {mica:document.documentElement.hasAttribute('windowsmica'),
       desktop:document.documentElement.hasAttribute('sona-desktop-glass'),
       background:getComputedStyle(document.documentElement).backgroundColor,
+      appearance:getComputedStyle(document.documentElement).appearance,
+      backdrop:Services.prefs.getIntPref('widget.windows.mica.toplevel-backdrop'),
       material:Sona.material};
   """)
   print('Windows acrylic state',backdrop,flush=True)

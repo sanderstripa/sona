@@ -62,7 +62,9 @@ def patch(path, before, after):
 # The add-on manager resolves the old URI during both startup and replacement.
 bootstrap = out / 'engine/sona.cfg'
 patch(bootstrap, "Services.prefs.setBoolPref('widget.windows.mica',false);Services.prefs.lockPref('widget.windows.mica');",
-      "Services.prefs.setBoolPref('widget.windows.mica',true);Services.prefs.lockPref('widget.windows.mica');")
+      "Services.prefs.setBoolPref('widget.windows.mica',true);Services.prefs.lockPref('widget.windows.mica');"
+      "Services.prefs.setIntPref('widget.windows.mica.toplevel-backdrop',2);"
+      "Services.prefs.lockPref('widget.windows.mica.toplevel-backdrop');")
 vot_registration = next(line for line in bootstrap.read_text(encoding='utf-8').splitlines()
                         if ".setSubstitution('sona-vot'," in line)
 patch(bootstrap, vot_registration, vot_registration + '''
@@ -190,6 +192,10 @@ shutil.copyfile(root/'ui/settings-components.js',ui/'settings-components.js')
 with (ui/'gecko-frontend.css').open('a',encoding='utf-8') as css:
     css.write((root/'gecko/chrome/navigation-fixes.css').read_text(encoding='utf-8'))
     css.write((root/'gecko/chrome/bookmarks-sidebar.css').read_text(encoding='utf-8'))
+
+frontend = ui/'gecko-frontend.css'
+frontend.write_text(re.sub(r'^.*data-matte=true.*\.browser-toolbar\{background:linear-gradient[^\n]*\n',
+                           '', frontend.read_text(encoding='utf-8'), flags=re.MULTILINE), encoding='utf-8')
 
 patch(ui/'renderer.js', 'function appearance(){',
       'function appearance(){document.body.toggleAttribute("data-desktop-glass",!!state.desktopGlassReady);')
