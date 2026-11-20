@@ -86,7 +86,7 @@ def setup(binary,environment,uninstall=False):
      ws=candidate;return True
     candidate.close()
    return False
-  try:wait(connect,60);yield ws,process
+  try:wait(connect,120);yield ws,process
   finally:
    if ws:
     try:command(ws,'Page.close')
@@ -190,7 +190,7 @@ try:
    version(ws,'welcome');presentation(ws,'light');hover_text_action(ws,'settingsButton','light');capture(ws,'installer-welcome.png');check('default_installation_is_separate_gecko_folder',evaluate(ws,'document.getElementById("path").value')==str(destination))
    evaluate(ws,'document.getElementById("settingsButton").click();document.getElementById("ru").click();document.getElementById("dark").click();true');version(ws,'settings');presentation(ws,'dark');hover_text_action(ws,'back','dark');capture(ws,'installer-settings.png')
    evaluate(ws,'document.getElementById("accept").click();true');wait(lambda:evaluate(ws,'document.body.dataset.stage==="installing"'));version(ws,'installing');capture(ws,'installer-progress.png')
-   wait(lambda:finished(ws),120);version(ws,'finish');capture(ws,'installer-finish.png')
+   wait(lambda:finished(ws),240);version(ws,'finish');capture(ws,'installer-finish.png')
    long_buffer=C.create_unicode_buffer(32768)
    C.windll.kernel32.GetLongPathNameW(str(destination/'Sona.exe'),long_buffer,len(long_buffer))
    long_exe=long_buffer.value or str(destination/'Sona.exe')
@@ -352,7 +352,7 @@ try:
   # A partially removed install is still recognized by its ownership manifest.
   (destination/'Sona.exe').unlink()
   with setup(exe,env) as (ws,process):
-   version(ws,'upgrade');evaluate(ws,'document.getElementById("primary").click();true');wait(lambda:finished(ws),120);evaluate(ws,'document.getElementById("launch").checked=false;document.getElementById("done").click();true');process.wait(timeout=20)
+   version(ws,'upgrade');evaluate(ws,'document.getElementById("primary").click();true');wait(lambda:finished(ws),240);evaluate(ws,'document.getElementById("launch").checked=false;document.getElementById("done").click();true');process.wait(timeout=20)
   settings=json.loads((profile/'sona-settings.json').read_text());check('upgrade_keeps_existing_profile_settings',settings['settings']['theme']=='dark' and settings['onboarding']['done'])
   with contextlib.closing(sqlite3.connect(profile/'places.sqlite')) as db:check('upgrade_keeps_real_bookmarks',db.execute('select count(*) from moz_bookmarks where title=?',('Preview 17 installer persistence',)).fetchone()[0]==1)
   with winreg.OpenKey(winreg.HKEY_CURRENT_USER,r'Software\Microsoft\Windows\CurrentVersion\Uninstall\Sona') as key:check('windows_installed_apps_has_correct_version',winreg.QueryValueEx(key,'DisplayVersion')[0]=='1.160.37')

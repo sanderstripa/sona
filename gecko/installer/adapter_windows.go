@@ -11,6 +11,7 @@ import (
 	"embed"
 	"encoding/hex"
 	"encoding/json"
+ "errors"
 	"fmt"
 	"golang.org/x/sys/windows/registry"
  "golang.org/x/sys/windows"
@@ -22,6 +23,7 @@ import (
  "strconv"
  "syscall"
 	"sync/atomic"
+ "time"
 )
 
 //go:embed payload.zip ribbon.png
@@ -102,6 +104,31 @@ func repairableDirectory(dir string) bool {
  err:=filepath.WalkDir(dir,func(path string,item os.DirEntry,e error)error{if e!=nil{return e};if item.Type()&os.ModeSymlink!=0{clean=false;return nil};if !item.IsDir()&&path!=filepath.Join(dir,"Uninstall Sona.exe"){clean=false};return nil})
  return err==nil&&clean
 }
+// Stream the installer into a sibling file and tolerate short-lived Windows
+// sharing locks while replacing the uninstaller.
+func copyUninstaller(destination string) error {
+ self, err := os.Executable()
+ if err != nil { return err }
+ source, err := os.Open(self)
+ if err != nil { return err }
+ defer source.Close()
+ staged, err := os.CreateTemp(filepath.Dir(destination), ".sona-uninstall-*.exe")
+ if err != nil { return err }
+ defer os.Remove(staged.Name())
+ _, copyErr := io.Copy(staged, source)
+ closeErr := staged.Close()
+ if copyErr != nil { return copyErr }
+ if closeErr != nil { return closeErr }
+ deadline := time.Now().Add(30 * time.Second)
+ for {
+  err = os.Rename(staged.Name(), destination)
+  if !errors.Is(err, windows.ERROR_SHARING_VIOLATION) && !errors.Is(err, windows.ERROR_LOCK_VIOLATION) || time.Now().After(deadline) {
+   return err
+  }
+  time.Sleep(250 * time.Millisecond)
+ }
+}
+
 func (a *Adapter) Install(o core.Options) error {
  if err:=checkPreviousClosed();err!=nil{return err}
  for _,oldDir:=range previousInstallations(){if previousOwned(oldDir)&&strings.EqualFold(oldDir,o.Path){return fmt.Errorf("choose the new Sona folder")}}
@@ -146,20 +173,9 @@ func (a *Adapter) Install(o core.Options) error {
 	if err = core.Unpack(raw, dir, "sona", "Sona.exe", func(p int) { a.progress.Store(int32(p)) }); err != nil {
 		return err
 	}
-	self, err := os.Executable()
-	if err != nil {
-		return err
-	}
-	data, err := os.ReadFile(self)
-	if err != nil {
-		return err
-	}
-	if _, err = core.OwnedPath(dir, "Uninstall Sona.exe"); err != nil {
-		return err
-	}
-	if err = core.AtomicWrite(filepath.Join(dir, "Uninstall Sona.exe"), data); err != nil {
-		return err
-	}
+ uninstaller, err := core.OwnedPath(dir, "Uninstall Sona.exe")
+ if err != nil { return err }
+ if err = copyUninstaller(uninstaller); err != nil { return err }
 	if err = setReg(`Software\Sona`, map[string]string{"InstallDir": dir}); err != nil {
 		return err
 	}
