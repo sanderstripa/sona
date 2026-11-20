@@ -38,6 +38,22 @@ function setBookmarksSidebar(open) {
 }
 const tabID=tab=>{if(!ids.has(tab)){ids.set(tab,nextId);tabs.set(nextId++,tab);}return ids.get(tab);};
 const selected=()=>gBrowser.selectedBrowser;
+let maximizeRegion;
+function setCaptionBounds(bounds){
+ if(Services.appinfo.OS!=='WINNT')return true;
+ if(!['x','y','width','height'].every(key=>Number.isFinite(bounds?.[key])))return false;
+ if(bounds.width<=0||bounds.height<=0)return true;
+ if(!maximizeRegion){
+  maximizeRegion=document.createElementNS(H,'div');
+  maximizeRegion.id='sona-native-maximize';
+  maximizeRegion.setAttribute('aria-hidden','true');
+  document.documentElement.append(maximizeRegion);
+ }
+ const rect=frame.getBoundingClientRect();
+ Object.assign(maximizeRegion.style,{left:(rect.left+bounds.x)+'px',top:(rect.top+bounds.y)+'px',
+  width:bounds.width+'px',height:bounds.height+'px'});
+ return true;
+}
 const currentURL=browser=>browser.currentURI.spec===homeURL?'sona://home':browser.currentURI.spec;
 const validTabs=()=>gBrowser.tabs.filter(t=>!t.closing);
 function internalURL(kind){if(kind==='startup'&&shared.isNewProfile&&!isPrivate&&shared.config.onboarding?.done!==true)return appURL+'onboarding.html';const s=shared.config.settings,mode=s[kind+'Mode'];return mode==='custom'?s[kind+'Url']:mode==='blank'?'about:blank':homeURL;}
@@ -204,7 +220,8 @@ async function dispatch(action,payload,source){
  case 'window.minimize':window.minimize();return true;
  case 'window.maximize':windowState===STATE_MAXIMIZED?window.restore():window.maximize();notify();return true;
  case 'window.close':await ChromeUtils.importESModule('chrome://sona/content/lifecycle.sys.mjs').closeWindow(window,shared);return true;
- case 'window.captionBounds':return true;
+ case 'window.captionBounds':
+  return source?.appURI===appURL+'index.html'&&setCaptionBounds(payload);
  case 'window.beginDrag':if(Number(payload)>1){windowState===STATE_MAXIMIZED?window.restore():window.maximize();}else if(!ChromeUtils.importESModule('chrome://sona/content/tab-drag.sys.mjs').beginWindow(window))ChromeUtils.importESModule('chrome://sona/content/window-controls.sys.mjs').beginDrag();return true;
  case 'window.toolbarMenu':{const en=shared.config.settings.language==='en';const items=[{command:1,label:en?'Settings':'Настройки'},{command:2,label:en?'Downloads':'Загрузки'},{command:5,label:en?'History':'История'},{command:6,label:en?'Clear browsing data…':'Очистить данные браузера…'},{separator:true},{command:3,label:en?'New tab':'Новая вкладка'},{command:4,label:en?'New incognito tab':'Новая вкладка инкогнито'}];const command=await menu(items,source?.pointer?.screenX??window.mozInnerScreenX+40,source?.pointer?.screenY??window.mozInnerScreenY+40);if(command===1)settings();if(command===2)send('openDownloads',null);if(command===5)openHistory();if(command===6)openHistory(true);if(command===3)await dispatch('browser.newTab');if(command===4)OpenBrowserWindow({private:true});return true;}
  }
