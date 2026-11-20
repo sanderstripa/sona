@@ -104,6 +104,33 @@ try:
  else:
   screenshot('sona-sidebar-after.png')
   check('synchronous_layout_at_rest', abs(after['left']-after['page']['left'])<2 and after['address']>before['address'] and abs(after['caption']-before['caption'])<2, after)
+  content("const probe=document.createElement('div');probe.id='matte-probe';probe.style.cssText='position:absolute;inset:0 0 auto;height:3000px;z-index:9999;pointer-events:none;background:repeating-linear-gradient(#fa3020 0 120px,#04b393 120px 240px)';document.body.append(probe);scrollTo(0,0);return true;")
+  page_top = chrome('return gBrowser.selectedBrowser.getBoundingClientRect().top')
+  call('browser.settings.set', {'mattePanel': True})
+  check('matte_preserves_viewport_position_and_top_controls',
+        wait(lambda: chrome(f"""return document.documentElement.hasAttribute('sona-page-glass')
+           && Math.abs(gBrowser.selectedBrowser.getBoundingClientRect().top-{page_top})<1
+           && document.getElementById('sona-page-glass').hidden""")))
+  check('sidebar_glass_contains_real_page_colors', wait(lambda: chrome("""
+    const glass=document.getElementById('sona-bookmarks-glass');
+    if(!glass||glass.hidden||!glass.width||!glass.height)return false;
+    const [r,g,b,a]=glass.getContext('2d').getImageData(4,4,1,1).data;
+    return a===255&&r>160&&g<120&&b<100;
+  """)))
+  screenshot('sona-sidebar-matte.png')
+  content('scrollTo(0,140);return true;')
+  check('matte_toolbar_samples_scrolled_contents', wait(lambda: chrome("""
+    const glass=document.getElementById('sona-page-glass');
+    if(!glass||glass.hidden||!glass.width||!glass.height)return false;
+    const [r,g,b,a]=glass.getContext('2d').getImageData(4,4,1,1).data;
+    return a===255&&r<100&&g>100&&b>90;
+  """)))
+  screenshot('sona-toolbar-matte-scrolled.png')
+  content('scrollTo(0,0);return true;')
+  check('matte_returns_to_neutral_at_top',
+        wait(lambda: chrome("return document.getElementById('sona-page-glass').hidden")))
+  call('browser.settings.set', {'mattePanel': False})
+  content("document.getElementById('matte-probe').remove();return true;")
   call('browser.bookmarks.sidebar', False)
   wait(lambda: geometry()['left']<1 and geometry()['page']['left']<1)
   samples=run("""const actor=document.getElementById('sona-shell-frame').browsingContext.currentWindowGlobal.getActor('SonaApp');

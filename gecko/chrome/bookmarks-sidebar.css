@@ -209,8 +209,10 @@ body .sona-bookmarks-sidebar > .navigation-search {
 @media (forced-colors: active) { .bookmark-scroll-thumb { display: none; } }
 
 body .sona-bookmarks-sidebar {
-  background: color-mix(in srgb, var(--solid) 88%, transparent);
-  backdrop-filter: blur(18px) saturate(115%);
+  background: var(--solid);
+}
+body[data-native-page-glass] .sona-bookmarks-sidebar {
+  background: color-mix(in srgb, var(--solid) 63%, transparent);
 }
 .sona-bookmarks-sidebar .bookmark-sections button {
   display: grid;

@@ -44,14 +44,14 @@ for name in ['vot-ui.js', 'translation-gecko-ui.js']:
 
 for locale in ['ru','en-US']:
     shutil.copyfile(root/'gecko/chrome/locales'/locale/'branding/brand.ftl',chrome/'locales'/locale/'branding/brand.ftl')
-for name in ['tab-drag.sys.mjs','integration.js','AppChild.sys.mjs','browser.js','window-controls.sys.mjs','shell-host.js','settings-routing.js','vot.js','storage.js','host.css','build-info.sys.mjs','updates.js','DownloadPolicy.sys.mjs','downloads.js']:
+for name in ['tab-drag.sys.mjs','integration.js','AppChild.sys.mjs','browser.js','window-controls.sys.mjs','shell-host.js','settings-routing.js','vot.js','storage.js','host.css','build-info.sys.mjs','updates.js','DownloadPolicy.sys.mjs','downloads.js','page-glass.js','PageGlassChild.sys.mjs','PageGlassParent.sys.mjs']:
     source = (root / 'gecko/chrome' / name).read_text(encoding='utf-8')
-    (chrome / name).write_text(re.sub(r'0\.(?:13|14)\.0 Preview','Preview 1.160.40',source),encoding='utf-8')
+    (chrome / name).write_text(re.sub(r'0\.(?:13|14)\.0 Preview','Preview 1.160.41',source),encoding='utf-8')
 for path in chrome.rglob('*'):
     if path.suffix in {'.js','.html','.mjs'} and 'third_party' not in path.parts:
         source = path.read_text(encoding='utf-8')
         if '0.17.0' in source:
-            path.write_text(source.replace('0.17.0','1.160.40'),encoding='utf-8')
+            path.write_text(source.replace('0.17.0','1.160.41'),encoding='utf-8')
 def patch(path, before, after):
     source = path.read_text(encoding='utf-8')
     if before not in source:
@@ -92,7 +92,7 @@ patch(index, source_close[0], source_close[1] +
       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>' +
       source_close[2])
 patch(index, 'm3 11 9-8 9 8M5 10v11h5v-7h4v7h5V10',
-      'M3.5 11 12 4l8.5 7M6 9.5V20h4v-6h4v6h4V9.5')
+      'M3.5 11 12 4l8.5 7M6 9v11h12V9')
 
 outline = '<rect x="3.25" y="4.25" width="17.5" height="15.5" rx="2.4"/><path d="M8.7 4.7v14.6"/>'
 fill = '<path class="sidebar-icon-fill" d="M8.7 4.25H5.65a2.4 2.4 0 0 0-2.4 2.4v10.7a2.4 2.4 0 0 0 2.4 2.4H8.7Z"/>'
@@ -129,7 +129,7 @@ for path in (out/'engine').rglob('*.exe'):
 build = json.loads((out/'BUILD.json').read_text(encoding='utf-8'))
 assert build['name'] == 'Sona 0.17.0 Preview'
 build.update(firefox='160.0',mozilla_archive='https://archive.mozilla.org/pub/firefox/releases/160.0/win64/ru/Firefox Setup 160.0.exe',mozilla_sha256='9aca6af4a633546ce9908894d735b0518c36b6a54f108566e517225983cf5173')
-build.update(name='Sona Preview 1.160.40',base_preview=17,sona_source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip())
+build.update(name='Sona Preview 1.160.41',base_preview=17,sona_source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip())
 (out/'BUILD.json').write_text(json.dumps(build,indent=2),encoding='utf-8')
 
 patch(ui/'renderer.js','mattePanel:true','mattePanel:false,showExtensions:false,showHome:false')
@@ -199,6 +199,14 @@ patch(ui/'renderer.js', "  const active=compactToolbar.querySelector('[data-acti
 
 patch(ui/'renderer.js', "      if(x.active){\n        bindAddress(node,",
       "      if(x.active){\n        requestAnimationFrame(()=>node.scrollIntoView({block:'nearest',inline:'nearest'}));\n        bindAddress(node,")
+
+patch(ui/'renderer.js', "  const count=wanted.filter(x=>!x.active).length;",
+      """  const count=wanted.filter(x=>!x.active).length;
+  const activeIndex=wanted.findIndex(tab=>tab.active);
+  const balance=Math.max(-3,Math.min(3,count-2*activeIndex));
+  const compactFlow=document.getElementById('compactTabFlow');
+  compactFlow.style.setProperty('--compact-start-space',Math.max(0,balance)*40+'px');
+  compactFlow.style.setProperty('--compact-end-space',Math.max(0,-balance)*40+'px');""")
 
 # The new native tab briefly has about:blank before the home document commits.
 # Never populate address suggestions with this transient startup URI.
@@ -283,4 +291,4 @@ shutil.copyfile(root/'gecko/chrome/integration-ui.js',ui/'integration-ui.js')
 with (ui/'gecko-frontend.css').open('a',encoding='utf-8') as css: css.write((root/'gecko/chrome/frontend.css').read_text(encoding='utf-8'))
 
 # Versioned shortcut resources must exist for every new installer version.
-shutil.copyfile(root/'ui/sona-icon.ico',ui/'sona-app-1.160.40.ico')
+shutil.copyfile(root/'ui/sona-icon.ico',ui/'sona-app-1.160.41.ico')

@@ -100,16 +100,45 @@ body .downloads-panel {
 .downloads-panel .download-row > b { color: var(--muted); background: var(--soft); }
 .gecko-download-actions { display: flex; gap: 1px; }
 .gecko-download-actions button { cursor: pointer; }
+/* Center the compact strip in the toolbar, with room between site icons. */
+body[data-layout=compact] .compact-toolbar .compact-center-cluster {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 300px);
+  min-width: 0;
+}
+body[data-layout=compact] .compact-center-cluster::before {
+  content: "";
+  flex: 0 0 58px;
+}
+body[data-layout=compact][data-vpn-toolbar=true] .compact-center-cluster::before { flex-basis: 28px; }
 body[data-layout=compact] .compact-tab-flow {
+  --compact-gap: 8px;
   min-width: 0;
-  max-width: min(620px, 100%);
+  gap: var(--compact-gap);
+  padding-inline-start: calc(6px + var(--compact-start-space, 0px));
+  padding-inline-end: calc(6px + var(--compact-end-space, 0px));
 }
-body[data-layout=compact] .compact-center-cluster {
-  position: static;
-  transform: none;
-  flex: 1 1 auto;
-  min-width: 0;
-  max-width: none;
+body[data-layout=compact] .compact-tab-flow > .compact-tab {
+  flex: 0 0 32px;
+  width: 32px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
 }
-body[data-layout=compact] .compact-drag-space { flex: 0 1 24px; }
-body[data-layout=compact] .compact-tab-flow > .navigation-toolbar-button { flex: none; }
+body[data-layout=compact] .compact-tab-flow > .compact-tab:hover { background: var(--soft); }
+body[data-layout=compact] .compact-drag-space,
+body[data-layout=compact] #compactDownloadsButton { margin-inline-start: auto; }
+body[data-layout=compact] .compact-drag-space { flex: 0 1 24px; min-width: 0; }
+body[data-layout=compact] #compactDownloadsButton:not(.auto-hidden) + .compact-drag-space { margin-inline-start: 0; }
+@container (max-width: 660px) {
+  body[data-layout=compact] .compact-toolbar .compact-center-cluster {
+    position: static;
+    transform: none;
+    max-width: none;
+    flex: 1 1 auto;
+  }
+  body[data-layout=compact] .compact-center-cluster::before { display: none; }
+  body[data-layout=compact] .compact-tab-flow { padding-inline: 4px; }
+}
