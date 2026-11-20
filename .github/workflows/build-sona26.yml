@@ -148,7 +148,7 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             throw 'Preview 1.160.36 already exists. An existing release will not be overwritten.'
           } else {
-            gh release create sona-preview-1.160.36 Sona-1.160.36-Preview-x64.exe SHA256SUMS.txt --target $env:GITHUB_SHA --title 'Sona Preview 1.160.36' --notes 'Исправлены меню закладок, переход на заданную домашнюю страницу и установка подписанного расширения VOT.'
+            gh release create sona-preview-1.160.36 Sona-1.160.36-Preview-x64.exe SHA256SUMS.txt --target $env:GITHUB_SHA --title 'Sona Preview 1.160.36' --notes 'Исправлены меню закладок, домашняя страница и подключение VOT. Обновлены подсветка кнопок окна, положение обзора вкладок и иконка боковой панели. Добавлена поддержка Windows Snap Layouts.'
           }
           if ($LASTEXITCODE) { throw 'Release publication failed' }
 
