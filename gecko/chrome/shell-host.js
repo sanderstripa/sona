@@ -60,21 +60,39 @@ function internalURL(kind){if(kind==='startup'&&shared.isNewProfile&&!isPrivate&
 function load(url,background=false){const tab=gBrowser.addTrustedTab(url,{inBackground:background,skipAnimation:true});if(!background)gBrowser.selectedTab=tab;return tabID(tab);}
 function rows(){return validTabs().map(tab=>({id:tabID(tab),active:tab===gBrowser.selectedTab,pinned:tab.pinned,title:tab.linkedBrowser.currentURI.spec===homeURL?'Sona':tab.label,label:tab.label,url:currentURL(tab.linkedBrowser),favicon:tab.image||'',loading:tab.linkedBrowser.currentURI.spec!==homeURL&&tab.hasAttribute('busy'),canGoBack:tab.linkedBrowser.canGoBack,canGoForward:tab.linkedBrowser.canGoForward,microphoneActive:!!tab._sharingState?.microphone,cameraActive:!!tab._sharingState?.camera,audible:tab.hasAttribute('soundplaying'),muted:tab.hasAttribute('muted'),generation:tab.linkedBrowser.browsingContext.currentWindowGlobal?.innerWindowId||0,incognito:isPrivate,thumbnail:overview?(Sona.thumbnails?.get(tab)||null):null}));}
 function barVisible(){const s=shared.config.settings;if(s.bookmarksBarPosition==='hidden'||s.bookmarksBarMode==='never')return false;return s.bookmarksBarMode==='always'||s.bookmarksBarMode==='auto'&&barAuto||['newTab','home'].includes(s.bookmarksBarMode)&&currentURL(selected())==='sona://home';}
+const downloadsPanelWidth=350;
+let surfaceRegions=[];
+function updateSurfaceClip(){
+ if(!frame)return;
+ const path=[`M0 0H${innerWidth}V${toolbarHeight}H0Z`];
+ const rect=(left,top,right,bottom)=>{
+  if(right>left&&bottom>top)path.push(`M${left} ${top}H${right}V${bottom}H${left}Z`);
+ };
+ if(rightPanel===downloadsPanelWidth)rect(innerWidth-Math.min(downloadsPanelWidth,innerWidth*.72),toolbarHeight,innerWidth,innerHeight);
+ if(bookmarksSide||sidebarClosing){
+  const width=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sona-left-panel'));
+  rect(0,toolbarHeight,width,innerHeight);
+ }
+ for(const [x,y,w,h] of surfaceRegions)
+  rect(Math.max(0,x),Math.max(0,y),Math.min(innerWidth,x+w),Math.min(innerHeight,y+h));
+ frame.style.setProperty('--sona-overlay-clip',`path('${path.join(' ')}')`);
+}
 function geometry(){
  const full=bookmarkConfirmation||popover||side||bookmarksSide||sidebarClosing||overview||rightPanel>0||suggestions>0;
  const overlays=popover||side||overview||rightPanel>0||suggestions>0;
  if(frame){
   frame.toggleAttribute('data-sona-overlay',overlays);
+  if(!overlays)surfaceRegions=[];
   frame.toggleAttribute('data-sona-confirmation',bookmarkConfirmation);
  }
- const height=(validTabs().length>1?88:68)+(barVisible()?28:0),root=document.documentElement;
+ const height=(shared.config.settings.layout==='compact'?58:validTabs().length>1?88:68)+(barVisible()?28:0),root=document.documentElement;
  if(height!==targetHeight){targetHeight=height;const from=toolbarHeight,start=performance.now(),token=++geometryToken,duration=matchMedia('(prefers-reduced-motion:reduce)').matches?60:320;
   send('adaptiveGeometry',{animation:{startAt:Date.now(),duration,from:from-(barVisible()?28:0),to:height-(barVisible()?28:0)},expanded:validTabs().length>1});
-  const tick=now=>{if(token!==geometryToken)return;const p=Math.min(1,(now-start)/duration),e=1-Math.pow(1-p,3);toolbarHeight=from+(height-from)*e;root.style.setProperty('--sona-toolbar-height',toolbarHeight+'px');if(!popover&&!side&&!bookmarksSide&&!sidebarClosing&&!overview&&!rightPanel&&!suggestions)root.style.setProperty('--sona-surface-height',toolbarHeight+'px');if(p===1)notify();if(p<1)requestAnimationFrame(tick);};requestAnimationFrame(tick);
+  const tick=now=>{if(token!==geometryToken)return;const p=Math.min(1,(now-start)/duration),e=1-Math.pow(1-p,3);toolbarHeight=from+(height-from)*e;root.style.setProperty('--sona-toolbar-height',toolbarHeight+'px');if(overlays)updateSurfaceClip();if(!popover&&!side&&!bookmarksSide&&!sidebarClosing&&!overview&&!rightPanel&&!suggestions)root.style.setProperty('--sona-surface-height',toolbarHeight+'px');if(p===1)notify();if(p<1)requestAnimationFrame(tick);};requestAnimationFrame(tick);
  }
- root.style.setProperty('--sona-surface-height',(full?innerHeight:toolbarHeight)+'px');root.style.setProperty('--sona-right-panel',rightPanel+'px');root.toggleAttribute('sona-fullscreen',fullScreen);
+ root.style.setProperty('--sona-surface-height',(full?innerHeight:toolbarHeight)+'px');root.style.setProperty('--sona-right-panel',(rightPanel===downloadsPanelWidth?0:rightPanel)+'px');root.toggleAttribute('sona-fullscreen',fullScreen);if(overlays)updateSurfaceClip();
 }
-function snapshot(){const list=rows(),page=list.find(t=>t.active);return {tabs:list,page,activeTabId:page?.id,update:{sona:'0.14.0 Preview',gecko:Services.appinfo.platformVersion,firefox:Services.appinfo.version,xray:Sona.components?.xray?.version||'—',sudoku:Sona.components?.sudoku?.version||'—',adblock:'adblock-rust 0.13.3'},settings:{...shared.config.settings,theme:ChromeUtils.importESModule('chrome://sona/content/theme.sys.mjs').resolveTheme(shared.config.settings.theme),layout:'adaptive'},incognito:isPrivate,fullscreen:fullScreen,maximized:windowState===STATE_MAXIMIZED,sidebarVisible:side,bookmarksSidebarVisible:bookmarksSide,bookmarksSidebarMotion:sidebarMotion,overviewVisible:overview,bookmarksBarVisible:barVisible(),bookmarks:marks,clientHeight:innerHeight,clientWidth:innerWidth,activeProfileId:shared.config.profile,adaptiveToolbar:{expanded:list.length>1,progress:Math.max(0,Math.min(1,(toolbarHeight-(barVisible()?28:0)-68)/20)),height:toolbarHeight-(barVisible()?28:0),active:toolbarHeight!==targetHeight},pageGlassReady:document.documentElement.hasAttribute('sona-page-glass'),surfaceExpanded:!!(popover||side||bookmarksSide||overview||rightPanel||suggestions),settingsOverlayOpen:!!settingsFrame&&!settingsFrame.hidden,settingsOverlayReady:settingsReady};}
+function snapshot(){const list=rows(),page=list.find(t=>t.active);return {tabs:list,page,activeTabId:page?.id,update:{sona:'0.14.0 Preview',gecko:Services.appinfo.platformVersion,firefox:Services.appinfo.version,xray:Sona.components?.xray?.version||'—',sudoku:Sona.components?.sudoku?.version||'—',adblock:'adblock-rust 0.13.3'},settings:{...shared.config.settings,theme:ChromeUtils.importESModule('chrome://sona/content/theme.sys.mjs').resolveTheme(shared.config.settings.theme)},incognito:isPrivate,fullscreen:fullScreen,maximized:windowState===STATE_MAXIMIZED,sidebarVisible:side,bookmarksSidebarVisible:bookmarksSide,bookmarksSidebarMotion:sidebarMotion,overviewVisible:overview,bookmarksBarVisible:barVisible(),bookmarks:marks,clientHeight:innerHeight,clientWidth:innerWidth,activeProfileId:shared.config.profile,adaptiveToolbar:{expanded:list.length>1,progress:Math.max(0,Math.min(1,(toolbarHeight-(barVisible()?28:0)-68)/20)),height:toolbarHeight-(barVisible()?28:0),active:toolbarHeight!==targetHeight},pageGlassReady:document.documentElement.hasAttribute('sona-page-glass'),surfaceExpanded:!!(popover||side||bookmarksSide||overview||rightPanel||suggestions),settingsOverlayOpen:!!settingsFrame&&!settingsFrame.hidden,settingsOverlayReady:settingsReady};}
 function actorSend(browser,name,data){try{browser?.browsingContext?.currentWindowGlobal?.getActor('SonaApp').sendAsyncMessage(name,data);}catch{}}
 function send(name,value){const shellValue=name==='settings'?{...value,theme:ChromeUtils.importESModule('chrome://sona/content/theme.sys.mjs').resolveTheme(value.theme)}:value;actorSend(frame,'emit',{name,value:shellValue});if(settingsFrame&&!settingsFrame.hidden)actorSend(settingsFrame,'emit',{name,value});}
 function emitTo(browser,value){actorSend(browser,'home',value);}
@@ -167,9 +185,9 @@ async function dispatch(action,payload,source){
  case 'browser.surfaceRegions':{
   if(!source?.appURI?.endsWith('/index.html'))throw Error('Trusted shell required');
   if(!Array.isArray(payload)||payload.length>24)throw Error('Invalid regions');
-  let path="";
-  for(const rect of payload){if(!Array.isArray(rect)||rect.length!==4||rect.some(n=>!Number.isFinite(n)))throw Error('Invalid rectangle');const [x,y,w,h]=rect,left=Math.max(0,x),top=Math.max(0,y),right=Math.min(innerWidth,x+w),bottom=Math.min(innerHeight,y+h);if(right>left&&bottom>top)path+=` M${left} ${top}H${right}V${bottom}H${left}Z`;}
-  frame.style.setProperty('--sona-overlay-clip',`path('M0 0H${innerWidth}V${toolbarHeight}H0Z${path}')`);return true;
+  for(const rect of payload)
+   if(!Array.isArray(rect)||rect.length!==4||rect.some(n=>!Number.isFinite(n)))throw Error('Invalid rectangle');
+  surfaceRegions=payload;updateSurfaceClip();return true;
  }
  case 'browser.popover':popover=!!payload;geometry();return true;
  case 'browser.pageMenu':send('requestSiteMenu',null);return true;

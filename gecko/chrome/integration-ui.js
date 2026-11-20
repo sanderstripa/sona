@@ -23,7 +23,7 @@ if(location.pathname.endsWith('/settings.html')){
 }
 if(!location.pathname.endsWith('/index.html'))return;
 let snapshot={},drag=null,suppress=0,regionRAF=0,lastRegions='';
-function regions(){if(regionRAF)return;regionRAF=requestAnimationFrame(()=>{regionRAF=0;if(innerHeight<=(snapshot.adaptiveToolbar?.height||68)+(snapshot.bookmarksBarVisible?28:0)+2){lastRegions='';return;}const rectangles=[];for(const n of document.querySelectorAll('.tab-overview,.bookmarks-menu,.bookmark-context,.side-panel.open,.site-popover,.sona-permission-prompt,.sona-translation,.suggestions.visible,.site-find,.bookmark-editor,.sidebar.open,.vpn-panel.open,.sona-gecko-qr,.sona-tab-preview,.sona-type-tooltip,.sona-bookmark-confirm')){if(n.hidden||getComputedStyle(n).display==='none'||getComputedStyle(n).visibility==='hidden')continue;const r=n.getBoundingClientRect();if(r.width&&r.height)rectangles.push([Math.floor(r.x-24),Math.floor(r.y-24),Math.ceil(r.width+48),Math.ceil(r.height+48)]);}const value=JSON.stringify(rectangles.slice(0,24));if(value!==lastRegions){lastRegions=value;invoke('browser.surfaceRegions',JSON.parse(value)).catch(error);}});}
+function regions(){if(regionRAF)return;regionRAF=requestAnimationFrame(()=>{regionRAF=0;if(innerHeight<=(snapshot.adaptiveToolbar?.height||68)+(snapshot.bookmarksBarVisible?28:0)+2){lastRegions='';return;}const rectangles=[];for(const n of document.querySelectorAll('.tab-overview,.bookmarks-menu,.bookmark-context,.side-panel.open:not(.downloads-panel),.site-popover,.sona-permission-prompt,.sona-translation,.suggestions.visible,.site-find,.bookmark-editor,.sidebar.open,.vpn-panel.open,.sona-gecko-qr,.sona-tab-preview,.sona-type-tooltip,.sona-bookmark-confirm')){if(n.hidden||getComputedStyle(n).display==='none'||getComputedStyle(n).visibility==='hidden')continue;const r=n.getBoundingClientRect();if(r.width&&r.height)rectangles.push([Math.floor(r.x-24),Math.floor(r.y-24),Math.ceil(r.width+48),Math.ceil(r.height+48)]);}const value=JSON.stringify(rectangles.slice(0,24));if(value!==lastRegions){lastRegions=value;invoke('browser.surfaceRegions',JSON.parse(value)).catch(error);}});}
 new MutationObserver(regions).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class','hidden','style','open']});window.addEventListener('resize',regions);
 
 api.onState(value=>{if(!value.surfaceExpanded)lastRegions='';snapshot=value;regions();const back=document.getElementById('backButton');if(back&&!document.getElementById('geckoForward')){const b=back.cloneNode(true);b.id='geckoForward';b.title='Вперёд';b.dataset.tooltip='Вперёд';b.setAttribute('aria-label','Вперёд');b.style.transform='rotate(180deg)';b.onclick=()=>invoke('browser.forward').catch(error);back.after(b);}const forward=document.getElementById('geckoForward');if(forward){forward.hidden=forward.disabled=!value.page?.canGoForward;forward.style.display=value.page?.canGoForward?'':'none';}});
@@ -57,7 +57,42 @@ window.__sonaEmit=(name,value)=>{
 document.addEventListener('click',e=>{if(performance.now()<suppress&&e.target.closest('[data-tab-id],[data-active-tab]')){e.preventDefault();e.stopImmediatePropagation();}},true);
 let qrPanel;const emit=window.__sonaEmit;window.__sonaEmit=(name,value)=>{emit?.(name,value);if(name!=='geckoQR')return;qrPanel?.remove();const panel=qrPanel=document.createElement('section');panel.className='site-popover sona-gecko-qr';panel.style.cssText='position:fixed;top:100px;left:calc(50% - 150px);width:300px;padding:20px;z-index:100';const title=document.createElement('h3');title.textContent='QR-код страницы';const qr=qrcode(0,'M');qr.addData(value);qr.make();const count=qr.getModuleCount(),canvas=document.createElement('canvas'),scale=4,pad=4;canvas.width=canvas.height=(count+pad*2)*scale;canvas.style.cssText='width:100%;image-rendering:pixelated';const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#000';for(let y=0;y<count;y++)for(let x=0;x<count;x++)if(qr.isDark(y,x))ctx.fillRect((x+pad)*scale,(y+pad)*scale,scale,scale);panel.append(title,canvas,button('Закрыть',()=>{panel.remove();api.setPopover(false,'gecko-qr');}));document.body.append(panel);api.setPopover(true,'gecko-qr');regions();};
 let downloads=[];
-function renderActions(){const rows=[...document.querySelectorAll('#downloadsList .download-row')];rows.forEach((row,i)=>{const d=downloads[i];if(!d||row.querySelector('.gecko-download-actions'))return;const box=document.createElement('div');box.className='gecko-download-actions';const add=(label,operation)=>box.append(button(label,async()=>{downloads=await invoke('browser.downloads.action',{id:d.id,operation});}));if(d.state==='progressing')add('Отмена','cancel');else{if(d.state==='completed'){add('Открыть','open');add('Папка','reveal');}else add('Повторить','retry');add('Убрать','remove');}row.append(box);});}
+const downloadGlyphs={
+ open:'M13 4h7v7m0-7-9 9m7 1v6H4V6h6',
+ reveal:'M3 7h7l2 2h9v3M3 7v13h15l3-8H7l-4 8',
+ remove:'m6 6 12 12M18 6 6 18',
+ cancel:'M6 6h12v12H6Z',
+ retry:'M4 11a8 8 0 1 1 2 6m-2-6V5m0 6h6',
+};
+function renderActions(){
+ const english=snapshot.settings?.language==='en';
+ const rows=document.querySelectorAll('#downloadsList .download-row');
+ rows.forEach((row,i)=>{
+  const download=downloads[i];
+  if(!download||row.querySelector('.gecko-download-actions'))return;
+  const box=document.createElement('div');
+  box.className='gecko-download-actions';
+  const add=(operation,ru,en)=>{
+   const action=button('',()=>invoke('browser.downloads.action',{id:download.id,operation}));
+   action.type='button';
+   action.title=english?en:ru;
+   action.setAttribute('aria-label',action.title);
+   action.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="'+downloadGlyphs[operation]+'"/></svg>';
+   box.append(action);
+  };
+  if(download.state==='progressing')add('cancel','Отменить загрузку','Cancel download');
+  else{
+   if(download.state==='completed'){
+    add('open','Открыть файл','Open file');
+    add('reveal','Показать в папке','Show in folder');
+   }else add('retry','Повторить загрузку','Retry download');
+   add('remove','Убрать из списка','Remove from list');
+  }
+  const filename=row.querySelector('strong');
+  if(filename)filename.title=download.filename;
+  row.append(box);
+ });
+}
 api.onDownloads(value=>{downloads=value;queueMicrotask(renderActions);});const get=api.getDownloads;api.getDownloads=async()=>{downloads=await get();setTimeout(renderActions,0);return downloads;};
 })();
 

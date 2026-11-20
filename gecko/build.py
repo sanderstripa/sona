@@ -61,8 +61,8 @@ for page in ['index.html','settings.html','home.html','history.html','onboarding
  path.write_text(content,encoding='utf-8')
 js=runtime/'sona/chrome/ui/settings.js';text=js.read_text(encoding='utf-8')
 text=text.replace('Автоматическое определение использует разрешённую геолокацию Windows.','Автоматическое определение использует разрешённую геолокацию браузера.')
-# Only the adaptive Sona toolbar is exposed.
-text=text.replace(",opt('compact','Компактная','Compact')",'')
+text=text.replace("opt('adaptive','Основная','Main'),opt('compact','Компактная','Compact')",
+                  "opt('adaptive','Основной','Main'),opt('compact','Компактный','Compact')")
 text=text.replace("['CEF',state.update?.cef],['Chromium',state.update?.chromium]","['Gecko',state.update?.gecko],['Firefox',state.update?.firefox]")
 text=text.replace("['Firefox',state.update?.firefox]","['Firefox',state.update?.firefox],['Xray',state.update?.xray],['Sudoku',state.update?.sudoku],['Adblock',state.update?.adblock]")
 # Avoid rebuilding an embedded Chrome page; use Firefox's actual manager/store.

@@ -11,7 +11,7 @@
   const shield=el('div','navigation-shield');shield.hidden=true;document.body.append(shield);
   const overview=el('section','tab-overview');overview.hidden=true;document.body.append(overview);
   const head=el('div','overview-head'), search=el('input','navigation-search');search.placeholder='Поиск вкладок';search.setAttribute('aria-label','Поиск вкладок');
-  const closeOverview=button('×',()=>api.setOverview(false));closeOverview.classList.add('overview-close');closeOverview.setAttribute('aria-label','Закрыть обзор вкладок');head.append(el('h1','','Обзор вкладок'),search,closeOverview);overview.append(head);
+  const closeOverview=button('×',()=>api.setOverview(false));closeOverview.classList.add('overview-close');closeOverview.setAttribute('aria-label','Закрыть обзор вкладок');head.append(el('h1','','Обзор вкладок'),search);if(!gecko)head.append(closeOverview);overview.append(head);
   const grid=el('div','overview-grid');overview.append(grid);search.oninput=renderOverview;
   const menuSearch=el('input','navigation-search');menuSearch.placeholder='Поиск закладок';menuSearch.setAttribute('aria-label','Поиск закладок');menuSearch.oninput=()=>{pane='list';query=menuSearch.value;renderMenu();};
   const contents=el('div','bookmark-tree'), actions=el('div','bookmark-actions');
@@ -383,6 +383,8 @@
     tabs=el('nav','bookmark-sections');
     bookmarkTab=button('',()=>selectSection('bookmarks'));
     readingTab=button('',()=>selectSection('reading'));
+    bookmarkTab.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v16l-6-4-6 4Z"/></svg>';
+    readingTab.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v13m0-13C9 4 5 4 3 5v13c3-1 6-1 9 1 3-2 6-2 9-1V5c-2-1-6-1-9 1Z"/></svg>';
     tabs.append(bookmarkTab,readingTab);
     menu.append(status,tabs);
     setSidebar(false);
@@ -503,8 +505,10 @@
     more.setAttribute('aria-label',more.title);
     menuSearch.placeholder=readingView?t('Поиск в списке','Search reading list'):t('Поиск закладок','Search bookmarks');
     menuSearch.setAttribute('aria-label',menuSearch.placeholder);
-    bookmarkTab.textContent=t('Закладки','Bookmarks');
-    readingTab.textContent=t('Список для чтения','Reading list');
+    bookmarkTab.title=t('Закладки','Bookmarks');
+    readingTab.title=t('Список для чтения','Reading list');
+    bookmarkTab.setAttribute('aria-label',bookmarkTab.title);
+    readingTab.setAttribute('aria-label',readingTab.title);
     bookmarkTab.setAttribute('aria-pressed',String(!readingView));
     readingTab.setAttribute('aria-pressed',String(readingView));
 

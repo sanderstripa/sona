@@ -207,3 +207,26 @@ body .sona-bookmarks-sidebar > .navigation-search {
 }
 .bookmark-scroll-thumb:hover::before { background: color-mix(in srgb, currentColor 55%, transparent); }
 @media (forced-colors: active) { .bookmark-scroll-thumb { display: none; } }
+
+body .sona-bookmarks-sidebar {
+  background: color-mix(in srgb, var(--solid) 88%, transparent);
+  backdrop-filter: blur(18px) saturate(115%);
+}
+.sona-bookmarks-sidebar .bookmark-sections button {
+  display: grid;
+  place-items: center;
+  min-height: 32px;
+  color: var(--muted);
+  background: transparent;
+}
+.sona-bookmarks-sidebar .bookmark-sections button[aria-pressed=true] { color: var(--text); }
+.sona-bookmarks-sidebar .bookmark-sections button:hover { background: var(--soft); }
+.bookmark-sections svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

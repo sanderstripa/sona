@@ -7,5 +7,10 @@ export function install(){if(installed)return;installed=true;Integration.downloa
  let host='';try{host=new URL(download.source.referrerInfo?.originalReferrer?.spec||download.source.url).hostname;}catch{}
  const value=state.config?.rules.sites[host]?.downloads??state.config?.rules.defaults.downloads??1;if(Number(value)===0)return false;if(Number(value)===2)return true;
  const win=[...Services.wm.getEnumerator('navigator:browser')].find(w=>!w.closed&&PrivateBrowsingUtils.isWindowPrivate(w)===!!download.source.isPrivate);if(!win)return true;
- return !Services.prompt.confirm(win,'Sona — загрузка файла','Разрешить загрузку файла с '+host+'?');
+ const english=state.config?.settings.language==='en';
+ const title=english?'Sona — File download':'Sona — загрузка файла';
+ const message=host
+  ? (english?'Allow this file download from '+host+'?':'Разрешить загрузку файла с сайта '+host+'?')
+  : (english?'Allow this file download?':'Разрешить загрузку этого файла?');
+ return !Services.prompt.confirm(win,title,message);
 }}));}

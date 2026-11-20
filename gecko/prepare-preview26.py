@@ -44,7 +44,7 @@ for name in ['vot-ui.js', 'translation-gecko-ui.js']:
 
 for locale in ['ru','en-US']:
     shutil.copyfile(root/'gecko/chrome/locales'/locale/'branding/brand.ftl',chrome/'locales'/locale/'branding/brand.ftl')
-for name in ['tab-drag.sys.mjs','integration.js','AppChild.sys.mjs','browser.js','window-controls.sys.mjs','shell-host.js','settings-routing.js','vot.js','storage.js','host.css','build-info.sys.mjs','updates.js']:
+for name in ['tab-drag.sys.mjs','integration.js','AppChild.sys.mjs','browser.js','window-controls.sys.mjs','shell-host.js','settings-routing.js','vot.js','storage.js','host.css','build-info.sys.mjs','updates.js','DownloadPolicy.sys.mjs','downloads.js']:
     source = (root / 'gecko/chrome' / name).read_text(encoding='utf-8')
     (chrome / name).write_text(re.sub(r'0\.(?:13|14)\.0 Preview','Preview 1.160.39',source),encoding='utf-8')
 for path in chrome.rglob('*'):
@@ -73,6 +73,26 @@ patch(bootstrap, vot_registration, vot_registration + '''
 
 index = ui / 'index.html'
 index.write_text(index.read_text(encoding='utf-8').replace('data-matte="true"','data-matte="false"'),encoding='utf-8')
+
+settings_ui=ui/'settings.js'
+settings_source=settings_ui.read_text(encoding='utf-8')
+if "opt('compact'" not in settings_source:
+    patch(settings_ui, "opt('adaptive','Основная','Main')",
+          "opt('adaptive','Основной','Main'),opt('compact','Компактный','Compact')")
+else:
+    patch(settings_ui, "opt('compact','Компактная','Compact')", "opt('compact','Компактный','Compact')")
+patch(index, 'M12 3v11m0 0 4-4m-4 4-4-4M5 19h14',
+      'M12 7.5v9m-3.5-3.5 3.5 3.5 3.5-3.5')
+patch(index, '<svg class="download-static" viewBox="0 0 24 24">',
+      '<svg class="download-static" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/>')
+source_close = re.search(r'(<button id="closeDownloads"[^>]*>).*?(</button>)',
+                         index.read_text(encoding='utf-8'))
+assert source_close, 'Downloads close button missing'
+patch(index, source_close[0], source_close[1] +
+      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>' +
+      source_close[2])
+patch(index, 'm3 11 9-8 9 8M5 10v11h5v-7h4v7h5V10',
+      'M3.5 11 12 4l8.5 7M6 9.5V20h4v-6h4v6h4V9.5')
 
 outline = '<rect x="3.25" y="4.25" width="17.5" height="15.5" rx="2.4"/><path d="M8.7 4.7v14.6"/>'
 fill = '<path class="sidebar-icon-fill" d="M8.7 4.25H5.65a2.4 2.4 0 0 0-2.4 2.4v10.7a2.4 2.4 0 0 0 2.4 2.4H8.7Z"/>'
@@ -168,6 +188,13 @@ shutil.copyfile(root/'ui/settings-components.js',ui/'settings-components.js')
 with (ui/'gecko-frontend.css').open('a',encoding='utf-8') as css:
     css.write((root/'gecko/chrome/navigation-fixes.css').read_text(encoding='utf-8'))
     css.write((root/'gecko/chrome/bookmarks-sidebar.css').read_text(encoding='utf-8'))
+
+# The compact command buttons remain next to the scrollable tab group.
+patch(ui/'renderer.js', "    if(x.active){const plus=$('#compactNewTabButton');if(node.nextElementSibling!==plus)node.after(plus);previous=plus;}\n", '')
+patch(ui/'renderer.js', "  const active=compactToolbar.querySelector('[data-active-tab]'),plus=$('#compactNewTabButton');if(active&&active.nextElementSibling!==plus)active.after(plus);\n", '')
+
+patch(ui/'renderer.js', "      if(x.active){\n        bindAddress(node,",
+      "      if(x.active){\n        requestAnimationFrame(()=>node.scrollIntoView({block:'nearest',inline:'nearest'}));\n        bindAddress(node,")
 
 # The new native tab briefly has about:blank before the home document commits.
 # Never populate address suggestions with this transient startup URI.

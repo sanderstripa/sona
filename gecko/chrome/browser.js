@@ -122,7 +122,7 @@ async function state(){const dirs=await IOUtils.getChildren(PathUtils.parent(pro
 function validate(next){
  if(next.profile!==shared.config.profile)throw Error('Profile changed');
  if(!['system','light','dark'].includes(next.settings.theme))throw Error('Invalid theme');
- next.settings.layout='adaptive';
+ next.settings.layout=next.settings.layout==='compact'?'compact':'adaptive';
  for(const key of ['startupUrl','newTabUrl','homeUrl'])if(next.settings[key]){const u=new URL(next.settings[key]);if(!['http:','https:'].includes(u.protocol))throw Error('Only HTTP/HTTPS page addresses are supported');}
  for(const row of next.vpn.profiles||[])if(typeof row.link!=='string'||row.link.length>16384||!/^vless:\/\/|^sudoku:\/\//.test(row.link))throw Error('Invalid VPN key');
  if(JSON.stringify(next).length>1048576)throw Error('Settings too large');return structuredClone(next);
@@ -182,7 +182,7 @@ function button(id,label,command){const b=document.createXULElement('toolbarbutt
 async function initialize(){
  const began=performance.now();Sona.startupTimings={initializeWindowAge:Math.round(began)};const timing=name=>Sona.startupTimings[name]=Math.round(performance.now()-began);
  if(!shared.initialized){shared.isNewProfile=!(await IOUtils.exists(settingsFile));if(shared.isNewProfile){try{const choice=await IOUtils.readJSON(PathUtils.join(PathUtils.parent(PathUtils.parent(profile)),'install-preferences.json'));if(['ru','en'].includes(choice.language))defaults.settings.language=shared.config.settings.language=choice.language;if(['light','dark'].includes(choice.theme))defaults.settings.theme=shared.config.settings.theme=choice.theme;}catch{}}try{const stored=await IOUtils.readJSON(settingsFile);if(stored.vpn?.protected){const encrypted=stored.vpn;try{const decoded=readVPNJSON(Cc['@mozilla.org/security/sdr;1'].getService(Ci.nsISecretDecoderRing).decryptString(stored.vpn.protected));if(decoded.repaired){const backup=settingsFile+'.before-unicode-repair';if(!(await IOUtils.exists(backup)))await IOUtils.copy(settingsFile,backup);await IOUtils.setPermissions(backup,0o600);shared.repairedSettings=true;}stored.vpn=decoded.value;}catch(error){shared.lockedVPN=encrypted;stored.vpn=structuredClone(defaults.vpn);shared.lockedVPNBaseline=JSON.stringify(stored.vpn);console.error("Sona VPN ciphertext preserved; other settings remain available",error);}}shared.config={...defaults,...stored,settings:{...defaults.settings,...stored.settings},rules:{...defaults.rules,...stored.rules},vpn:{...defaults.vpn,...stored.vpn}};}catch(error){if(await IOUtils.exists(settingsFile)){shared.storageError=String(error);console.error('Sona settings preserved:',error);}}try{shared.networkBeforeVPN=await IOUtils.readJSON(PathUtils.join(profile,'sona-network-before-vpn.json'));}catch{}proxy(false);await IOUtils.remove(PathUtils.join(profile,'sona-network-before-vpn.json'),{ignoreAbsent:true});shared.initialized=true;}
- shared.config.settings.layout='adaptive';
+ shared.config.settings.layout=shared.config.settings.layout==='compact'?'compact':'adaptive';
  Sona.backend={shared,Services,IOUtils,PathUtils,PlacesUtils,profile,isPrivate,save,apply};
  // Restore internal tabs saved before the product's filesystem identity changed.
  // Ordinary web addresses and their browsing state remain unchanged.
