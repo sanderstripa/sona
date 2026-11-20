@@ -157,6 +157,7 @@ body .sona-bookmarks-sidebar > .navigation-search {
   z-index: 2;
   inset: calc(100% - 4px) 5px auto;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1px;
   max-height: calc(100vh - 54px);
   overflow: auto;
@@ -167,8 +168,13 @@ body .sona-bookmarks-sidebar > .navigation-search {
   box-shadow: 0 5px 16px var(--shadow);
 }
 .sona-bookmarks-sidebar .bookmark-action-menu .nav-action {
-  padding: 5px 7px;
+  width: 100%;
+  min-width: 0;
+  height: auto;
   min-height: 28px;
+  padding: 5px 7px;
+  border-radius: 6px;
+  white-space: normal;
   font: inherit;
   overflow-wrap: anywhere;
 }
