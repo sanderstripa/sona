@@ -39,3 +39,15 @@ html.cef-runtime body[data-native-page-glass][data-matte=true][data-page-glass-r
 .classic-tab,.compact-tab,.compact-active-tab{transition:translate 140ms ease;touch-action:none}
 .gecko-tab-dragging{opacity:1!important;position:relative;z-index:20;transition:none!important;pointer-events:none;cursor:grabbing!important}
 @media(prefers-reduced-motion:reduce){.classic-tab,.compact-tab{transition:none}}
+
+/* Extend the hover paint to the frame edges while keeping the glyph centers. */
+body[data-layout=adaptive] .browser-toolbar .window-controls button:not(.navigation-toolbar-button)::before {
+  top: min(0px, calc((48px - (68px - 20px * var(--adaptive-progress))) / 2));
+}
+.classic-navigation-right,
+.compact-toolbar-surface {
+  --sona-caption-edge: max(0px, calc(8px + (var(--toolbar-target) - var(--caption-target)) / 2));
+}
+.browser-toolbar :is(.window-controls button,.compact-window-button).window-close:not(.navigation-toolbar-button)::before {
+  right: calc(-1 * var(--sona-caption-edge));
+}

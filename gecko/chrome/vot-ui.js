@@ -5,7 +5,7 @@ const invoke=(action,payload)=>new Promise((resolve,reject)=>cefQuery({request:J
 const el=(tag,text)=>{const n=document.createElement(tag);if(text)n.textContent=text;return n;};
 window.sonaVideoSettings={open(){sonaSettings.dialog('Перевод YouTube · VOT',box=>{
  const status=el('p','Проверка расширения VOT…');status.setAttribute('role','status');
- const note=el('p','VOT передаёт адрес видео и данные запроса внешним серверам Яндекса/VOT. Это отдельная функция от локального перевода страниц Sona. Перевод запускается кнопкой VOT на видео; громкость, язык и возврат оригинального звука регулируются там же.');note.className='note';
+ const note=el('p','VOT передаёт адрес видео и данные запроса внешним серверам Яндекса/VOT. Это отдельная функция от локального перевода страниц Sona. Запустите видео и нажмите «Перевести» над плеером; громкость, язык и возврат оригинального звука регулируются там же.');note.className='note';
  const details=el('details'),summary=el('summary','Разрешения компонента');details.append(summary);const permissions=el('pre');permissions.style.cssText='white-space:pre-wrap;max-height:160px;overflow:auto;font:inherit';details.append(permissions);
  const consent=el('input');consent.type='checkbox';consent.id='gecko-vot-consent';const label=el('label');label.append(consent,document.createTextNode('Разрешаю установить VOT и обращаться к внешнему сервису перевода.'));
  const install=el('button','Установить VOT');install.type='button';install.id='gecko-vot-install';install.disabled=true;
