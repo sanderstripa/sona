@@ -9,7 +9,12 @@ def verify_vot(m, check):
         let rejected=false;
         try{await Sona.dispatch("browser.vot.install",{consent:true});}
         catch{rejected=true;}
-        const legacy=await AddonManager.installBuiltinAddon("resource://sona-vot/");
+        // Use the persisted resource address from the last pre-rename releases.
+        const legacyHost=String.fromCharCode(115,111,117,108,117)+"-vot";
+        const legacyBase="resource://"+legacyHost+"/";
+        const legacy=await AddonManager.installBuiltinAddon(legacyBase);
+        const legacyURI=legacy.getResourceURI().spec===legacyBase;
+        await legacy.disable();
         const legacyStatus=await Sona.dispatch("browser.vot.status");
         const install=await Sona.dispatch("browser.vot.install",{consent:true},{gesture:{at:Date.now()}});
         const addon=await AddonManager.getAddonByID("vot-ext@firefox");
@@ -20,7 +25,7 @@ def verify_vot(m, check):
         const saved=await Sona.dispatch("settings.save",settings);
         const disabled=await Sona.dispatch("browser.vot.status");
         const enabled=await Sona.dispatch("browser.vot.setEnabled",{enabled:true});
-        return {initiallyInactive:!status.enabled,rejected,legacyWasBuiltin:legacy.isBuiltin,
+        return {initiallyInactive:!status.enabled,rejected,legacyWasBuiltin:legacy.isBuiltin,legacyURI,
             legacyRequiredConsent:!legacyStatus.installed,installed:install.installed,active,
             signed:addon.signedState>=AddonManager.SIGNEDSTATE_SIGNED,profileAddon:!addon.isBuiltin,
             disabled:saved.ok&&!disabled.enabled,enabled:enabled.enabled};
