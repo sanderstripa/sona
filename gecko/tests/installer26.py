@@ -1,6 +1,7 @@
 """Real CEF-style installer UI: install, launch, upgrade, uninstall, and preserved data."""
 import base64,contextlib,ctypes as C,json,os,pathlib,socket,sqlite3,subprocess,sys,tempfile,time,urllib.request,winreg
 import websocket,threading,psutil
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from PIL import ImageGrab
 from marionette_driver.marionette import Marionette
 exe=pathlib.Path(sys.argv[1]).resolve();out=pathlib.Path(sys.argv[2]).resolve();out.mkdir(parents=True,exist_ok=True)
@@ -312,6 +313,62 @@ try:
   })().then(done,e=>done({error:String(e)}));""")
   check('downloads_panel_paints_first_frame_without_resizing_page',
         downloads==dict(open=True,visible=True,fits=True,close=True,samePageWidth=True,clipped=True),downloads)
+
+  class DownloadFixture(BaseHTTPRequestHandler):
+   def do_GET(self):
+    body=b'Sona native download acceptance fixture'
+    self.send_response(200)
+    self.send_header('Content-Type','application/octet-stream')
+    self.send_header('Content-Length',str(len(body)))
+    self.end_headers()
+    self.wfile.write(body)
+
+  with ThreadingHTTPServer(('127.0.0.1',0),DownloadFixture) as server, tempfile.TemporaryDirectory() as folder:
+   worker=threading.Thread(target=server.serve_forever,daemon=True)
+   worker.start()
+   try:
+    target=pathlib.Path(folder)/'sona-native-download.bin'
+    native_download=m.execute_async_script(r"""const [url,target,done]=arguments;
+    const host=new URL(url).hostname;
+    const sites=Sona.config.rules.sites,previous=sites[host];
+    (async()=>{
+      const {Downloads}=ChromeUtils.importESModule('resource://gre/modules/Downloads.sys.mjs');
+      const list=await Downloads.getList(Downloads.PUBLIC);
+      const download=await Downloads.createDownload({source:url,target});
+      const frame=document.getElementById('sona-shell-frame');
+      const actor=frame.browsingContext.currentWindowGlobal.getActor('SonaApp');
+      try{
+        sites[host]={...previous,downloads:0};
+        await list.add(download);
+        await download.start();
+        const rows=await Sona.dispatch('browser.downloads.get');
+        const row=rows.find(r=>r.filename==='sona-native-download.bin');
+        if(!row||row.state!=='completed')return {state:row?.state};
+        const actions=await actor.sendQuery('testing',`
+          document.getElementById('downloadsButton').click();
+          for(let i=0;i<30;i++){
+            const control=document.querySelector('#downloadsList .gecko-download-actions');
+            if(control)return Array.from(control.querySelectorAll('button')).map(button=>button.getAttribute('aria-label'));
+            await new Promise(resolve=>setTimeout(resolve,30));
+          }
+          return [];`);
+        await actor.sendQuery('testing',"document.getElementById('closeDownloads').click();return true;");
+        const remaining=await Sona.dispatch('browser.downloads.action',{id:row.id,operation:'remove'});
+        return {actions,removed:!remaining.some(r=>r.id===row.id),keptFile:await IOUtils.exists(target)};
+      }finally{
+        if(previous)sites[host]=previous;
+        else delete sites[host];
+        if((await list.getAll()).includes(download))await list.remove(download);
+      }
+    })().then(done,e=>done({error:String(e)}));""",
+      script_args=[f'http://127.0.0.1:{server.server_port}/download',str(target)])
+    check('native_download_actions_remove_history_only',
+          native_download==dict(actions=['Открыть файл','Показать в папке','Убрать из списка'],
+                                removed=True,keptFile=True),native_download)
+    check('downloaded_file_has_original_bytes',target.read_bytes()==b'Sona native download acceptance fixture')
+   finally:
+    server.shutdown()
+    worker.join()
 
   result=m.execute_async_script('const done=arguments[arguments.length-1];(async()=>{const {PlacesUtils}=ChromeUtils.importESModule("resource://gre/modules/PlacesUtils.sys.mjs");await PlacesUtils.bookmarks.insert({parentGuid:PlacesUtils.bookmarks.toolbarGuid,url:"https://example.org/preview22-persistence",title:"Preview 17 installer persistence"});Sona.config.onboarding={done:true,step:6};await Sona.backend.save();return true;})().then(done,e=>done({error:String(e)}));');check('real_bookmark_saved_before_upgrade',result is True)
   # Verify actual shell-decoded desktop/Start/pinned shortcuts and native HWND.
