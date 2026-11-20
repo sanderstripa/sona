@@ -302,6 +302,7 @@ try:
   verify_fullscreen(m,check,wait,out)
   from home24 import verify_home
   verify_home(m,check,wait)
+  runpy.run_path(str(pathlib.Path(__file__).with_name("vot-consent.py")))["verify_vot"](m,check)
   m.execute_script('Sona.dispatch("browser.newIncognito");return true;')
   private_window='[...Services.wm.getEnumerator("navigator:browser")].find(w=>w.Sona?.ready && w.Sona.backend.isPrivate)'
   check('incognito_uses_sona_shell',wait(lambda:m.execute_script('const w='+private_window+';return !!w?.document.documentElement.hasAttribute("sona-ui-ready")')))
