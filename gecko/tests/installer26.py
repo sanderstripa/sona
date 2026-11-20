@@ -141,7 +141,7 @@ def version(ws,stage):
  check('only_sona_brand_'+stage,not evaluate(ws,'/firefox/i.test(document.body.innerText)'))
  value=evaluate(ws,'document.getElementById("version").textContent');check('version_visible_'+stage,'1.160.37' in value and evaluate(ws,'document.getElementById("version").getBoundingClientRect().height>0'),value)
 try:
- with tempfile.TemporaryDirectory(prefix='Sona installer acceptance ') as temporary:
+ with tempfile.TemporaryDirectory(prefix='Sona installer acceptance ',ignore_cleanup_errors=True) as temporary:
   root=pathlib.Path(temporary);local=root/'userdata';profile=local/'Sona/Profiles/default';prior=''.join(map(chr,[83,111,117,108,117]));legacy_profile=local/prior/'Profiles/default';legacy_profile.mkdir(parents=True);mp=port()
   # A verified previous installation, its private profile and shell registration.
   previous=local/'Programs'/prior;previous.mkdir(parents=True)
@@ -190,7 +190,12 @@ try:
    version(ws,'welcome');presentation(ws,'light');hover_text_action(ws,'settingsButton','light');capture(ws,'installer-welcome.png');check('default_installation_is_separate_gecko_folder',evaluate(ws,'document.getElementById("path").value')==str(destination))
    evaluate(ws,'document.getElementById("settingsButton").click();document.getElementById("ru").click();document.getElementById("dark").click();true');version(ws,'settings');presentation(ws,'dark');hover_text_action(ws,'back','dark');capture(ws,'installer-settings.png')
    evaluate(ws,'document.getElementById("accept").click();true');wait(lambda:evaluate(ws,'document.body.dataset.stage==="installing"'));version(ws,'installing');capture(ws,'installer-progress.png')
-   wait(lambda:finished(ws),240);version(ws,'finish');capture(ws,'installer-finish.png')
+   try:wait(lambda:finished(ws),240)
+   except AssertionError as error:
+    capture(ws,'installer-timeout.png')
+    detail=evaluate(ws,'({stage:document.body.dataset.stage,progress:document.getElementById("progress").value})')
+    raise AssertionError(f"Installer did not finish: {detail}") from error
+   version(ws,'finish');capture(ws,'installer-finish.png')
    long_buffer=C.create_unicode_buffer(32768)
    C.windll.kernel32.GetLongPathNameW(str(destination/'Sona.exe'),long_buffer,len(long_buffer))
    long_exe=long_buffer.value or str(destination/'Sona.exe')
