@@ -35,9 +35,15 @@ subprocess.run(['python',str(root/'gecko/rename-owned.py'),str(out)],check=True)
 subprocess.run(['python',str(root/'gecko/upgrade-runtime22.py')],check=True)
 chrome = out / 'engine/sona/chrome'
 ui = chrome / 'ui'
+vot = out / 'engine/sona/optional/vot-1.12.6.xpi'
+vot_pin = json.loads((root/'gecko/vot-pin.json').read_text(encoding='utf-8'))
+if not vot.is_file() or hashlib.sha256(vot.read_bytes()).hexdigest() != vot_pin['sha256']:
+    subprocess.run(['python', str(root/'gecko/prepare-vot.py'), str(out), str(out/'engine')], check=True)
+shutil.copyfile(root/'gecko/chrome/vot-ui.js', ui/'vot-ui.js')
+
 for locale in ['ru','en-US']:
     shutil.copyfile(root/'gecko/chrome/locales'/locale/'branding/brand.ftl',chrome/'locales'/locale/'branding/brand.ftl')
-for name in ['tab-drag.sys.mjs','integration.js','AppChild.sys.mjs','browser.js','window-controls.sys.mjs','shell-host.js','storage.js','host.css','build-info.sys.mjs','updates.js']:
+for name in ['tab-drag.sys.mjs','integration.js','AppChild.sys.mjs','browser.js','window-controls.sys.mjs','shell-host.js','settings-routing.js','vot.js','storage.js','host.css','build-info.sys.mjs','updates.js']:
     source = (root / 'gecko/chrome' / name).read_text(encoding='utf-8')
     (chrome / name).write_text(re.sub(r'0\.(?:13|14)\.0 Preview','Preview 1.160.35',source),encoding='utf-8')
 for path in chrome.rglob('*'):
