@@ -30,18 +30,26 @@ def verify_tab_drag(m,check,wait):
  row=m.execute_script('return Sona.tabDragLayout.find(r=>r.id===Sona.native.tabID(__dragTabs[0]))')
  try:
   start_script = """const done=arguments[arguments.length-1];
+  const {ctypes}=ChromeUtils.importESModule("resource://gre/modules/ctypes.sys.mjs");
+  const user=ctypes.open("user32.dll"),abi=ctypes.winapi_abi||ctypes.default_abi;
+  const button=user.declare("mouse_event",abi,ctypes.void_t,ctypes.uint32_t,
+    ctypes.uint32_t,ctypes.uint32_t,ctypes.uint32_t,ctypes.uintptr_t);
+  button(2,0,0,0,0);
+  user.close();
+  window.setTimeout(()=>{
   const p=ChromeUtils.importESModule("chrome://sona/content/window-controls.sys.mjs").tabDragPointer(window);
   if(!p.down){done({started:false,pointer:p});return;}
   Sona.dispatch("browser.tabDrag.begin",{id:Sona.native.tabID(__dragTabs[0]),layout:Sona.tabDragLayout,offsetX:20,offsetY:20})
-    .then(started=>done({started,pointer:p}),error=>done({error:String(error),pointer:p}));"""
+    .then(started=>done({started,pointer:p}),error=>done({error:String(error),pointer:p}));
+  },120);"""
   user_window=C.c_void_p(int(info['hwnd'],16))
+  u.GetForegroundWindow.restype=C.c_void_p
   u.SetForegroundWindow(user_window)
+  wait(lambda:u.GetForegroundWindow()==int(info['hwnd'],16))
   started=None
   for _ in range(8):
    u.mouse_event(4,0,0,0,0)
    point(row['x']+20,row['y']+20)
-   u.mouse_event(2,0,0,0,0)
-   time.sleep(.12)
    started=m.execute_async_script(start_script)
    if started.get('started') or started.get('error'):break
   check('windows_reports_pressed_mouse_button',bool(started and started.get('pointer',{}).get('down')),started)
