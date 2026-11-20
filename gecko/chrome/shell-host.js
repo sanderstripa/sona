@@ -129,7 +129,11 @@ async function dispatch(action,payload,source){
  case 'browser.navigate':navigate(payload);return true;
  case 'browser.newTab':focusAfterHome=load(internalURL('newTab'));setTimeout(()=>send('focusAddress',null),40);notify();return true;
  case 'browser.openTab':{const url=payload.url;if(!/^(https?:|about:)/.test(url))throw Error('Unsupported URL');load(url,!!payload.background);notify();return true;}
- case 'browser.home':navigate('sona://home');return true;
+ case 'browser.home':{
+  const url=internalURL('home')||'about:blank';
+  selected().loadURI(Services.io.newURI(url),{triggeringPrincipal:Services.scriptSecurityManager.getSystemPrincipal()});
+  notify();return true;
+ }
  case 'browser.back':if(selected().canGoBack)selected().goBack();return true;
  case 'browser.reload':if(gBrowser.selectedTab.hasAttribute('busy'))selected().stop();else selected().reload();return true;
  case 'browser.switchTab':{const tab=tabs.get(Number(payload));if(tab&&!tab.closing)gBrowser.selectedTab=tab;notify();return true;}
