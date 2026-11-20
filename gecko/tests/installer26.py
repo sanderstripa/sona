@@ -290,10 +290,10 @@ try:
   })().then(done,error=>done({error:String(error)}));"""
   result=m.execute_async_script(sidebar)
   check('installed_sidebar_shifts_entire_workspace',result is True,result)
-  from toolbar19 import verify_toolbar
-  verify_toolbar(m,check,wait)
   import runpy
   runpy.run_path(str(pathlib.Path(__file__).with_name("tab-drag-windows.py")))["verify_tab_drag"](m,check,wait)
+  from toolbar19 import verify_toolbar
+  verify_toolbar(m,check,wait)
   from about22 import verify_about
   verify_about(m,check,wait)
   from branding25 import verify_branding
