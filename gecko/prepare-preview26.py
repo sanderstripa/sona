@@ -59,6 +59,15 @@ def patch(path, before, after):
 
 index = ui / 'index.html'
 index.write_text(index.read_text(encoding='utf-8').replace('data-matte="true"','data-matte="false"'),encoding='utf-8')
+
+outline = '<rect x="3.25" y="4.25" width="17.5" height="15.5" rx="2.4"/><path d="M8.7 4.7v14.6"/>'
+fill = '<path class="sidebar-icon-fill" d="M8.7 4.25H5.65a2.4 2.4 0 0 0-2.4 2.4v10.7a2.4 2.4 0 0 0 2.4 2.4H8.7Z"/>'
+patch(index, outline, fill + outline)
+for name in ['toolbar-ui.css','caption-geometry.js','navigation.css']:
+    shutil.copyfile(root/'ui'/name, ui/name)
+if 'src="caption-geometry.js"' not in index.read_text(encoding='utf-8'):
+    patch(index, '</body>', '<script src="caption-geometry.js"></script></body>')
+
 patch(ui/'renderer.js','if(!wanted.has(id))node.remove();','if(!wanted.has(id)){sonaTabExit(node);node.remove();}')
 patch(ui/'renderer.js','if(container.children[index]!==node)container.insertBefore(node,container.children[index]||null);',"""
     const entering = !node.isConnected;
