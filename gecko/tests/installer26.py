@@ -139,7 +139,7 @@ def presentation(ws, theme):
  check('installer_caption_centers_'+theme,evaluate(ws,'["minimize","close"].every(id=>{const b=document.getElementById(id).getBoundingClientRect(),g=document.querySelector("#"+id+" svg").getBoundingClientRect();return Math.abs((b.left+b.right-g.left-g.right)/2)<0.6&&Math.abs((b.top+b.bottom-g.top-g.bottom)/2)<0.6;})'))
 def version(ws,stage):
  check('only_sona_brand_'+stage,not evaluate(ws,'/firefox/i.test(document.body.innerText)'))
- value=evaluate(ws,'document.getElementById("version").textContent');check('version_visible_'+stage,'1.160.37' in value and evaluate(ws,'document.getElementById("version").getBoundingClientRect().height>0'),value)
+ value=evaluate(ws,'document.getElementById("version").textContent');check('version_visible_'+stage,'1.160.38' in value and evaluate(ws,'document.getElementById("version").getBoundingClientRect().height>0'),value)
 try:
  with tempfile.TemporaryDirectory(prefix='Sona installer acceptance ',ignore_cleanup_errors=True) as temporary:
   root=pathlib.Path(temporary);local=root/'userdata';profile=local/'Sona/Profiles/default';prior=''.join(map(chr,[83,111,117,108,117]));legacy_profile=local/prior/'Profiles/default';legacy_profile.mkdir(parents=True);mp=port()
@@ -202,7 +202,7 @@ try:
    icon_script="$shell=New-Object -ComObject WScript.Shell;$roots=@([Environment]::GetFolderPath('Desktop'),[Environment]::GetFolderPath('Programs'));foreach($r in $roots){Get-ChildItem -LiteralPath $r -Filter Sona.lnk -Recurse -ErrorAction SilentlyContinue|ForEach-Object{$link=$shell.CreateShortcut($_.FullName);if($link.TargetPath -eq '"+long_exe.replace("'","''")+"'){$link.IconLocation}}}"
    icon_output=subprocess.check_output(['powershell.exe','-NoProfile','-Command',icon_script],text=True)
    locations=[line.strip() for line in icon_output.splitlines() if line.strip()]
-   check('desktop_and_start_links_use_fresh_icon',len(locations)>=2 and all('sona-app-1.160.37.ico' in line for line in locations),locations)
+   check('desktop_and_start_links_use_fresh_icon',len(locations)>=2 and all('sona-app-1.160.38.ico' in line for line in locations),locations)
    check('stale_firefox_private_shortcut_removed',not stale.exists())
    check('unrelated_private_shortcut_preserved',foreign.exists());foreign.unlink()
    for remaining in (p for p in localized if p.exists()):
@@ -255,9 +255,9 @@ try:
   check('unicode_settings_encryption_roundtrip',m.execute_async_script('const done=arguments[arguments.length-1];(async()=>{const old=structuredClone(Sona.backend.shared.config.vpn);try{Sona.backend.shared.config.vpn.directDomains="пример.рф\\n日本語.example";await Sona.backend.save();const disk=await IOUtils.readJSON(PathUtils.join(PathUtils.profileDir,"sona-settings.json"));const raw=Cc["@mozilla.org/security/sdr;1"].getService(Ci.nsISecretDecoderRing).decryptString(disk.vpn.protected);return JSON.parse(raw).directDomains==="пример.рф\\n日本語.example";}finally{Sona.backend.shared.config.vpn=old;await Sona.backend.save();}})().then(done,e=>done({error:String(e)}));') is True)
 
   check('default_toolbar',m.execute_script('const s=Sona.config.settings;return s.layout==="adaptive"&&!s.mattePanel&&!s.showExtensions&&!s.showHome&&!s.vpnToolbarVisible'))
-  check('first_installed_launch_version_is_preview22',m.execute_script('return document.documentElement.getAttribute("sona-version")')=='Sona Preview 1.160.37')
+  check('first_installed_launch_version_is_preview22',m.execute_script('return document.documentElement.getAttribute("sona-version")')=='Sona Preview 1.160.38')
   check('first_installed_launch_shows_sona_welcome',m.execute_script('return gBrowser.selectedBrowser.currentURI.spec.endsWith("/onboarding.html")'))
-  check('semantic_release_order',m.execute_script('const make=v=>{const tag="sona-preview-"+v,name="Sona-"+v+"-Preview-x64.exe";return {draft:false,tag_name:tag,assets:[{id:1,name,size:1,digest:"sha256:"+"a".repeat(64),browser_download_url:"https://github.com/sanderstripa/soulu/releases/download/"+tag+"/"+name}]};};return Sona.updateCandidate([make("1.160.37")])===null && Sona.updateCandidate([make("1.160.21")])===null && Sona.updateCandidate([make("1.160.38")])!==null && Sona.updateCandidate([make("1.161.1")])!==null;'))
+  check('semantic_release_order',m.execute_script('const make=v=>{const tag="sona-preview-"+v,name="Sona-"+v+"-Preview-x64.exe";return {draft:false,tag_name:tag,assets:[{id:1,name,size:1,digest:"sha256:"+"a".repeat(64),browser_download_url:"https://github.com/sanderstripa/soulu/releases/download/"+tag+"/"+name}]};};return Sona.updateCandidate([make("1.160.38")])===null && Sona.updateCandidate([make("1.160.21")])===null && Sona.updateCandidate([make("1.160.39")])!==null && Sona.updateCandidate([make("1.161.1")])!==null;'))
   (out/'installed-first-launch.png').write_bytes(base64.b64decode(m.screenshot()))
   result=m.execute_async_script('const done=arguments[arguments.length-1];(async()=>{const {PlacesUtils}=ChromeUtils.importESModule("resource://gre/modules/PlacesUtils.sys.mjs");await PlacesUtils.bookmarks.insert({parentGuid:PlacesUtils.bookmarks.toolbarGuid,url:"https://example.org/preview22-persistence",title:"Preview 17 installer persistence"});Sona.config.onboarding={done:true,step:6};await Sona.backend.save();return true;})().then(done,e=>done({error:String(e)}));');check('real_bookmark_saved_before_upgrade',result is True)
   # Verify actual shell-decoded desktop/Start/pinned shortcuts and native HWND.
@@ -360,7 +360,7 @@ try:
    version(ws,'upgrade');evaluate(ws,'document.getElementById("primary").click();true');wait(lambda:finished(ws),240);evaluate(ws,'document.getElementById("launch").checked=false;document.getElementById("done").click();true');process.wait(timeout=20)
   settings=json.loads((profile/'sona-settings.json').read_text());check('upgrade_keeps_existing_profile_settings',settings['settings']['theme']=='dark' and settings['onboarding']['done'])
   with contextlib.closing(sqlite3.connect(profile/'places.sqlite')) as db:check('upgrade_keeps_real_bookmarks',db.execute('select count(*) from moz_bookmarks where title=?',('Preview 17 installer persistence',)).fetchone()[0]==1)
-  with winreg.OpenKey(winreg.HKEY_CURRENT_USER,r'Software\Microsoft\Windows\CurrentVersion\Uninstall\Sona') as key:check('windows_installed_apps_has_correct_version',winreg.QueryValueEx(key,'DisplayVersion')[0]=='1.160.37')
+  with winreg.OpenKey(winreg.HKEY_CURRENT_USER,r'Software\Microsoft\Windows\CurrentVersion\Uninstall\Sona') as key:check('windows_installed_apps_has_correct_version',winreg.QueryValueEx(key,'DisplayVersion')[0]=='1.160.38')
   subprocess.run([sys.executable,str(pathlib.Path(__file__).with_name('restart18.py')),str(destination),str(out)],check=True)
   uninstaller=destination/'Uninstall Sona.exe'
   with setup(uninstaller,env,True) as (ws,process):

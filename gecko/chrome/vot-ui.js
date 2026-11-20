@@ -13,6 +13,25 @@ window.sonaVideoSettings={open(){sonaSettings.dialog('Перевод YouTube · 
  box.append(note,status,details,label,install);
  invoke('browser.vot.status').then(r=>{permissions.textContent=JSON.stringify(r.permissions,null,2);status.textContent=r.installed?'VOT '+r.version+(r.enabled?' включён.':' отключён.'):'Подписанный VOT готов к установке после согласия.';if(r.installed){label.hidden=install.hidden=true;const toggle=el('button',r.enabled?'Отключить VOT':'Включить VOT');toggle.type='button';toggle.onclick=async()=>{toggle.disabled=true;try{await invoke('browser.vot.setEnabled',{enabled:!r.enabled});await sonaSettings.reload();document.getElementById('actionDialog').close();}catch(e){status.textContent=e.message;toggle.disabled=false;}};box.append(toggle);}}).catch(e=>{status.textContent=e.message;install.disabled=true;});
  });}};
-const watch=()=>{const n=document.getElementById('videoTranslationEnabled');if(n)invoke('browser.vot.status').then(r=>{n.disabled=!r.installed;n.title=r.installed?'Озвучка через подписанное расширение VOT':'Сначала установите VOT в настройках перевода YouTube.';}).catch(()=>n.disabled=true);};
+const watch=()=>{
+ const toggle=document.getElementById('videoTranslationEnabled');
+ if(!toggle)return;
+ const change=toggle.onchange;
+ toggle.disabled=true;
+ const askForConsent=()=>{
+  toggle.checked=false;
+  window.sonaVideoSettings.open();
+ };
+ invoke('browser.vot.status').then(({installed,enabled})=>{
+  toggle.checked=enabled;
+  toggle.onchange=installed?change:askForConsent;
+  toggle.title=installed?'Озвучка через VOT':'Установить VOT';
+  toggle.disabled=false;
+ }).catch(()=>{
+  toggle.checked=false;
+  toggle.onchange=askForConsent;
+  toggle.disabled=false;
+ });
+};
 new MutationObserver(watch).observe(document.getElementById('sectionContent'),{childList:true});
 })();

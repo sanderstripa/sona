@@ -9,15 +9,21 @@ def verify_vot(m, check):
         let rejected=false;
         try{await Sona.dispatch("browser.vot.install",{consent:true});}
         catch{rejected=true;}
+        const legacy=await AddonManager.installBuiltinAddon("resource://sona-vot/");
+        const legacyStatus=await Sona.dispatch("browser.vot.status");
         const install=await Sona.dispatch("browser.vot.install",{consent:true},{gesture:{at:Date.now()}});
         const addon=await AddonManager.getAddonByID("vot-ext@firefox");
         const policy=WebExtensionPolicy.getByID(addon.id);
         const active=addon.isActive&&policy?.canAccessURI(Services.io.newURI("https://www.youtube.com/watch?v=jNQXAC9IVRw"));
-        const disabled=await Sona.dispatch("browser.vot.setEnabled",{enabled:false});
+        const settings=await Sona.dispatch("settings.begin");
+        settings.settings.videoTranslationEnabled=false;
+        const saved=await Sona.dispatch("settings.save",settings);
+        const disabled=await Sona.dispatch("browser.vot.status");
         const enabled=await Sona.dispatch("browser.vot.setEnabled",{enabled:true});
-        return {initiallyInactive:!status.enabled,rejected,installed:install.installed,active,
+        return {initiallyInactive:!status.enabled,rejected,legacyWasBuiltin:legacy.isBuiltin,
+            legacyRequiredConsent:!legacyStatus.installed,installed:install.installed,active,
             signed:addon.signedState>=AddonManager.SIGNEDSTATE_SIGNED,profileAddon:!addon.isBuiltin,
-            disabled:!disabled.enabled,enabled:enabled.enabled};
+            disabled:saved.ok&&!disabled.enabled,enabled:enabled.enabled};
     })().then(done,error=>done({error:String(error)}));
     ''')
     check('signed_vot_installs_with_consent_and_can_access_youtube',
