@@ -119,6 +119,7 @@ try:
   """)))
   screenshot('sona-sidebar-matte.png')
   content('scrollTo(0,140);return true;')
+  check('page_fixture_scrolled',wait(lambda: content('return scrollY>=139')))
   check('matte_toolbar_samples_scrolled_contents', wait(lambda: chrome("""
     const glass=document.getElementById('sona-page-glass');
     if(!glass||glass.hidden||!glass.width||!glass.height)return false;

@@ -2,11 +2,10 @@
  * below the toolbar and to the right of the bookmarks sidebar. */
 (()=>{
  const root=document.documentElement;
- const {PageThumbs}=ChromeUtils.importESModule('resource://gre/modules/PageThumbs.sys.mjs');
  if(!Sona.backend.shared.pageGlassActorRegistered){
   ChromeUtils.registerWindowActor('SonaPageGlass',{
    parent:{esModuleURI:'chrome://sona/content/PageGlassParent.sys.mjs'},
-   child:{esModuleURI:'chrome://sona/content/PageGlassChild.sys.mjs',events:{scroll:{capture:true}}},
+   child:{esModuleURI:'chrome://sona/content/PageGlassChild.sys.mjs'},
    matches:['http://*/*','https://*/*'],remoteTypes:['web'],allFrames:false,safeForUntrustedWebProcess:true,
   });
   Sona.backend.shared.pageGlassActorRegistered=true;
@@ -17,7 +16,7 @@
   return node;
  };
  const top=canvas('sona-page-glass'),left=canvas('sona-bookmarks-glass');
- let timer=0,capturing=false,dirty=false,atTop=true,activeGlobal=null;
+ let timer=0,capturing=false,dirty=false,viewport=null,activeGlobal=null;
  const clear=node=>{node.hidden=true;node.width=0;};
  const eligible=()=>root.hasAttribute('sona-page-glass')&&!root.hasAttribute('inDOMFullscreen')&&!root.hasAttribute('sona-fullscreen');
  const schedule=()=>{
@@ -29,26 +28,28 @@
   timer=0;dirty=false;
   const browser=gBrowser.selectedBrowser;
   const global=browser.browsingContext.currentWindowGlobal;
-  const sidebar=root.hasAttribute('sona-bookmarks-open');
-  if(!eligible()||!global||(!sidebar&&atTop))return;
+  const sidebar=root.hasAttribute('sona-bookmarks-open'),view=viewport;
+  if(!eligible()||!global||!view||(!sidebar&&view.y<=0))return;
   const rect=browser.getBoundingClientRect(),scale=.2;
-  if(!rect.width||!rect.height)return;
-  const sample=document.createElementNS('http://www.w3.org/1999/xhtml','canvas');
-  sample.width=Math.ceil(rect.width*scale);
-  sample.height=Math.ceil(rect.height*scale);
+  if(!rect.width||!rect.height||!view.width||!view.height)return;
   capturing=true;
   try{
-   await PageThumbs.captureToCanvas(browser,sample,{fullViewport:true,targetWidth:sample.width},true);
-   if(global!==browser.browsingContext.currentWindowGlobal||browser!==gBrowser.selectedBrowser||!eligible())return;
-   const draw=(node,width,height)=>{
-    node.width=Math.max(1,Math.round(width*sample.width/rect.width));
-    node.height=Math.max(1,Math.round(height*sample.height/rect.height));
-    node.getContext('2d').drawImage(sample,0,0,Math.min(node.width,sample.width),
-     Math.min(node.height,sample.height),0,0,node.width,node.height);
-    node.hidden=false;
-   };
-   if(!atTop)draw(top,rect.width,rect.top);
-   if(root.hasAttribute('sona-bookmarks-open'))draw(left,rect.left,rect.height);
+   const image=await browser.drawSnapshot(view.x,view.y,view.width,view.height,
+    scale,root.hasAttribute('sona-dark')?'#08090b':'#f6f6f8');
+   if(!image)return;
+   try{
+    if(global!==browser.browsingContext.currentWindowGlobal||
+       browser!==gBrowser.selectedBrowser||!eligible())return;
+    const draw=(node,width,height)=>{
+     node.width=Math.max(1,Math.round(width*image.width/rect.width));
+     node.height=Math.max(1,Math.round(height*image.height/rect.height));
+     node.getContext('2d').drawImage(image,0,0,Math.min(node.width,image.width),
+      Math.min(node.height,image.height),0,0,node.width,node.height);
+     node.hidden=false;
+    };
+    if(viewport?.y>0)draw(top,rect.width,rect.top);
+    if(root.hasAttribute('sona-bookmarks-open'))draw(left,rect.left,rect.height);
+   }finally{image.close();}
   }catch(error){console.debug('Sona glass sample unavailable',String(error));}
   finally{capturing=false;if(dirty)schedule();}
  }
@@ -59,33 +60,33 @@
   root.toggleAttribute('sona-page-glass',enabled);
   const global=browser.browsingContext.currentWindowGlobal;
   if(!enabled||global!==activeGlobal){
-   activeGlobal=global;atTop=true;clear(top);clear(left);
+   activeGlobal=global;viewport=null;clear(top);clear(left);
   }
   if(enabled&&global){
-   Promise.resolve().then(()=>global.getActor('SonaPageGlass').sendQuery('atTop')).then(value=>{
+   Promise.resolve().then(()=>global.getActor('SonaPageGlass').sendQuery('viewport')).then(value=>{
     if(global!==activeGlobal||!eligible())return;
-    atTop=value;if(atTop)clear(top);schedule();
+    Sona.pageGlassScroll(browser,value);
    }).catch(()=>{});
   }
   Sona.native.send('pageGlass',enabled);
   Sona.notify();
  }
  Sona.pageGlassScroll=(browser,data)=>{
-  if(browser!==gBrowser.selectedBrowser||!eligible())return;
-  if(data.document)atTop=data.atTop;
-  if(atTop)clear(top);
+  if(browser!==gBrowser.selectedBrowser||!eligible()||!data)return;
+  viewport=data;
+  if(data.y<=0)clear(top);
   schedule();
  };
  const observer=new MutationObserver(()=>{
   if(!root.hasAttribute('sona-bookmarks-open'))clear(left);
   if(!eligible()){clear(top);clear(left);}
-  else schedule();
+  else update();
  });
  observer.observe(root,{attributes:true,attributeFilter:['sona-bookmarks-open','sona-fullscreen','inDOMFullscreen']});
  clear(top);clear(left);
  const refresh=Sona.refresh;
  Sona.refresh=()=>{refresh();update();};
- window.addEventListener('resize',schedule);
+ window.addEventListener('resize',update);
  window.addEventListener('unload',()=>{observer.disconnect();clearTimeout(timer);},{once:true});
  gBrowser.tabContainer.addEventListener('TabSelect',update);
  gBrowser.addTabsProgressListener({
