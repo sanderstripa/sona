@@ -259,6 +259,38 @@ try:
   check('first_installed_launch_shows_sona_welcome',m.execute_script('return gBrowser.selectedBrowser.currentURI.spec.endsWith("/onboarding.html")'))
   check('semantic_release_order',m.execute_script('const make=v=>{const tag="sona-preview-"+v,name="Sona-"+v+"-Preview-x64.exe";return {draft:false,tag_name:tag,assets:[{id:1,name,size:1,digest:"sha256:"+"a".repeat(64),browser_download_url:"https://github.com/sanderstripa/soulu/releases/download/"+tag+"/"+name}]};};return Sona.updateCandidate([make("1.160.39")])===null && Sona.updateCandidate([make("1.160.21")])===null && Sona.updateCandidate([make("1.160.40")])!==null && Sona.updateCandidate([make("1.161.1")])!==null;'))
   (out/'installed-first-launch.png').write_bytes(base64.b64decode(m.screenshot()))
+  compact=m.execute_async_script(r"""const done=arguments[arguments.length-1];
+  const frame=document.getElementById('sona-shell-frame');
+  const actor=frame.browsingContext.currentWindowGlobal.getActor('SonaApp');
+  const test=source=>actor.sendQuery('testing',source);
+  const before=gBrowser.selectedBrowser;
+  const state=()=>test('return window.browserShell.getState();');
+  (async()=>{
+    const initial=await state();
+    try{
+      const settings=await Sona.dispatch('settings.begin');
+      settings.settings.layout='compact';
+      const saved=await Sona.dispatch('settings.save',settings);
+      if(!saved.ok)return saved;
+      for(let i=0;i<20;i++){
+        if(await test('return document.body.dataset.layout==="compact" && !!document.querySelector(".compact-active-tab input");'))break;
+        await new Promise(resolve=>setTimeout(resolve,50));
+      }
+      const view=await test(`const toolbar=document.querySelector('.compact-toolbar');
+        return toolbar.getBoundingClientRect().height===58 &&
+          !!toolbar.querySelector('.navigation-toolbar-button') &&
+          !document.querySelector('.overview-close');`);
+      const current=await state();
+      const disk=await IOUtils.readJSON(PathUtils.join(PathUtils.profileDir,'sona-settings.json'));
+      return {view,sameTabs:JSON.stringify(current.tabs.map(t=>t.id))===JSON.stringify(initial.tabs.map(t=>t.id)),
+        sameBrowser:before===gBrowser.selectedBrowser,saved:disk.settings.layout==='compact'};
+    }finally{
+      const settings=await Sona.dispatch('settings.begin');
+      settings.settings.layout='adaptive';
+      await Sona.dispatch('settings.save',settings);
+    }
+  })().then(done,e=>done({error:String(e)}));""")
+  check('compact_toolbar_preserves_session_and_settings',compact==dict(view=True,sameTabs=True,sameBrowser=True,saved=True),compact)
   result=m.execute_async_script('const done=arguments[arguments.length-1];(async()=>{const {PlacesUtils}=ChromeUtils.importESModule("resource://gre/modules/PlacesUtils.sys.mjs");await PlacesUtils.bookmarks.insert({parentGuid:PlacesUtils.bookmarks.toolbarGuid,url:"https://example.org/preview22-persistence",title:"Preview 17 installer persistence"});Sona.config.onboarding={done:true,step:6};await Sona.backend.save();return true;})().then(done,e=>done({error:String(e)}));');check('real_bookmark_saved_before_upgrade',result is True)
   # Verify actual shell-decoded desktop/Start/pinned shortcuts and native HWND.
   import importlib.util

@@ -2,7 +2,7 @@ name: Build and publish Sona Preview 1.160.39
 on:
   workflow_dispatch:
   push:
-    branches: [gecko-preview, main, codex/sona-bookmarks-sidebar]
+    branches: [gecko-preview, main, codex/sona-bookmarks-sidebar, codex/sona-preview-interface-downloads]
     paths: ['.github/workflows/build-sona26.yml','gecko/**','ui/**','scripts/*branding.py']
 permissions:
   contents: write
