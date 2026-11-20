@@ -29,15 +29,23 @@ def verify_tab_drag(m,check,wait):
                  round(rect.top+(y+info['dy'])*info['scale']))
  row=m.execute_script('return Sona.tabDragLayout.find(r=>r.id===Sona.native.tabID(__dragTabs[0]))')
  try:
-  for _ in range(5):
+  start_script = """const done=arguments[arguments.length-1];
+  const p=ChromeUtils.importESModule("chrome://sona/content/window-controls.sys.mjs").tabDragPointer(window);
+  if(!p.down){done({started:false,pointer:p});return;}
+  Sona.dispatch("browser.tabDrag.begin",{id:Sona.native.tabID(__dragTabs[0]),layout:Sona.tabDragLayout,offsetX:20,offsetY:20})
+    .then(started=>done({started,pointer:p}),error=>done({error:String(error),pointer:p}));"""
+  user_window=C.c_void_p(int(info['hwnd'],16))
+  u.SetForegroundWindow(user_window)
+  started=None
+  for _ in range(8):
    u.mouse_event(4,0,0,0,0)
    point(row['x']+20,row['y']+20)
    u.mouse_event(2,0,0,0,0)
    time.sleep(.12)
-   if u.GetAsyncKeyState(1)&0x8000:break
-  check('windows_reports_pressed_mouse_button',bool(u.GetAsyncKeyState(1)&0x8000))
-  started=m.execute_async_script('const done=arguments[arguments.length-1];Sona.dispatch("browser.tabDrag.begin",{id:Sona.native.tabID(__dragTabs[0]),layout:Sona.tabDragLayout,offsetX:20,offsetY:20}).then(done,e=>done(String(e)));')
-  check('native_tab_drag_started',started is True,started)
+   started=m.execute_async_script(start_script)
+   if started.get('started') or started.get('error'):break
+  check('windows_reports_pressed_mouse_button',bool(started and started.get('pointer',{}).get('down')),started)
+  check('native_tab_drag_started',bool(started and started.get('started')),started)
   bottom=m.execute_script('return Math.max(...Sona.tabDragLayout.map(r=>r.y+r.height))')
   point(row['x']+30,bottom+25);time.sleep(.25)
   status=m.execute_script('''const t=__dragTabs[0];return {inSource:[...gBrowser.tabs].includes(t),closing:!!t.closing,windows:[...Services.wm.getEnumerator("navigator:browser")].length,pointer:ChromeUtils.importESModule("chrome://sona/content/window-controls.sys.mjs").tabDragPointer(window),rows:Sona.tabDragLayout,error:Sona.lastTabDragError||null};''')
