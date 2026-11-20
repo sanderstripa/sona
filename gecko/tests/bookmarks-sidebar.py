@@ -139,6 +139,10 @@ try:
   user32.GetAncestor.restype=W.HWND
   user32.SetWindowPos.argtypes=[W.HWND,W.HWND,C.c_int,C.c_int,C.c_int,C.c_int,W.UINT]
   hwnd=int(chrome('return String(window.docShell.treeOwner.QueryInterface(Ci.nsIInterfaceRequestor).getInterface(Ci.nsIBaseWindow).nativeHandle)'),16)
+  user32.SetForegroundWindow.argtypes=[W.HWND]
+  user32.GetForegroundWindow.restype=W.HWND
+  chrome('window.moveTo(80,55)')
+  time.sleep(.25)
   origin=W.POINT()
   assert user32.ClientToScreen(hwnd,C.byref(origin))
   backing=tk.Tk()
@@ -148,15 +152,25 @@ try:
    backing.geometry('270x480')
    backing.update()
    assert user32.SetWindowPos(user32.GetAncestor(backing.winfo_id(),2),hwnd,
-                              origin.x+1,origin.y+110,270,480,0x50)
+                              origin.x-32,origin.y+110,305,480,0x50)
    backing.update()
+   user32.SetForegroundWindow(hwnd)
    time.sleep(.65)
+   check('sona_foreground_for_desktop_acrylic',user32.GetForegroundWindow()==hwnd)
    point=(origin.x+130,origin.y+365)
-   dark_pixel=ImageGrab.grab().getpixel(point)
+   reference=(origin.x-14,origin.y+365)
+   dark_frame=ImageGrab.grab()
+   dark_pixel=dark_frame.getpixel(point)
+   dark_reference=dark_frame.getpixel(reference)
    backing.configure(background='#ffffff')
    backing.update()
    time.sleep(.65)
-   light_pixel=ImageGrab.grab().getpixel(point)
+   light_frame=ImageGrab.grab()
+   light_pixel=light_frame.getpixel(point)
+   light_reference=light_frame.getpixel(reference)
+   check('reference_window_behind_sona_changes_brightness',
+         sum(light_reference[:3])-sum(dark_reference[:3])>=480,
+         {'dark':dark_reference,'light':light_reference})
    check('sidebar_backdrop_tracks_window_behind_sona',
          sum(light_pixel[:3])-sum(dark_pixel[:3])>=24,
          {'dark':dark_pixel,'light':light_pixel})
