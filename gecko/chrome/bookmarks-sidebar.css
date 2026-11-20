@@ -211,8 +211,8 @@ body .sona-bookmarks-sidebar > .navigation-search {
 body .sona-bookmarks-sidebar {
   background: var(--solid);
 }
-body[data-native-page-glass] .sona-bookmarks-sidebar {
-  background: color-mix(in srgb, var(--solid) 63%, transparent);
+body[data-desktop-glass] .sona-bookmarks-sidebar {
+  background: light-dark(rgb(247 247 247 / .43), rgb(21 21 21 / .50));
 }
 .sona-bookmarks-sidebar .bookmark-sections button {
   display: grid;

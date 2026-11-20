@@ -142,3 +142,57 @@ body[data-layout=compact] #compactDownloadsButton:not(.auto-hidden) + .compact-d
   body[data-layout=compact] .compact-center-cluster::before { display: none; }
   body[data-layout=compact] .compact-tab-flow { padding-inline: 4px; }
 }
+
+/* Keep the matte coat neutral in both layouts, independent of theme gradients. */
+html.cef-runtime:has(body[data-matte=true]) {
+  background: transparent !important;
+}
+html.cef-runtime body[data-matte=true] {
+  background: transparent !important;
+  --toolbar-bg: transparent;
+}
+html.cef-runtime body[data-matte=true] :is(.browser-toolbar,.classic-main-row,.compact-toolbar-surface) {
+  background: transparent !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+}
+html.cef-runtime body[data-matte=true][data-desktop-glass] .browser-toolbar {
+  background: light-dark(rgb(246 246 246 / .87), rgb(21 21 21 / .87)) !important;
+}
+
+body[data-layout=compact] .compact-toolbar .compact-center-cluster {
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+body[data-layout=compact] .compact-toolbar .compact-tab-flow {
+  --compact-gap: 4px;
+  flex: 0 1 auto;
+  width: min(var(--compact-flow-width, 420px), 820px);
+  min-height: 38px;
+  border-radius: 13px;
+  background: light-dark(rgb(225 225 225 / .9), rgb(46 46 46 / .9));
+  box-shadow: none;
+}
+body[data-layout=compact] .compact-toolbar .compact-tab-flow > .compact-tab {
+  position: relative;
+  flex-basis: 59px;
+  width: 59px;
+  border-radius: 8px;
+}
+body[data-layout=compact] .compact-tab + .compact-tab::before {
+  content: "";
+  position: absolute;
+  inset: 7px auto 7px 0;
+  width: 1px;
+  background: var(--line);
+}
+body[data-layout=compact] .compact-toolbar .compact-active-tab {
+  flex: 0 0 clamp(155px, 24vw, 300px);
+  min-width: 155px;
+  height: 31px;
+  border-radius: 10px;
+}
+@container (max-width: 660px) {
+  body[data-layout=compact] .compact-toolbar .compact-center-cluster { top: auto; transform: none; }
+  body[data-layout=compact] .compact-toolbar .compact-tab-flow > .compact-tab { flex-basis: 40px; width: 40px; }
+}

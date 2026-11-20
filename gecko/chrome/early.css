@@ -76,3 +76,10 @@
     overflow-wrap: anywhere;
   }
 }
+
+@-moz-document url("chrome://browser/content/browser.xhtml") {
+ :root[sona-ui-ready][sona-desktop-glass][sona-bookmarks-open] {
+   background-color:transparent!important;
+   background-image:none!important;
+ }
+}

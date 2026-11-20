@@ -111,11 +111,14 @@ try:
         wait(lambda: chrome(f"""return document.documentElement.hasAttribute('sona-page-glass')
            && Math.abs(gBrowser.selectedBrowser.getBoundingClientRect().top-{page_top})<1
            && document.getElementById('sona-page-glass').hidden""")))
-  check('sidebar_glass_contains_real_page_colors', wait(lambda: chrome("""
-    const glass=document.getElementById('sona-bookmarks-glass');
-    if(!glass||glass.hidden||!glass.width||!glass.height)return false;
-    const [r,g,b,a]=glass.getContext('2d').getImageData(4,4,1,1).data;
-    return a===255&&r>160&&g<120&&b<100;
+  check('sidebar_uses_windows_desktop_backdrop', wait(lambda: chrome("""
+    return document.documentElement.hasAttribute('windowsmica') &&
+      document.documentElement.hasAttribute('sona-desktop-glass') &&
+      getComputedStyle(document.documentElement).backgroundColor==='rgba(0, 0, 0, 0)';
+  """) and shell("""
+    const style=getComputedStyle(document.querySelector('.sona-bookmarks-sidebar'));
+    return document.body.hasAttribute('data-desktop-glass') &&
+      style.backgroundColor.includes('0.43');
   """)))
   screenshot('sona-sidebar-matte.png')
   content('scrollTo(0,140);return true;')
@@ -124,7 +127,7 @@ try:
     const glass=document.getElementById('sona-page-glass');
     if(!glass||glass.hidden||!glass.width||!glass.height)return false;
     const [r,g,b,a]=glass.getContext('2d').getImageData(4,4,1,1).data;
-    return a===255&&r<100&&g>100&&b>90;
+    return a===255&&r<100&&g>100&&b>90&&getComputedStyle(glass).filter.includes('grayscale(1)');
   """)))
   screenshot('sona-toolbar-matte-scrolled.png')
   content('scrollTo(0,0);return true;')

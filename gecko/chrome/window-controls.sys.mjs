@@ -21,12 +21,31 @@ export function brand(win){
  try{library('shell32.dll').declare('SetCurrentProcessExplicitAppUserModelID',(ctypes.winapi_abi||ctypes.default_abi),ctypes.long,(ctypes.char16_t||ctypes.jschar).ptr)('Sona.Preview');}catch(error){result.processError=String(error);}
  return result;
 }
+const backdropWindows=new WeakMap();
 export function material(win,enabled){
- // Page translucency is rendered by WebRender, not the Windows wallpaper material.
- Services.prefs.setBoolPref('widget.windows.mica',false);
- win.document.documentElement.removeAttribute('windowsmica');
- win.document.documentElement.removeAttribute('sona-matte');
- return {enabled:!!enabled,native:true};
+ const root=win.document.documentElement;
+ if(Services.appinfo.OS!=='WINNT')return {enabled:false,native:false};
+ let state=backdropWindows.get(win);
+ if(!state){
+  const abi=ctypes.winapi_abi||ctypes.default_abi;
+  const set=library('dwmapi.dll').declare('DwmSetWindowAttribute',abi,ctypes.long,
+   ctypes.uintptr_t,ctypes.uint32_t,ctypes.int.ptr,ctypes.uint32_t);
+  const apply=()=>{
+   if(win.closed)return;
+   const type=ctypes.int(state.enabled?3:0); // DWMSBT_TRANSIENTWINDOW: Desktop Acrylic
+   const ok=set(handle(win),38,type.address(),4)===0;
+   root.toggleAttribute('sona-desktop-glass',state.enabled&&ok);
+  };
+  state={enabled:false,apply};backdropWindows.set(win,state);
+  win.addEventListener('activate',()=>win.requestAnimationFrame(apply));
+  win.addEventListener('sizemodechange',()=>win.requestAnimationFrame(apply));
+ }
+ state.enabled=!!enabled;
+ root.toggleAttribute('windowsmica',state.enabled);
+ root.removeAttribute('sona-matte');
+ state.apply();
+ win.requestAnimationFrame(()=>win.requestAnimationFrame(state.apply));
+ return {enabled:!!enabled,native:true,desktop:root.hasAttribute('sona-desktop-glass')};
 }
 
 export function isDefault(){

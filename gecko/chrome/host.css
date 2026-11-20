@@ -42,23 +42,15 @@
 /* The remote page keeps its normal geometry. Only the passive glass layers
    receive sampled page pixels. */
 :root[sona-page-glass] { background:var(--sona-bg,#f6f6f8)!important; }
-#sona-page-glass,#sona-bookmarks-glass {
-  position:fixed; pointer-events:none; z-index:9999;
-  opacity:.44; filter:blur(17px) saturate(125%); clip-path:inset(0);
-}
 #sona-page-glass {
+  position:fixed; pointer-events:none; z-index:9999;
+  opacity:.32; filter:grayscale(1) blur(16px); clip-path:inset(0);
   inset:0 0 auto var(--sona-left-panel);
   width:calc(100% - var(--sona-left-panel));
   height:var(--sona-toolbar-height,68px);
 }
-#sona-bookmarks-glass {
-  inset:var(--sona-toolbar-height,68px) auto 0 0;
-  width:var(--sona-left-panel);
-  height:calc(100% - var(--sona-toolbar-height,68px));
-  opacity:.65;
-}
-:is(#sona-page-glass,#sona-bookmarks-glass)[hidden],
-:root:is([sona-fullscreen],[inDOMFullscreen]) :is(#sona-page-glass,#sona-bookmarks-glass) { display:none; }
+#sona-page-glass[hidden],
+:root:is([sona-fullscreen],[inDOMFullscreen]) #sona-page-glass { display:none; }
 
 menupopup[data-sona-extensions]{appearance:none;min-width:220px;padding:6px;background:var(--sona-bg,#f6f6f8);color:var(--sona-text,#191a1e);border:1px solid light-dark(#00000020,#ffffff24);border-radius:14px;font:13px Onest,"Segoe UI",sans-serif}
 menupopup[data-sona-extensions] menuitem{min-height:34px;padding:6px 10px;border-radius:8px}

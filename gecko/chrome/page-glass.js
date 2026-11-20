@@ -15,7 +15,7 @@
   node.id=id;node.setAttribute('aria-hidden','true');root.append(node);
   return node;
  };
- const top=canvas('sona-page-glass'),left=canvas('sona-bookmarks-glass');
+ const top=canvas('sona-page-glass');
  let timer=0,capturing=false,dirty=false,viewport=null,activeGlobal=null;
  const clear=node=>{node.hidden=true;node.width=0;};
  const eligible=()=>root.hasAttribute('sona-page-glass')&&!root.hasAttribute('inDOMFullscreen')&&!root.hasAttribute('sona-fullscreen');
@@ -28,8 +28,8 @@
   timer=0;dirty=false;
   const browser=gBrowser.selectedBrowser;
   const global=browser.browsingContext.currentWindowGlobal;
-  const sidebar=root.hasAttribute('sona-bookmarks-open'),view=viewport;
-  if(!eligible()||!global||!view||(!sidebar&&view.y<=0))return;
+  const view=viewport;
+  if(!eligible()||!global||!view||view.y<=0)return;
   const rect=browser.getBoundingClientRect(),scale=.2;
   if(!rect.width||!rect.height||!view.width||!view.height)return;
   capturing=true;
@@ -48,7 +48,6 @@
      node.hidden=false;
     };
     if(viewport?.y>0)draw(top,rect.width,rect.top);
-    if(root.hasAttribute('sona-bookmarks-open'))draw(left,rect.left,rect.height);
    }finally{image.close();}
   }catch(error){console.debug('Sona glass sample unavailable',String(error));}
   finally{capturing=false;if(dirty)schedule();}
@@ -60,7 +59,7 @@
   root.toggleAttribute('sona-page-glass',enabled);
   const global=browser.browsingContext.currentWindowGlobal;
   if(!enabled||global!==activeGlobal){
-   activeGlobal=global;viewport=null;clear(top);clear(left);
+   activeGlobal=global;viewport=null;clear(top);
   }
   if(enabled&&global){
    Promise.resolve().then(()=>global.getActor('SonaPageGlass').sendQuery('viewport')).then(value=>{
@@ -78,12 +77,11 @@
   schedule();
  };
  const observer=new MutationObserver(()=>{
-  if(!root.hasAttribute('sona-bookmarks-open'))clear(left);
-  if(!eligible()){clear(top);clear(left);}
+  if(!eligible()){clear(top);}
   else update();
  });
- observer.observe(root,{attributes:true,attributeFilter:['sona-bookmarks-open','sona-fullscreen','inDOMFullscreen']});
- clear(top);clear(left);
+ observer.observe(root,{attributes:true,attributeFilter:['sona-bookmarks-open','sona-fullscreen','inDOMFullscreen','sona-desktop-glass']});
+ clear(top);
  const refresh=Sona.refresh;
  Sona.refresh=()=>{refresh();update();};
  window.addEventListener('resize',update);
