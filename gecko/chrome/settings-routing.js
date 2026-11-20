@@ -19,10 +19,6 @@
 
  const dispatch=Sona.dispatch;
  Sona.dispatch=async function(action,payload,source){
-  if(action==='browser.home'){
-   const settings=Sona.config?.settings;
-   if(settings?.homeMode==='custom'&&/^https?:\/\//i.test(settings.homeUrl||''))return dispatch('browser.navigate',settings.homeUrl,source);
-  }
   if(action==='browser.closeTab'){
    const wasSelected=Number(payload)===Sona.native?.tabID(gBrowser.selectedTab);
    const result=await dispatch(action,payload,source);
