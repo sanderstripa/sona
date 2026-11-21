@@ -2885,9 +2885,9 @@ void BrowserWindow::HandleBridge(const std::string& request,
     return ReplyEmpty(callback);
   }
   else if (action == "browser.readingList") {
-    auto request=payload&&payload->GetType()==VTYPE_DICTIONARY?payload->GetDictionary():nullptr;
-    if(settings_source||!request){callback->Failure(400,"Reading list request required");return;}
-    const std::string kind=request->GetString("kind");
+    auto reading_request=payload&&payload->GetType()==VTYPE_DICTIONARY?payload->GetDictionary():nullptr;
+    if(settings_source||!reading_request){callback->Failure(400,"Reading list request required");return;}
+    const std::string kind=reading_request->GetString("kind");
     const auto profile=VisibleProfileId();
     auto rows=CefListValue::Create();
     if(profile=="__incognito__"){
@@ -2899,7 +2899,7 @@ void BrowserWindow::HandleBridge(const std::string& request,
     else if(std::filesystem::exists(file)){callback->Failure(500,"Could not read reading list");return;}
     if(kind=="get")return Reply(callback,Wrap(rows));
     auto* tab=ActiveTab();
-    const std::string url=kind=="add"&&tab?tab->url:request->GetString("url").ToString();
+    const std::string url=kind=="add"&&tab?tab->url:reading_request->GetString("url").ToString();
     if(WebOrigin(url).empty()||url.size()>65536){callback->Failure(400,"HTTP or HTTPS page required");return;}
     size_t found=rows->GetSize();
     for(size_t i=0;i<rows->GetSize();++i){
@@ -2918,7 +2918,7 @@ void BrowserWindow::HandleBridge(const std::string& request,
       rows=next;
     }else if(kind=="mark"||kind=="remove"){
       if(found==rows->GetSize())return Reply(callback,Wrap(rows));
-      if(kind=="mark")rows->GetDictionary(found)->SetBool("read",request->GetBool("read"));
+      if(kind=="mark")rows->GetDictionary(found)->SetBool("read",reading_request->GetBool("read"));
       else rows->Remove(found);
     }else{callback->Failure(400,"Unknown reading list action");return;}
     if(!WriteJson(file,Wrap(rows->Copy()))){callback->Failure(500,"Could not save reading list");return;}
