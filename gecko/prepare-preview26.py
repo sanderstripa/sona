@@ -62,8 +62,8 @@ def patch(path, before, after):
 # The add-on manager resolves the old URI during both startup and replacement.
 bootstrap = out / 'engine/sona.cfg'
 patch(bootstrap, "Services.prefs.setBoolPref('widget.windows.mica',false);Services.prefs.lockPref('widget.windows.mica');",
-      "Services.prefs.setBoolPref('widget.windows.mica',true);Services.prefs.lockPref('widget.windows.mica');"
-      "Services.prefs.setIntPref('widget.windows.mica.toplevel-backdrop',2);"
+      "Services.prefs.getDefaultBranch('').setBoolPref('widget.windows.mica',true);Services.prefs.lockPref('widget.windows.mica');"
+      "Services.prefs.getDefaultBranch('').setIntPref('widget.windows.mica.toplevel-backdrop',2);"
       "Services.prefs.lockPref('widget.windows.mica.toplevel-backdrop');")
 vot_registration = next(line for line in bootstrap.read_text(encoding='utf-8').splitlines()
                         if ".setSubstitution('sona-vot'," in line)
