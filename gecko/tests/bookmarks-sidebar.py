@@ -186,7 +186,9 @@ try:
    assert user32.SetWindowPos(user32.GetAncestor(backing.winfo_id(),2),hwnd,
                               origin.x-32,origin.y+110,305,480,0x50)
    backing.update()
-   user32.SetForegroundWindow(hwnd)
+   assert user32.SetCursorPos(origin.x+410,origin.y+85)
+   user32.mouse_event(2,0,0,0,0)
+   user32.mouse_event(4,0,0,0,0)
    time.sleep(.65)
    check('sona_foreground_for_desktop_acrylic',user32.GetForegroundWindow()==hwnd)
    point=(origin.x+130,origin.y+365)

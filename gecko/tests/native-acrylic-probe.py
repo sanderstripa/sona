@@ -13,6 +13,7 @@ user.GetAncestor.argtypes = [W.HWND, W.UINT]
 user.GetAncestor.restype = W.HWND
 user.SetForegroundWindow.argtypes = [W.HWND]
 user.GetForegroundWindow.restype = W.HWND
+user.SetWindowPos.argtypes = [W.HWND,W.HWND,C.c_int,C.c_int,C.c_int,C.c_int,W.UINT]
 user.CreateWindowExW.argtypes = [
     W.DWORD, W.LPCWSTR, W.LPCWSTR, W.DWORD, C.c_int, C.c_int,
     C.c_int, C.c_int, W.HWND, W.HMENU, W.HINSTANCE, W.LPVOID,
@@ -45,7 +46,11 @@ try:
     requested = dwm.DwmSetWindowAttribute(front, 38, C.byref(kind), C.sizeof(kind))
     actual = C.c_int()
     read = dwm.DwmGetWindowAttribute(front, 38, C.byref(actual), C.sizeof(actual))
-    user.SetForegroundWindow(front)
+    backing = user.GetAncestor(back.winfo_id(), 2)
+    assert user.SetWindowPos(backing, front, 90, 80, 460, 380, 0x50)
+    assert user.SetCursorPos(230, 230)
+    user.mouse_event(2, 0, 0, 0, 0)
+    user.mouse_event(4, 0, 0, 0, 0)
 
     def sample(color):
         back.configure(background=color)

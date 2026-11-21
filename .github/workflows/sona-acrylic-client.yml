@@ -2,7 +2,7 @@ name: Check desktop acrylic on Windows 11
 on:
   push:
     branches: [codex/sona-acrylic-probe]
-    paths: ['.github/workflows/sona-acrylic-client.yml']
+    paths: ['.github/workflows/sona-acrylic-client.yml','gecko/tests/native-acrylic-probe.py','gecko/tests/bookmarks-sidebar.py']
 permissions:
   contents: read
   actions: read
