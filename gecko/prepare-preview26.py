@@ -211,14 +211,6 @@ patch(ui/'renderer.js', "  const active=compactToolbar.querySelector('[data-acti
 patch(ui/'renderer.js', "      if(x.active){\n        bindAddress(node,",
       "      if(x.active){\n        requestAnimationFrame(()=>node.scrollIntoView({block:'nearest',inline:'nearest'}));\n        bindAddress(node,")
 
-patch(ui/'renderer.js', "  const count=wanted.filter(x=>!x.active).length;",
-      """  const count=wanted.filter(x=>!x.active).length;
-  const activeIndex=wanted.findIndex(tab=>tab.active);
-  const balance=Math.max(-3,Math.min(3,count-2*activeIndex));
-  const compactFlow=document.getElementById('compactTabFlow');
-  compactFlow.style.setProperty('--compact-start-space',Math.max(0,balance)*64+'px');
-  compactFlow.style.setProperty('--compact-end-space',Math.max(0,-balance)*64+'px');""")
-
 # The new native tab briefly has about:blank before the home document commits.
 # Never populate address suggestions with this transient startup URI.
 patch(ui/'renderer.js',"input.value=state.page?.url==='sona://home'?'':state.page?.url||'';",

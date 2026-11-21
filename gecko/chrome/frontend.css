@@ -140,8 +140,8 @@ html.cef-runtime body[data-layout=compact] .compact-tab-flow {
   max-width: min(100%, 820px);
   height: 36px;
   gap: 0;
-  padding-inline-start: var(--compact-start-space, 0px);
-  padding-inline-end: var(--compact-end-space, 0px);
+  padding-inline-start: 3px;
+  padding-inline-end: 3px;
   border: 0;
   border-radius: 18px;
   background: light-dark(rgb(20 20 20 / .07), rgb(255 255 255 / .09));
@@ -173,7 +173,9 @@ html.cef-runtime body[data-layout=compact] .compact-active-tab {
   width: clamp(172px, 30vw, 380px);
   min-width: 172px;
   height: 30px;
-  border-radius: 12px;
+  border-radius: 999px;
+  box-sizing: border-box;
+  align-items: center;
   background: var(--field);
   box-shadow: none;
 }
@@ -191,4 +193,12 @@ body[data-layout=compact] #compactDownloadsButton:not(.auto-hidden) + .compact-d
   body[data-layout=compact] .compact-center-cluster::before { display: none; }
   html.cef-runtime body[data-layout=compact] .compact-tab-flow { padding-inline: 0; }
   html.cef-runtime body[data-layout=compact] .compact-tab-flow > .compact-tab { flex-basis: 40px; width: 40px; }
+}
+
+html.cef-runtime body[data-layout=compact] .compact-active-tab :is(button,.tab-action) {
+  box-sizing: border-box;
+  height: 24px;
+  max-height: 24px;
+  align-self: center;
+  margin-block: 0;
 }
