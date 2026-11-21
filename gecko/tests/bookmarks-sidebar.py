@@ -190,6 +190,12 @@ try:
    assert user32.SetCursorPos(origin.x+410,origin.y+85)
    user32.mouse_event(2,0,0,0,0)
    user32.mouse_event(4,0,0,0,0)
+   if os.getenv('SONA_GLASS_PROBE') == 'force-frame':
+    class Margins(C.Structure):
+     _fields_=[(name,C.c_int) for name in ('left','right','top','bottom')]
+    dwm=C.windll.dwmapi
+    dwm.DwmExtendFrameIntoClientArea.argtypes=[W.HWND,C.POINTER(Margins)]
+    assert dwm.DwmExtendFrameIntoClientArea(hwnd,C.byref(Margins(-1,-1,-1,-1)))==0
    time.sleep(.65)
    check('sona_foreground_for_desktop_acrylic',user32.GetForegroundWindow()==hwnd)
    point=(origin.x+130,origin.y+365)

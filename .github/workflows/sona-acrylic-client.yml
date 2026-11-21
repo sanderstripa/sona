@@ -2,32 +2,18 @@ name: Check desktop acrylic on Windows 11
 on:
   push:
     branches: [codex/sona-acrylic-probe]
-    paths: ['.github/workflows/sona-acrylic-client.yml','gecko/tests/native-acrylic-probe.py','gecko/tests/bookmarks-sidebar.py','gecko/tests/prepare-client-desktop.ps1']
+    paths: ['.github/workflows/sona-acrylic-client.yml','gecko/tests/native-acrylic-probe.py','gecko/tests/bookmarks-sidebar.py','gecko/tests/prepare-client-desktop.ps1','gecko/tests/candidate-visual.py']
 permissions:
   contents: read
   actions: read
 jobs:
-  native:
-    runs-on: windows-2025
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          architecture: x64
-      - run: python -m pip install pillow
-      - shell: pwsh
-        run: ./gecko/tests/prepare-client-desktop.ps1
-      - run: python gecko/tests/native-acrylic-probe.py
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: windows11-native-acrylic
-          path: acrylic-*.png
   sona:
     runs-on: windows-2025
     timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        composition: [force-frame, no-native-layer]
     env:
       GH_TOKEN: ${{ github.token }}
       PYTHONUTF8: 1
@@ -38,7 +24,7 @@ jobs:
           python-version: '3.12'
           architecture: x64
       - run: python -m pip install pillow marionette_driver
-      - run: gh run download 44842914762 --name sona42-windows-x64-candidate --dir candidate
+      - run: gh run download 44873629274 --name sona42-windows-x64-candidate --dir candidate
       - shell: pwsh
         run: ./gecko/tests/prepare-client-desktop.ps1
       - shell: powershell
@@ -48,8 +34,10 @@ jobs:
           "AdvancedEffectsEnabled=$($ui.AdvancedEffectsEnabled)"
           Get-CimInstance Win32_VideoController | Select-Object Name,DriverVersion,VideoProcessor | Format-List
       - run: python gecko/tests/candidate-visual.py --sidebar
+        env:
+          SONA_GLASS_PROBE: ${{ matrix.composition }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: windows11-sona-sidebar
+          name: sona-sidebar-${{ matrix.composition }}
           path: candidate-visual/

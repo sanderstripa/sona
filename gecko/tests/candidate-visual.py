@@ -29,6 +29,16 @@ for match in re.finditer(b'PK\x05\x06',raw):
 else:
     raise RuntimeError('Candidate installer payload missing')
 
+# Disable only native WebRender layers, leaving GPU acceleration active.
+import os
+if os.getenv('SONA_GLASS_PROBE') == 'no-native-layer':
+    config, = Path('candidate-runtime/engine').glob('sona.cfg')
+    source = config.read_text(encoding='utf-8')
+    marker = "  const Services = globalThis.Services;"
+    assert source.count(marker) == 1
+    source = source.replace(marker, marker + "\n  Services.prefs.getDefaultBranch('').setBoolPref('gfx.webrender.compositor', false);")
+    config.write_text(source, encoding='utf-8')
+
 full_sidebar = '--sidebar' in sys.argv
 sys.argv[1:] = ['candidate-runtime/engine/SonaEngine.exe','candidate-visual']
 harness = Path(__file__).with_name('bookmarks-sidebar.py')
