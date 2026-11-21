@@ -29,7 +29,7 @@ class Fixture(http.server.BaseHTTPRequestHandler):
 server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Fixture);threading.Thread(target=server.serve_forever,daemon=True).start()
 origin=f'http://127.0.0.1:{server.server_port}';out=Path(sys.argv[2]);out.mkdir(parents=True,exist_ok=True)
 with tempfile.TemporaryDirectory(prefix='soulu-polish-',ignore_cleanup_errors=True) as root:
- config=Path(root)/'Soulu'/'User Data'/'Profiles'/'personal';config.mkdir(parents=True)
+ config=Path(root)/'Sona Preview'/'User Data'/'Profiles'/'personal';config.mkdir(parents=True)
  (config/'soulu-settings.json').write_text(json.dumps({'onboarding':{'status':'skipped'},'layout':'adaptive','theme':'light','startupMode':'soulu','newTabMode':'blank','mattePanel':False,'bookmarksBarMode':'never'}))
  # GetModuleFileName and Chromium canonical file URLs differ when this path has Unicode/spaces.
  alias=Path(root)/'Soulu тест';runtime=Path(sys.argv[1]).resolve().parent

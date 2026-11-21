@@ -139,7 +139,7 @@ def main():
    report.parent.mkdir(parents=True,exist_ok=True)
    ImageGrab.grab().save(report.with_suffix('.failure.png'))
    report.parent.mkdir(parents=True,exist_ok=True)
-   log=Path(root)/'Soulu/User Data/Profiles/chrome_debug.log'
+   log=Path(root)/'Sona Preview/User Data/Profiles/chrome_debug.log'
    if log.is_file():shutil.copyfile(log,report.with_suffix('.debug.log'))
    raise
   finally:

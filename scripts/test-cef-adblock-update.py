@@ -40,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix='soulu-adblock-update-',ignore_cleanup_e
             if r.get('lastUpdateError'):raise AssertionError(r['lastUpdateError'])
             return r if r.get('lastSuccessfulUpdate',0)>0 else None
         completed=wait(updated)
-        cache=Path(root)/'Soulu'/'User Data'/'AdBlock'/'filters-v1.json'
+        cache=Path(root)/'Sona Preview'/'User Data'/'AdBlock'/'filters-v1.json'
         assert cache.exists() and completed['ready'] and completed['source']=='cache'
         evidence['successful_https_update']=completed;stop()
         offline=dict(env,SOULU_ADBLOCK_NO_UPDATE='1');start(offline)

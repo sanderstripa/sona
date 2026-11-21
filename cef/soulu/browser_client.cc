@@ -79,7 +79,7 @@ bool BrowserClient::OnJSDialog(CefRefPtr<CefBrowser>, const CefString& origin, J
   const auto text=site.empty()?message.ToWString():site+L"\n\n"+message.ToWString();
   bool accepted=false;
   if(type==JSDIALOGTYPE_PROMPT)accepted=TypographyPrompt(owner_->hwnd(),text,initial.ToWString(),value,this);
-  else accepted=TypographyMessageBox(owner_->hwnd(),text.c_str(),L"Soulu",
+  else accepted=TypographyMessageBox(owner_->hwnd(),text.c_str(),L"Sona Preview",
       type==JSDIALOGTYPE_CONFIRM?MB_OKCANCEL:MB_OK,this)==IDOK;
   js_dialog_open_=false;callback->Continue(accepted,CefString(value));return true;
 }
@@ -89,7 +89,7 @@ bool BrowserClient::OnBeforeUnloadDialog(CefRefPtr<CefBrowser>,const CefString& 
   if(js_dialog_open_){callback->Continue(false,CefString());return true;}
   CefRefPtr<BrowserClient> keep_alive(this);
   js_dialog_open_=true;
-  const bool accepted=TypographyMessageBox(owner_->hwnd(),text.ToWString().c_str(),L"Soulu",MB_YESNO|MB_DEFBUTTON2,this)==IDYES;
+  const bool accepted=TypographyMessageBox(owner_->hwnd(),text.ToWString().c_str(),L"Sona Preview",MB_YESNO|MB_DEFBUTTON2,this)==IDYES;
   js_dialog_open_=false;callback->Continue(accepted,CefString());return true;
 }
 void BrowserClient::OnResetDialogState(CefRefPtr<CefBrowser>){

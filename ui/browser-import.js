@@ -4,10 +4,10 @@
   const statuses={available:['Доступно','Available'],not_found:['Не найдено','Not found'],action_required:['Требует действия','Action required'],unsupported:['Не поддерживается','Unsupported'],blocked:['Недоступно','Unavailable']};
   const reasons={
     passwords:['Экспортируйте пароли штатными средствами браузера и выберите CSV-файл.','Export passwords using the source browser, then choose its CSV file.'],
-    autofill:['В Soulu нет поддерживаемого хранилища адресов и полей форм.','Soulu has no supported address and form autofill store.'],
+    autofill:['В Sona Preview нет поддерживаемого хранилища адресов и полей форм.','Sona Preview has no supported address and form autofill store.'],
     tabs:['Чтение сессий пока не проверено. Приватные вкладки и авторизация не переносятся.','Session reading is not verified. Private tabs and authentication are excluded.'],
     favicons:['Отдельная база значков пока не переносится. Поддерживаются безопасные значки в HTML-экспорте.','Separate favicon databases are not imported. Safe icons in HTML exports are supported.'],
-    preferences:['Совместимость настроек с Soulu пока не проверена.','Preferences have no verified mapping to Soulu.'],
+    preferences:['Совместимость настроек с Sona Preview пока не проверена.','Preferences have no verified mapping to Sona Preview.'],
     other:['Для загрузок и расширений нет проверенного механизма переноса.','Downloads and extensions have no verified import binding.']
   };
   function parseHtml(text) {
@@ -69,7 +69,7 @@
       };
     }
     function hideMenus(){from?.hide();to?.hide();}
-    function targetChoices(){to.setOptions([...targets.map(p=>({id:p.id,text:p.name+(p.id===activeTarget?label(' · текущий',' · current'):'' )})),{id:'__new__',text:label('+ Новый профиль Soulu','+ New Soulu profile'),separator:true}]);}
+    function targetChoices(){to.setOptions([...targets.map(p=>({id:p.id,text:p.name+(p.id===activeTarget?label(' · текущий',' · current'):'' )})),{id:'__new__',text:label('+ Новый профиль Sona Preview','+ New Sona Preview profile'),separator:true}]);}
     function sourceChoices(){from.setOptions([...sourceOptions,...extraSources,{id:'__html__',text:label('HTML-файл с закладками…','Bookmarks HTML file…'),separator:true},{id:'__tabs_html__',text:label('HTML-файл с вкладками…','Open tabs HTML file…')},{id:'__csv__',text:label('CSV-файл с паролями…','Passwords CSV file…')},{id:'__portable__',text:label('Другая папка профиля…','Other profile folder…')},{id:'__refresh__',text:label('Обновить список браузеров','Refresh browser list')}]);}
     function lock() {
       const busy=phase!=='form';
@@ -150,7 +150,7 @@
       const selected=source,chosen=Object.fromEntries([...checks].map(([key,c])=>[key,c.checked&&!c.disabled]));
       const approved=consent.checked;let destination=to.value;
       if(destination==='__new__'){
-        phase='creating';box.dataset.importState=phase;execution.hidden=false;execution.textContent=label('Создаём профиль Soulu…','Creating a Soulu profile…');lock();
+        phase='creating';box.dataset.importState=phase;execution.hidden=false;execution.textContent=label('Создаём профиль Sona Preview…','Creating a Sona Preview profile…');lock();
         try{await ui.flush();const profile=await call('createProfile',{name:newName.value.trim()});if(!profile?.id)throw Error(label('Не удалось создать профиль.','Could not create a profile.'));
           if(closed)return;targets.push(profile);targetChoices();to.setValue(profile.id);destination=profile.id;createField.hidden=true;
         }catch(e){if(closed)return;phase='form';box.dataset.importState=phase;execution.hidden=true;error(e);lock();return;}

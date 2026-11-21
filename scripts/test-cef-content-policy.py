@@ -74,7 +74,7 @@ with tempfile.TemporaryDirectory(prefix='soulu-policy-',ignore_cleanup_errors=Tr
         s.navigate(content,f'http://ad.doubleclick.net:{server.server_port}/document')
         assert s.evaluate(content,'document.title')=='Policy smoke','Top-level navigation was filtered'
         content.close();shell.close();s.close_normally(process)
-        preferences=json.loads((Path(root)/'Soulu'/'User Data'/'Profiles'/'personal'/'Preferences').read_text(encoding='utf-8'))
+        preferences=json.loads((Path(root)/'Sona Preview'/'User Data'/'Profiles'/'personal'/'Preferences').read_text(encoding='utf-8'))
         exceptions=preferences['profile']['content_settings']['exceptions']
         assert exceptions['geolocation'][origin+',*']['setting']==1,'Native geolocation override was not applied'
         geo=exceptions['geolocation_with_options'][origin+',*']['setting']

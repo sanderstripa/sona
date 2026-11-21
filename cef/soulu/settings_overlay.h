@@ -4,10 +4,6 @@
 #include <string>
 
 namespace soulu {
-// An owned, non-activatable-in-the-taskbar composition host. It has no caption,
-// independent placement, drag or lifetime; its bounds always equal the owner's
-// client area. A distinct DWM host is necessary to sample the live native CEF
-// children and layered toolbar without capturing or copying their pixels.
 class SettingsOverlay final {
  public:
   explicit SettingsOverlay(HWND owner, std::function<void()> closed,
@@ -33,6 +29,9 @@ class SettingsOverlay final {
   void PlacePanel();
   void ResizeTick();
   void ClipPanel();
+  void CaptureBackground();
+  HBITMAP backdrop_ = nullptr;
+  int backdrop_width_ = 0, backdrop_height_ = 0;
   HWND owner_ = nullptr, hwnd_ = nullptr, browser_ = nullptr;
   std::function<void()> closed_, request_close_;
   State state_ = State::Loading;

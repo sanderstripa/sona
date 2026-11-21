@@ -22,7 +22,7 @@ def check(ok,label):
 def photo(name):
  shot=s.command(page,'Page.captureScreenshot',{'format':'png','captureBeyondViewport':False});(out/(name+'.png')).write_bytes(base64.b64decode(shot['data']))
 with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as root:
- profile=Path(root)/'Soulu'/'User Data'/'Profiles'/'personal';profile.mkdir(parents=True)
+ profile=Path(root)/'Sona Preview'/'User Data'/'Profiles'/'personal';profile.mkdir(parents=True)
  (profile/'soulu-settings.json').write_text(json.dumps({'onboarding':{'status':'skipped'},'layout':'adaptive','mattePanel':False,'videoTranslationEnabled':True}),encoding='utf-8')
  try:
   process=subprocess.Popen([str(Path(sys.argv[1]).resolve()),'--no-proxy-server'],env=dict(os.environ,LOCALAPPDATA=root,SOULU_UI_TEST_PORT=str(s.DEBUG_PORT)))

@@ -48,7 +48,7 @@ def main():
             # The shell may appear before onboarding; finish it before testing restart.
             def onboarding_finished():
                 s.targets()
-                settings=Path(root)/'Soulu'/'User Data'/'Profiles'/'personal'/'soulu-settings.json'
+                settings=Path(root)/'Sona Preview'/'User Data'/'Profiles'/'personal'/'soulu-settings.json'
                 return settings.exists() and json.loads(settings.read_text(encoding='utf-8')).get('onboarding',{}).get('status') in ('skipped','completed')
             wait(onboarding_finished)
         def stop():
@@ -103,7 +103,7 @@ def main():
             check(any(t.get('pinned') for t in state()['tabs']),'Pinned tab returns with its own profile')
             print('Before restart:',json.dumps(state()['tabs'],ensure_ascii=False),flush=True)
             stop()
-            session=Path(root)/'Soulu'/'User Data'/'Profiles'/'personal'/'soulu-session.json'
+            session=Path(root)/'Sona Preview'/'User Data'/'Profiles'/'personal'/'soulu-session.json'
             print('Saved session:',session.read_text(encoding='utf-8') if session.exists() else '<missing>',flush=True)
             start();print('After restart:',json.dumps(state()['tabs'],ensure_ascii=False),flush=True)
             wait(lambda:any(t.get('pinned') for t in state()['tabs']))

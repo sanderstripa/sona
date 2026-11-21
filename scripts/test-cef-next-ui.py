@@ -18,7 +18,7 @@ def check(value,label):
  report['checks'].append(label);print('PASS:',label,flush=True)
 def connect(target):return s.websocket.create_connection(target['webSocketDebuggerUrl'],timeout=30,origin=s.BASE)
 with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as root:
- profile=Path(root)/'Soulu'/'User Data'/'Profiles'/'personal';profile.mkdir(parents=True);(profile/'soulu-settings.json').write_text(json.dumps({'onboarding':{'status':'skipped'},'theme':'light','layout':'adaptive','mattePanel':False,'newTabMode':'soulu'}))
+ profile=Path(root)/'Sona Preview'/'User Data'/'Profiles'/'personal';profile.mkdir(parents=True);(profile/'soulu-settings.json').write_text(json.dumps({'onboarding':{'status':'skipped'},'theme':'light','layout':'adaptive','mattePanel':False,'newTabMode':'soulu'}))
  try:
   p=subprocess.Popen([str(Path(sys.argv[1]).resolve()),'--no-proxy-server'],env=dict(os.environ,LOCALAPPDATA=root,SOULU_UI_TEST_PORT=str(s.DEBUG_PORT)))
   shell=connect(wait(lambda:next((t for t in s.targets() if '/ui/index.html' in t.get('url','')),None)))
@@ -101,7 +101,7 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as root:
   wait(lambda:s.evaluate(settings,"souluSettings.persisted.vpn.profiles.length===1&&souluSettings.persisted.vpn.protocol==='vless'"))
   wait(lambda:not s.evaluate(shell,"vpn.send('status').then(s=>s.connected)"))
   check(True,'Deleting the active key disconnects VPN and retains the other saved key')
-  saved=json.loads((Path(root)/'Soulu'/'User Data'/'settings.json').read_text())['vpn']
+  saved=json.loads((Path(root)/'Sona Preview'/'User Data'/'settings.json').read_text())['vpn']
   check(len(saved['profiles'])==1 and saved['defaultProfileId']==saved['lastProfileId'],'Saved list and default are written to the native persistent store')
   s.evaluate(settings,"souluSettings.openSection('translation')");time.sleep(.2)
   check(s.evaluate(settings,"document.querySelector('#videoTranslationEnabled').checked"),'Video Translate is enabled by default')

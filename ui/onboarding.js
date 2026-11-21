@@ -45,9 +45,9 @@
     const focused=clearMessage?null:document.activeElement?.getAttribute('aria-label');
     const step=flow.step||1;art(step);$('counter').textContent=`${step} из 6`;
     $('controls').replaceChildren();$('actions').replaceChildren();if(clearMessage)$('message').textContent='';
-    const titles=['Добро пожаловать в Soulu','Импортировать данные','Что перенести?','Приватность и защита','Встроенный VPN','Всё готово — добро пожаловать в Soulu'];
+    const titles=['Добро пожаловать в Sona Preview','Импортировать данные','Что перенести?','Приватность и защита','Встроенный VPN','Всё готово — добро пожаловать в Sona Preview'];
     const source=sources.find(s=>s.id===flow.source);
-    const descriptions=['Спокойный браузер с чистым интерфейсом, вкладками, закладками и приватностью под твоим контролем.',sources.length?'Найдены браузеры на этом устройстве. Выбери, откуда перенести данные в Soulu.':'Поддерживаемые браузеры для импорта не найдены.',`Выбери, какие данные импортировать из ${source?.browser||'выбранного браузера'}.`,'Базовые настройки, которые можно изменить позже.','Добавь ключ подключения сейчас или настрой позже.','Базовые параметры настроены. Остальное можно изменить в настройках в любой момент.'];
+    const descriptions=['Спокойный браузер с чистым интерфейсом, вкладками, закладками и приватностью под твоим контролем.',sources.length?'Найдены браузеры на этом устройстве. Выбери, откуда перенести данные в Sona Preview.':'Поддерживаемые браузеры для импорта не найдены.',`Выбери, какие данные импортировать из ${source?.browser||'выбранного браузера'}.`,'Базовые настройки, которые можно изменить позже.','Добавь ключ подключения сейчас или настрой позже.','Базовые параметры настроены. Остальное можно изменить в настройках в любой момент.'];
     $('title').textContent=titles[step-1];$('description').textContent=descriptions[step-1];
     if(step===6&&!flow.privacyApplied)$('description').textContent='Первичная настройка завершена. Остальное можно изменить в настройках в любой момент.';
     const actions=$('actions'),controls=$('controls');
@@ -83,8 +83,8 @@
       controls.append(button('Проверить ключ',()=>{parseVpn();$('message').textContent='Формат ключа распознан. При добавлении его проверит VPN backend. Подключение не запускается.';},'link'));
       actions.append(button('Назад',()=>go(4)),button('Пропустить',()=>go(6)),button('Добавить',async()=>{const parsed=parseVpn();const result=await invoke('vpn',parsed);if(result?.ok===false)throw Error(result.error||'Ключ не сохранён');flow.vpnAdded=true;vpnDraft='';await go(6);},'primary'));
     }
-    if(step===6){summary();note('Если хочешь, можно сразу сделать Soulu браузером по умолчанию.');controls.lastChild.classList.add('divider');
-      actions.append(button('Не сейчас',()=>finish(false)),button('Сделать браузером по умолчанию',async()=>{const result=await invoke('default');if(!result.ok)throw Error('Не удалось открыть стандартные приложения Windows');$('message').textContent=result.message;},'primary'),button('Открыть Soulu',()=>finish(false),'link'));
+    if(step===6){summary();note('Если хочешь, можно сразу сделать Sona Preview браузером по умолчанию.');controls.lastChild.classList.add('divider');
+      actions.append(button('Не сейчас',()=>finish(false)),button('Сделать браузером по умолчанию',async()=>{const result=await invoke('default');if(!result.ok)throw Error('Не удалось открыть стандартные приложения Windows');$('message').textContent=result.message;},'primary'),button('Открыть Sona Preview',()=>finish(false),'link'));
     }
     disable();
     if(focused)for(const n of document.querySelectorAll('input'))if(n.getAttribute('aria-label')===focused)n.focus();

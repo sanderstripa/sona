@@ -49,7 +49,7 @@ def main():
         os.environ['LOCALAPPDATA']=root
         env=dict(os.environ,SOULU_UI_TEST_PORT=str(s.DEBUG_PORT))
         process=None;shell=None;connections=[]
-        profile=Path(root)/'Soulu'/'User Data'/'Profiles'/'personal'
+        profile=Path(root)/'Sona Preview'/'User Data'/'Profiles'/'personal'
         def start():
             nonlocal process,shell
             process=subprocess.Popen([exe,'--no-proxy-server'],env=env)

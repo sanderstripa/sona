@@ -93,7 +93,7 @@ try:
     s.navigate(page,f'http://127.0.0.1:{server.server_port}/next');time.sleep(.3)
     assert s.evaluate(shell,'browserShell.translation("apply",{...translationSnapshot,token:translationToken,rows:[]}).then(()=>false,()=>true)'),'Stale result accepted'
     s.evaluate(shell,'translationEngine.delete()')
-    cache_root=pathlib.Path(profile.name)/'Soulu/User Data/Translation/Models/v1'
+    cache_root=pathlib.Path(profile.name)/'Sona Preview/User Data/Translation/Models/v1'
     assert cache_root.is_dir() and list(cache_root.glob('*.model')),'Models were not cached outside profile storage'
     manifest=json.loads((pathlib.Path(__file__).resolve().parents[1]/'ui/translation-models.json').read_text(encoding='utf-8'))
     damaged=next(pair for pair in manifest['pairs'] if pair['from']=='ru' and pair['to']=='en')['files']['lexicalShortlist']['sha256']

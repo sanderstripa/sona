@@ -42,7 +42,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='soulu-first-run-',ignore_cleanup_errors=True) as temp:
         root=Path(temp);local=root/'local';roaming=root/'roaming';local.mkdir();roaming.mkdir()
         env=dict(os.environ,LOCALAPPDATA=str(local),APPDATA=str(roaming),SOULU_UI_TEST_PORT=str(s.DEBUG_PORT))
-        profile=local/'Soulu'/'User Data'/'Profiles'/'personal'
+        profile=local/'Sona Preview'/'User Data'/'Profiles'/'personal'
         process=None;connections=[]
         def socket(fragment):
             target=wait(lambda:next((t for t in s.targets() if fragment in t.get('url','')),None))

@@ -98,7 +98,7 @@ with tempfile.TemporaryDirectory(prefix='soulu-profiles-',ignore_cleanup_errors=
         s.evaluate(first,"localStorage.setItem('isolation','first');sessionStorage.setItem('session','first')")
         s.evaluate(first,IDB_WRITE)
         invoke(shell,'setSettings',{'theme':'dark'})
-        legacy=json.loads((Path(root)/'Soulu'/'User Data'/'settings.json').read_text(encoding='utf-8'))
+        legacy=json.loads((Path(root)/'Sona Preview'/'User Data'/'settings.json').read_text(encoding='utf-8'))
         assert legacy['settings']['theme']!='dark','Profile settings changed the global migration template'
         assert 'vpn' in legacy,'The existing global VPN owner was lost'
         secret='vault-integration-test-'+str(time.time_ns())
@@ -152,7 +152,7 @@ with tempfile.TemporaryDirectory(prefix='soulu-profiles-',ignore_cleanup_errors=
         for connection in sockets:
             connection.close()
         sockets=[];s.close_normally(process)
-        for path in (Path(root)/'Soulu'/'User Data').rglob('*'):
+        for path in (Path(root)/'Sona Preview'/'User Data').rglob('*'):
             if path.is_file():
                 data=path.read_bytes()
                 for marker in (secret,private_secret):
@@ -174,8 +174,8 @@ with tempfile.TemporaryDirectory(prefix='soulu-profiles-',ignore_cleanup_errors=
         assert answer==[True] and len(state['profiles'])==1,'Confirmed profile deletion failed'
         for connection in sockets:connection.close()
         sockets=[];s.close_normally(process)
-        assert not (Path(root)/'Soulu'/'User Data'/'Profiles'/second_id).exists(),'Deleted profile files remained after shutdown'
-        assert (Path(root)/'Soulu'/'User Data'/'Profiles'/'personal'/'soulu-passwords.json').exists(),'Deletion touched another profile'
+        assert not (Path(root)/'Sona Preview'/'User Data'/'Profiles'/second_id).exists(),'Deleted profile files remained after shutdown'
+        assert (Path(root)/'Sona Preview'/'User Data'/'Profiles'/'personal'/'soulu-passwords.json').exists(),'Deletion touched another profile'
         print(json.dumps({'profile_storage_isolation':True,'incognito_new_session_empty':True,
                           'password_restart':True,'plaintext_absent':True,'rules_restart_isolation':True}))
     finally:

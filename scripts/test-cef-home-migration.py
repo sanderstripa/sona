@@ -21,7 +21,7 @@ def wait(fn,timeout=30):
 def main():
  exe=Path(sys.argv[1]).resolve();report=Path(sys.argv[2]).resolve();connections=[];process=None;shell=None
  with tempfile.TemporaryDirectory(prefix='soulu-home-migration-',ignore_cleanup_errors=True) as root:
-  folder=Path(root)/'Soulu/User Data';folder.mkdir(parents=True)
+  folder=Path(root)/'Sona Preview/User Data';folder.mkdir(parents=True)
   legacy={'layout':'compact','theme':'light','language':'ru','startupMode':'custom','startupUrl':'https://example.com/startup','newTabMode':'blank','homeMode':'custom','homeUrl':'https://example.com/home','homeWeatherCity':'Paris','homeShortcuts':[{'name':'Old favorite','url':'https://example.com/saved'},{'name':'Duplicate favorite','url':'https://example.com/saved'},{'name':'Другой сайт','url':'https://example.org/legacy'}]}
   (folder/'settings.json').write_text(json.dumps({'settings':legacy,'vpn':{}},ensure_ascii=False),encoding='utf-8')
   original={'id':44,'type':'url','title':'Preserved original title','url':'https://example.com/saved','favicon':'','profileId':'personal','parentId':0,'order':0}

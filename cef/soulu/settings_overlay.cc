@@ -1,6 +1,5 @@
 #include "examples/soulu/settings_overlay.h"
 #include "examples/soulu/motion.h"
-#include "examples/soulu/frosted_backdrop.h"
 #include <dwmapi.h>
 #include <windowsx.h>
 #include <algorithm>
@@ -12,22 +11,48 @@ SettingsOverlay::SettingsOverlay(HWND owner, std::function<void()> closed,
     : owner_(owner), closed_(std::move(closed)), request_close_(std::move(request_close)) {}
 SettingsOverlay::~SettingsOverlay() {
   if (IsWindow(hwnd_)) DestroyWindow(hwnd_);
+  if (backdrop_) DeleteObject(backdrop_);
+}
+void SettingsOverlay::CaptureBackground() {
+  RECT bounds{};
+  GetClientRect(owner_, &bounds);
+  const int width = bounds.right, height = bounds.bottom;
+  if (width <= 0 || height <= 0) return;
+  POINT origin{};
+  ClientToScreen(owner_, &origin);
+  HDC screen = GetDC(nullptr);
+  if (!screen) return;
+  HDC memory = CreateCompatibleDC(screen);
+  backdrop_width_ = std::max(1, width / 16);
+  backdrop_height_ = std::max(1, height / 16);
+  if (memory) {
+    backdrop_ = CreateCompatibleBitmap(screen, backdrop_width_, backdrop_height_);
+    if (backdrop_) {
+      HGDIOBJ previous = SelectObject(memory, backdrop_);
+      SetStretchBltMode(memory, HALFTONE);
+      const BOOL copied = StretchBlt(memory, 0, 0, backdrop_width_, backdrop_height_,
+          screen, origin.x, origin.y, width, height, SRCCOPY);
+      SelectObject(memory, previous);
+      if (!copied) { DeleteObject(backdrop_); backdrop_ = nullptr; }
+    }
+    DeleteDC(memory);
+  }
+  ReleaseDC(nullptr, screen);
 }
 bool SettingsOverlay::Create() {
+  CaptureBackground();
   WNDCLASSEXW wc = {sizeof(wc)};
   wc.lpfnWndProc = Proc; wc.hInstance = GetModuleHandleW(nullptr);
   wc.lpszClassName = L"SouluSettingsOverlay";
   wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
   RegisterClassExW(&wc);
-  hwnd_ = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_NOREDIRECTIONBITMAP,
-      wc.lpszClassName, L"Soulu Settings", WS_POPUP | WS_CLIPCHILDREN,
+  hwnd_ = CreateWindowExW(WS_EX_TOOLWINDOW,
+      wc.lpszClassName, L"Sona Preview Settings", WS_POPUP | WS_CLIPCHILDREN,
       0, 0, 1, 1, owner_, nullptr, wc.hInstance, this);
   if (!hwnd_) return false;
   // No independent Windows corners: the owner supplies the external silhouette.
   const DWORD corners = 1; // DWMWCP_DONOTROUND
   DwmSetWindowAttribute(hwnd_, 33, &corners, sizeof(corners));
-  if (!ConfigureFrostedBackdrop(hwnd_, true)) { DestroyWindow(hwnd_); hwnd_ = nullptr; return false; }
-  SetFrostedBackdropOpacity(hwnd_, 0);
   BOOL animate = TRUE;
   if (SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animate, 0)) reduced_ = !animate;
   duration_ = reduced_ ? motion::kReducedOverlayMs : 320;
@@ -80,7 +105,7 @@ void SettingsOverlay::Layout() {
   panel_width_ = std::min(width_, static_cast<int>(std::round(1020 * scale)));
   panel_height_ = std::min(height_, static_cast<int>(std::round(display_height_ * scale)));
   SetWindowPos(hwnd_, HWND_TOP, p.x, p.y, width_, height_, SWP_NOACTIVATE | SWP_NOCOPYBITS);
-  ResizeFrostedBackdrop(hwnd_, width_, height_);
+  InvalidateRect(hwnd_, nullptr, FALSE);
   // Crop to the owner's client region, including its rounded normal-window
   // silhouette. No independent desktop-relative geometry is persisted.
   const int radius = IsZoomed(owner_) ? 0 : static_cast<int>(std::round(16 * scale));
@@ -107,17 +132,14 @@ void SettingsOverlay::PlacePanel() {
   const float distance = reduced_ ? std::min(12, panel_height_) : panel_height_;
   int y = static_cast<int>(std::round(-(1-progress_) * distance));
   if (state_ == State::Loading) y = -panel_height_;
-  SetSettingsBackdropPanel(hwnd_,(width_-panel_width_)/2.f,static_cast<float>(y),
-      static_cast<float>(panel_width_),static_cast<float>(panel_height_),GetDpiForWindow(owner_)/96.f);
   SetWindowPos(browser_, HWND_TOP, (width_-panel_width_)/2, y,
-      panel_width_, panel_height_, SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_SHOWWINDOW);
+      panel_width_, panel_height_, SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
 void SettingsOverlay::Tick() {
   const float fraction = std::min(1.f, static_cast<float>(GetTickCount64()-start_) / duration_);
   const float eased = fraction >= 1 ? 1 : motion::EaseOut(fraction);
   progress_ = state_ == State::Closing ? close_start_ * (1-eased) : eased;
   ++ticks_;
-  SetFrostedBackdropOpacity(hwnd_, progress_);
   PlacePanel();
   if (fraction < 1) return;
   KillTimer(hwnd_, 1);
@@ -137,6 +159,23 @@ LRESULT CALLBACK SettingsOverlay::Proc(HWND hwnd, UINT message, WPARAM wp, LPARA
   if (!self) return DefWindowProcW(hwnd, message, wp, lp);
   switch (message) {
     case WM_ERASEBKGND: return 1;
+    case WM_PAINT: {
+      PAINTSTRUCT paint{};
+      HDC dc = BeginPaint(hwnd, &paint);
+      HDC memory = self->backdrop_ ? CreateCompatibleDC(dc) : nullptr;
+      if (memory) {
+        HGDIOBJ previous = SelectObject(memory, self->backdrop_);
+        SetStretchBltMode(dc, HALFTONE);
+        StretchBlt(dc, 0, 0, self->width_, self->height_, memory, 0, 0,
+            self->backdrop_width_, self->backdrop_height_, SRCCOPY);
+        SelectObject(memory, previous);
+        DeleteDC(memory);
+      } else {
+        FillRect(dc, &paint.rcPaint, GetSysColorBrush(COLOR_WINDOW));
+      }
+      EndPaint(hwnd, &paint);
+      return 0;
+    }
     case WM_TIMER: if (wp == 1) self->Tick(); else if(wp==2)self->ResizeTick(); return 0;
     case WM_CLOSE: self->request_close_(); return 0;
     case WM_SETFOCUS: self->Focus(); return 0;
@@ -153,7 +192,7 @@ LRESULT CALLBACK SettingsOverlay::Proc(HWND hwnd, UINT message, WPARAM wp, LPARA
       }
       return HTCLIENT;
     }
-    case WM_DESTROY: KillTimer(hwnd, 1); KillTimer(hwnd, 2); ReleaseFrostedBackdrop(hwnd); return 0;
+    case WM_DESTROY: KillTimer(hwnd, 1); KillTimer(hwnd, 2); return 0;
   }
   return DefWindowProcW(hwnd, message, wp, lp);
 }

@@ -48,7 +48,7 @@ std::filesystem::path DataRoot() {
   wchar_t appdata[32768]={};
   auto n=GetEnvironmentVariableW(L"LOCALAPPDATA",appdata,32768);
   if(!n || n>=32768) throw std::runtime_error("LOCALAPPDATA is unavailable");
-  return std::filesystem::weakly_canonical(std::filesystem::path(appdata)/L"Soulu"/L"User Data");
+  return std::filesystem::weakly_canonical(std::filesystem::path(appdata)/L"Sona Preview"/L"User Data");
 }
 bool ValidProfileId(const std::string& id) {
   if(id.empty() || id.size()>80 || id=="cef" || id=="__incognito__") return false;

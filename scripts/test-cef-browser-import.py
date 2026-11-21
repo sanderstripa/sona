@@ -88,7 +88,7 @@ def main():
             profile=call('createProfile',{'name':'Import target fixture'});other=profile['id'];check(s.evaluate(shell,'browserShell.getState()')['activeProfileId']=='personal','inline-profile-creation-does-not-switch-profile')
             result=call('run',payload);check(result['status']=='ok' and all(result['categories'][k]['imported']>0 for k in ('bookmarks','history','passwords','autofill','tabs')),'all-five-categories-import-through-native-settings-bridge')
             again=call('run',payload);print('Repeat synthetic import:',again,flush=True);check(all(r.get('imported',0)==0 for r in again['categories'].values()),'repeat-import-deduplicates-all-categories')
-            data=local/'Soulu/User Data';personal=data/'Profiles/personal';destination=data/'Profiles'/other
+            data=local/'Sona Preview/User Data';personal=data/'Profiles/personal';destination=data/'Profiles'/other
             check(not (destination/'soulu-autofill.json').exists() and not (destination/'soulu-passwords.json').exists(),'existing-target-profile-isolation')
             check(b'fixture@example.test' not in (personal/'soulu-autofill.json').read_bytes() and b'synthetic-import-only' not in (personal/'soulu-passwords.json').read_bytes(),'native-target-stores-encrypted')
             marks=s.evaluate(settings,'browserShell.getBookmarks()');check(any(r.get('parentId',0)>0 for r in marks) and len(marks)==3,'nested-bookmarks-visible-in-existing-bookmark-backend')

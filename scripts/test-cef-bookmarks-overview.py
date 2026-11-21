@@ -51,7 +51,7 @@ with tempfile.TemporaryDirectory(prefix='soulu-navigation-', ignore_cleanup_erro
               {'id':2,'type':'url','title':'Example','url':'https://example.com','parentId':1,'order':0},
               {'id':3,'type':'url','title':'Move me','url':'https://move.test','parentId':0,'order':1}]
         assert len(s.evaluate(shell,'window.browserShell.replaceBookmarks('+json.dumps(rows)+')'))==3
-        saved=Path(isolated)/'Soulu'/'User Data'/'bookmarks.json'
+        saved=Path(isolated)/'Sona Preview'/'User Data'/'bookmarks.json'
         assert json.loads(saved.read_text(encoding='utf-8'))[1]['parentId']==1
         assert s.evaluate(shell,"window.browserShell.replaceBookmarks([{id:3,type:'folder',parentId:3}]).then(()=>false,()=>true)") is True
         assert len(s.evaluate(shell,'window.browserShell.getBookmarks()'))==3
@@ -88,7 +88,7 @@ with tempfile.TemporaryDirectory(prefix='soulu-navigation-', ignore_cleanup_erro
             s.command(shell,'Input.dispatchMouseEvent',{'type':'mousePressed','button':'left','clickCount':1,**point})
             s.command(shell,'Input.dispatchMouseEvent',{'type':'mouseReleased','button':'left','clickCount':1,**point})
         assert s.evaluate(shell,"!!document.querySelector('#bookmarkSettingsAction') && !document.querySelector('.bookmark-select-trigger')"), 'Bookmark preferences have one canonical Settings editor'
-        settings_file=Path(isolated)/'Soulu'/'User Data'/'Profiles'/'personal'/'soulu-settings.json'
+        settings_file=Path(isolated)/'Sona Preview'/'User Data'/'Profiles'/'personal'/'soulu-settings.json'
         assert json.loads(settings_file.read_text(encoding='utf-8'))['bookmarksBarMode']=='always'
         s.evaluate(shell,"document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))")
         positions=s.evaluate(shell,"(()=>{const p=id=>{const r=document.querySelector('.bookmarks-bar [data-bookmark-id=\"'+id+'\"]').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}};return {from:p(3),to:p(1)}})()")

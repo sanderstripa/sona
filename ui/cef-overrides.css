@@ -193,3 +193,83 @@ html.cef-runtime body[data-layout=compact] .compact-active-tab :is(button,.tab-a
   align-self: center;
   margin-block: 0;
 }
+
+/* Keep the active field centered while the favicon slots scroll around it. */
+html.cef-runtime body[data-layout=compact] .compact-center-cluster {
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  align-items: center;
+  max-width: calc(100% - 300px);
+  min-width: 0;
+}
+body[data-layout=compact] .compact-center-cluster::before {
+  content: "";
+  flex: 0 0 58px;
+}
+body[data-layout=compact][data-vpn-toolbar=true] .compact-center-cluster::before { flex-basis: 28px; }
+
+html.cef-runtime body[data-layout=compact] .compact-tab-flow {
+  flex: 0 1 auto;
+  justify-content: safe center;
+  width: max-content;
+  min-width: 0;
+  max-width: min(100%, 820px);
+  height: 36px;
+  gap: 0;
+  padding-inline-start: 3px;
+  padding-inline-end: 3px;
+  border: 0;
+  border-radius: 18px;
+  background: light-dark(rgb(20 20 20 / .07), rgb(255 255 255 / .09));
+  box-shadow: none;
+}
+html.cef-runtime body[data-layout=compact] .compact-tab-flow:not(:has(> .compact-tab)) {
+  padding-inline: 0;
+  background: transparent;
+}
+html.cef-runtime body[data-layout=compact] .compact-tab-flow > .compact-tab {
+  position: relative;
+  flex: 0 0 64px;
+  width: 64px;
+  height: 30px;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: none;
+  background: transparent;
+}
+html.cef-runtime body[data-layout=compact] .compact-tab-flow > .compact-tab:hover { background: var(--soft); }
+body[data-layout=compact] .compact-tab + .compact-tab::before {
+  content: "";
+  position: absolute;
+  inset: 6px auto 6px 0;
+  width: 1px;
+  background: var(--line);
+}
+html.cef-runtime body[data-layout=compact] .compact-active-tab {
+  flex: 0 1 clamp(172px, 30vw, 380px);
+  width: clamp(172px, 30vw, 380px);
+  min-width: 172px;
+  height: 30px;
+  border-radius: 999px;
+  box-sizing: border-box;
+  align-items: center;
+  background: var(--field);
+  box-shadow: none;
+}
+body[data-layout=compact] .compact-drag-space,
+body[data-layout=compact] #compactDownloadsButton { margin-inline-start: auto; }
+body[data-layout=compact] .compact-drag-space { flex: 0 1 24px; min-width: 0; }
+body[data-layout=compact] #compactDownloadsButton:not(.auto-hidden) + .compact-drag-space { margin-inline-start: 0; }
+@container (max-width: 660px) {
+  html.cef-runtime body[data-layout=compact] .compact-center-cluster {
+    position: static;
+    transform: none;
+    max-width: none;
+    flex: 1 1 auto;
+  }
+  body[data-layout=compact] .compact-center-cluster::before { display: none; }
+  html.cef-runtime body[data-layout=compact] .compact-tab-flow { padding-inline: 0; }
+  html.cef-runtime body[data-layout=compact] .compact-tab-flow > .compact-tab { flex-basis: 40px; width: 40px; }
+}

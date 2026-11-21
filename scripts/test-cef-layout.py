@@ -233,7 +233,7 @@ base = f'http://127.0.0.1:{port}'
 window = None
 with tempfile.TemporaryDirectory(prefix='soulu-layout-', ignore_cleanup_errors=True) as profile:
     # This suite exercises ordinary browsing; seed an existing install fixture.
-    baseline=Path(profile)/'Soulu'/'User Data'
+    baseline=Path(profile)/'Sona Preview'/'User Data'
     baseline.mkdir(parents=True)
     (baseline/'settings.json').write_text('{}')
     env = dict(os.environ, LOCALAPPDATA=profile, SOULU_UI_TEST_PORT=str(port))

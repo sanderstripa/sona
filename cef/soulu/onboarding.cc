@@ -29,16 +29,16 @@ bool RegisterDefaultBrowser() {
     const bool ok=RegSetValueExW(handle,name,0,REG_SZ,reinterpret_cast<const BYTE*>(value.c_str()),static_cast<DWORD>((value.size()+1)*sizeof(wchar_t)))==ERROR_SUCCESS;
     RegCloseKey(handle);return ok;
   };
-  return set(L"Software\\Classes\\Soulu.Url",nullptr,L"Soulu Web Link")&&
-      set(L"Software\\Classes\\Soulu.Url",L"URL Protocol",L"")&&
-      set(L"Software\\Classes\\Soulu.Url\\DefaultIcon",nullptr,exe+L",0")&&
-      set(L"Software\\Classes\\Soulu.Url\\shell\\open\\command",nullptr,command)&&
-      set(L"Software\\Soulu\\Capabilities",L"ApplicationName",L"Soulu")&&
-      set(L"Software\\Soulu\\Capabilities",L"ApplicationDescription",L"Soulu browser")&&
-      set(L"Software\\Soulu\\Capabilities",L"ApplicationIcon",exe+L",0")&&
-      set(L"Software\\Soulu\\Capabilities\\URLAssociations",L"http",L"Soulu.Url")&&
-      set(L"Software\\Soulu\\Capabilities\\URLAssociations",L"https",L"Soulu.Url")&&
-      set(L"Software\\RegisteredApplications",L"Soulu",L"Software\\Soulu\\Capabilities");
+  return set(L"Software\\Classes\\SonaPreview.Url",nullptr,L"Sona Preview Web Link")&&
+      set(L"Software\\Classes\\SonaPreview.Url",L"URL Protocol",L"")&&
+      set(L"Software\\Classes\\SonaPreview.Url\\DefaultIcon",nullptr,exe+L",0")&&
+      set(L"Software\\Classes\\SonaPreview.Url\\shell\\open\\command",nullptr,command)&&
+      set(L"Software\\Sona Preview\\Capabilities",L"ApplicationName",L"Sona Preview")&&
+      set(L"Software\\Sona Preview\\Capabilities",L"ApplicationDescription",L"Sona Preview browser")&&
+      set(L"Software\\Sona Preview\\Capabilities",L"ApplicationIcon",exe+L",0")&&
+      set(L"Software\\Sona Preview\\Capabilities\\URLAssociations",L"http",L"SonaPreview.Url")&&
+      set(L"Software\\Sona Preview\\Capabilities\\URLAssociations",L"https",L"SonaPreview.Url")&&
+      set(L"Software\\RegisteredApplications",L"Sona Preview",L"Software\\Sona Preview\\Capabilities");
 }
 }
 void BrowserWindow::OpenExternal(const std::string& url) {

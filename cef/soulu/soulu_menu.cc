@@ -103,7 +103,7 @@ class AccessibleMenu final:public IAccessible {
   HRESULT STDMETHODCALLTYPE get_accParent(IDispatch** out) override{if(!out)return E_POINTER;*out=nullptr;return S_FALSE;}
   HRESULT STDMETHODCALLTYPE get_accChildCount(long* n) override{if(!n)return E_POINTER;auto p=Get();*n=p?static_cast<long>(p->model->size()):0;return S_OK;}
   HRESULT STDMETHODCALLTYPE get_accChild(VARIANT,IDispatch** out) override{if(!out)return E_POINTER;*out=nullptr;return S_FALSE;}
-  HRESULT STDMETHODCALLTYPE get_accName(VARIANT child,BSTR* out) override{if(!out)return E_POINTER;auto item=Item(child);*out=SysAllocString(item?item->label.c_str():L"Soulu");return S_OK;}
+  HRESULT STDMETHODCALLTYPE get_accName(VARIANT child,BSTR* out) override{if(!out)return E_POINTER;auto item=Item(child);*out=SysAllocString(item?item->label.c_str():L"Sona Preview");return S_OK;}
   HRESULT STDMETHODCALLTYPE get_accValue(VARIANT,BSTR* out) override{if(!out)return E_POINTER;*out=nullptr;return S_FALSE;}
   HRESULT STDMETHODCALLTYPE get_accDescription(VARIANT,BSTR* out) override{return get_accValue({},out);}
   HRESULT STDMETHODCALLTYPE get_accRole(VARIANT child,VARIANT* out) override{if(!out)return E_POINTER;*out=VARIANT{};out->vt=VT_I4;auto item=Item(child);out->lVal=!item?ROLE_SYSTEM_MENUPOPUP:item->type==MenuItemType::Separator?ROLE_SYSTEM_SEPARATOR:ROLE_SYSTEM_MENUITEM;return S_OK;}
@@ -193,7 +193,7 @@ Panel* Open(Session& s,MenuModel& model,POINT at,Panel* parent){
   if(parent&&at.x+panel->width>work.right){RECT rect={};GetWindowRect(parent->window,&rect);at.x=rect.left-panel->width+s.Px(3);}
   at.x=std::clamp(static_cast<int>(at.x),static_cast<int>(work.left),static_cast<int>(work.right)-panel->width);
   at.y=std::clamp(static_cast<int>(at.y),static_cast<int>(work.top),static_cast<int>(work.bottom)-panel->height);
-  HWND window=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_TOPMOST,L"SouluMenuHost",L"Soulu",WS_POPUP,at.x,at.y,panel->width,panel->height,s.owner,nullptr,GetModuleHandleW(nullptr),panel.get());
+  HWND window=CreateWindowExW(WS_EX_TOOLWINDOW|WS_EX_TOPMOST,L"SouluMenuHost",L"Sona Preview",WS_POPUP,at.x,at.y,panel->width,panel->height,s.owner,nullptr,GetModuleHandleW(nullptr),panel.get());
   if(!window)return nullptr;
   SetWindowRgn(window,CreateRoundRectRgn(0,0,panel->width+1,panel->height+1,s.Px(14),s.Px(14)),FALSE);
   const DWORD corner=2;DwmSetWindowAttribute(window,33,&corner,sizeof(corner));

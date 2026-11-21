@@ -81,7 +81,7 @@ def main():
                 try:ws.close()
                 except Exception:pass
             sockets.clear();s.close_normally(process);process=None
-        profile=Path(root)/'Soulu'/'User Data'/'Profiles'/'personal'
+        profile=Path(root)/'Sona Preview'/'User Data'/'Profiles'/'personal'
         try:
             start();content=s.page_socket();sockets.append(content);s.navigate(content,origin+'/seed')
             s.evaluate(content,"localStorage.setItem('history-test','keep');sessionStorage.setItem('history-session','keep')")

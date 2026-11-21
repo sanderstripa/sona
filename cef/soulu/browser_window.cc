@@ -424,7 +424,7 @@ BrowserWindow::BrowserWindow()
   settings_->SetString("theme", "system");
   settings_->SetString("language", "ru");
   settings_->SetString("translationTarget", "ru");
-  settings_->SetBool("mattePanel", true);
+  settings_->SetBool("mattePanel", false);
   settings_->SetString("searchEngine", "google");
   settings_->SetString("addressOpenMode", "current");
   settings_->SetString("addressPosition", "center");
@@ -508,13 +508,7 @@ void BrowserWindow::LoadSettings() {
   } else if (settings_->GetString("bookmarksBarMode") == "auto") {
     settings_->SetString("bookmarksBarMode", "always");
   }
-  // Earlier previews persisted the disabled default. Apply the new default
-  // once to existing profiles; subsequent user choices remain untouched.
-  if (!settings_->HasKey("matteDefaultV15")) {
-    settings_->SetBool("mattePanel", true);
-    settings_->SetBool("matteDefaultV15", true);
-    SaveSettings();
-  }
+  settings_->SetBool("mattePanel", false);
 }
 
 bool BrowserWindow::SaveSettings() const {
@@ -605,7 +599,7 @@ bool BrowserWindow::CreateNativeWindow() {
       }
     }
   }
-  hwnd_ = CreateWindowExW(0, kWindowClass, L"Soulu",
+  hwnd_ = CreateWindowExW(0, kWindowClass, L"Sona Preview",
                           WS_POPUP | WS_THICKFRAME | WS_MINIMIZEBOX | WS_CLIPCHILDREN |
                               WS_MAXIMIZEBOX | WS_SYSMENU,
                           x, y, restored_width, restored_height, nullptr, nullptr, wc.hInstance, this);
@@ -696,6 +690,7 @@ void BrowserWindow::CreateProfile(const std::string& name,
   profiles_.push_back(profile);
   auto saved=ReadJson(profile_path/L"soulu-settings.json");
   auto config=saved&&saved->GetType()==VTYPE_DICTIONARY?saved->GetDictionary()->Copy(false):initial_settings_->Copy(false);
+  config->SetBool("mattePanel", false);
   if(existing&&(!saved||saved->GetType()!=VTYPE_DICTIONARY)&&config->GetList("homeShortcuts")&&config->GetList("homeShortcuts")->GetSize())config->Remove("homeFavoriteIds");
   if(!existing){
     // New profiles keep independent page intents after root legacy migration.
@@ -951,7 +946,7 @@ void BrowserWindow::OfferCredential(int id,CefRefPtr<CefFrame> frame,
   credential_prompt_open_=true;
   if(TypographyMessageBox(hwnd_,prompt.c_str(),L"Пароли Soulu",MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2)==IDYES &&
      !vault.Put(origin,username,password,true))
-    TypographyMessageBox(hwnd_,L"Не удалось сохранить пароль.",L"Soulu",MB_OK|MB_ICONERROR);
+    TypographyMessageBox(hwnd_,L"Не удалось сохранить пароль.",L"Sona Preview",MB_OK|MB_ICONERROR);
   if(auto* current=FindTab(id);current&&current==ActiveTab()&&current->browser)
     FocusContent(current);
   SecureZeroMemory(password.data(),password.size());
@@ -1045,7 +1040,7 @@ void BrowserWindow::OpenSettingsOverlay() {
       [this] { FinishSettingsTransition(); }, [this] { GuardSettingsClose(kSettingsSession); });
   if (!settings_overlay_->Create()) {
     settings_overlay_.reset();
-    TypographyMessageBox(hwnd_, L"Не удалось создать слой настроек Windows Composition.", L"Soulu", MB_OK | MB_ICONERROR);
+    TypographyMessageBox(hwnd_, L"Не удалось создать слой настроек Windows Composition.", L"Sona Preview", MB_OK | MB_ICONERROR);
     return;
   }
   BlockSettingsBackground(true);
@@ -2337,6 +2332,7 @@ void BrowserWindow::SetSetting(const std::string& key, CefRefPtr<CefValue> value
   if (key == "startPageMode" || key == "startPageUrl") {
     settings_->SetValue(key == "startPageMode" ? "startupMode" : "startupUrl", value->Copy());
   }
+  if (key == "mattePanel") return;
   settings_->SetValue(key, value->Copy());
   SaveSettings();
   if (key == "layout" || key.find("bookmarks") == 0) Layout();
@@ -2699,7 +2695,7 @@ void BrowserWindow::HandleBridge(const std::string& request,
     if(action=="browser.sites.set")ok=policy->Set(domain,data->GetString("permission"),data->GetInt("value"));
     else if(action=="browser.sites.blocking")ok=policy->SetBlocking(domain,data->GetInt("value"));
     else if(action=="browser.sites.reset"){
-      if(domain.empty()&&TypographyMessageBox(hwnd_,L"Сбросить все исключения разрешений сайтов этого профиля?",L"Soulu",MB_YESNO|MB_DEFBUTTON2)!=IDYES)return Reply(callback,policy->Snapshot());
+      if(domain.empty()&&TypographyMessageBox(hwnd_,L"Сбросить все исключения разрешений сайтов этого профиля?",L"Sona Preview",MB_YESNO|MB_DEFBUTTON2)!=IDYES)return Reply(callback,policy->Snapshot());
       ok=policy->Reset(domain);
     }
     if(!ok){callback->Failure(400,"Rule could not be saved");return;}

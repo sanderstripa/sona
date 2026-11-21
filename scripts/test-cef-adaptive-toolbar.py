@@ -48,7 +48,7 @@ def main():
     def check(value,label):
         assert value,label;evidence['checks'].append(label);print('PASS:',label,flush=True)
     with tempfile.TemporaryDirectory(prefix='soulu-adaptive-',ignore_cleanup_errors=True) as root:
-        profile=Path(root)/'Soulu'/'User Data'/'Profiles'/'personal';profile.mkdir(parents=True)
+        profile=Path(root)/'Sona Preview'/'User Data'/'Profiles'/'personal';profile.mkdir(parents=True)
         (profile/'soulu-settings.json').write_text(json.dumps({'onboarding':{'status':'skipped'},'layout':'adaptive','startupMode':'continue','newTabMode':'blank','bookmarksBarMode':'never','theme':'dark','mattePanel':False}),encoding='utf-8')
         env=dict(os.environ,LOCALAPPDATA=root,SOULU_UI_TEST_PORT=str(s.DEBUG_PORT))
         def state():return s.evaluate(shell,'browserShell.getState()')

@@ -86,7 +86,7 @@ bool BrowserWindow::SaveSettingsSnapshot(CefRefPtr<CefDictionaryValue> requested
   // home data changed outside this view. Refuse concurrent edits to a key.
   auto next=settings_->Copy(false),base=settings_loaded_->GetDictionary("settings");
   CefDictionaryValue::KeyList keys;config->GetKeys(keys);
-  for(const auto& key:keys){auto changed=config->GetValue(key),before=base->GetValue(key);
+  for(const auto& key:keys){if(key=="mattePanel")continue;auto changed=config->GetValue(key),before=base->GetValue(key);
     if(before&&before->IsEqual(changed))continue;
     auto current=settings_->GetValue(key);
     if(before&&current&&!before->IsEqual(current)&&!current->IsEqual(changed)){
@@ -203,7 +203,7 @@ bool BrowserWindow::HandleSettingsBridge(int id,const std::string& request,
       wchar_t progid[256]={};DWORD size=sizeof(progid);
       const std::wstring key=std::wstring(L"Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\")+scheme+L"\\UserChoice";
       if(RegGetValueW(HKEY_CURRENT_USER,key.c_str(),L"ProgId",RRF_RT_REG_SZ,nullptr,progid,&size)!=ERROR_SUCCESS||
-          std::wstring(progid)!=L"Soulu.Url")is_default=false;
+          std::wstring(progid)!=L"SonaPreview.Url")is_default=false;
     }
     const int backdrop=BackdropCapabilities();
     result->SetBool("matteAvailable",(backdrop&3)==3&&!(backdrop&8));

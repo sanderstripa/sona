@@ -106,7 +106,7 @@ def main():
         env['APPDATA'] = str(Path(folder) / 'roaming')
         env['SOULU_REGRESSION_SKIP_FIRST_RUN'] = '1'
         env['SOULU_UI_TEST_PORT'] = str(s.DEBUG_PORT)
-        data = Path(folder) / 'Soulu' / 'User Data'; data.mkdir(parents=True)
+        data = Path(folder) / 'Sona Preview' / 'User Data'; data.mkdir(parents=True)
         (data / 'settings.json').write_text(json.dumps({'settings': {'startupMode':'blank',
             'newTabMode':'blank','theme':'light','mattePanel':False,'matteDefaultV15':True}}))
         process = subprocess.Popen([exe, '--no-proxy-server'], env=env)

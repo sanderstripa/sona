@@ -41,7 +41,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Handler);threading.Thread(target=server.serve_forever,daemon=True).start();origin=f'http://127.0.0.1:{server.server_port}'
 p=None;connections=[]
 with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as root:
- config=Path(root)/'Soulu'/'User Data'/'Profiles'/'personal';config.mkdir(parents=True);(config/'soulu-settings.json').write_text(json.dumps({'onboarding':{'status':'skipped'},'theme':'light','layout':'adaptive','mattePanel':False,'newTabMode':'soulu','homeMode':'soulu','startupMode':'soulu'}))
+ config=Path(root)/'Sona Preview'/'User Data'/'Profiles'/'personal';config.mkdir(parents=True);(config/'soulu-settings.json').write_text(json.dumps({'onboarding':{'status':'skipped'},'theme':'light','layout':'adaptive','mattePanel':False,'newTabMode':'soulu','homeMode':'soulu','startupMode':'soulu'}))
  env=dict(os.environ,LOCALAPPDATA=root,SOULU_UI_TEST_PORT=str(s.DEBUG_PORT))
  try:
   p=subprocess.Popen([str(Path(sys.argv[1]).resolve()),'--no-proxy-server','--use-fake-device-for-media-stream'],env=env)
@@ -113,7 +113,7 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as root:
   hwnd=wait(lambda:native_window(p.pid));wait(lambda:ctypes.windll.user32.IsWindowVisible(hwnd));ctypes.windll.user32.ShowWindow(hwnd,9);ctypes.windll.user32.MoveWindow(hwnd,*expected,True)
   for ws in connections:ws.close()
   connections.clear();s.close_normally(p);p=None
-  placement=Path(root)/'Soulu'/'User Data'/'window-placement.json';check(placement.exists(),'Native window placement is persisted on close')
+  placement=Path(root)/'Sona Preview'/'User Data'/'window-placement.json';check(placement.exists(),'Native window placement is persisted on close')
   p=subprocess.Popen([str(Path(sys.argv[1]).resolve()),'--no-proxy-server'],env=env);shell=socket_for('/ui/index.html');connections.append(shell);hwnd=wait(lambda:native_window(p.pid))
   wait(lambda:ctypes.windll.user32.IsWindowVisible(hwnd));rect=Rect();ctypes.windll.user32.GetWindowRect(hwnd,ctypes.byref(rect));check(abs(rect.left-expected[0])<=2 and abs(rect.top-expected[1])<=2 and abs(rect.right-rect.left-expected[2])<=2,'Window position and normal size are restored on restart')
   ctypes.windll.user32.ShowWindow(hwnd,3)

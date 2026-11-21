@@ -35,7 +35,7 @@ def main():
     evidence=output.parent/'settings-visuals';evidence.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='soulu-settings-',ignore_cleanup_errors=True) as temp:
         root=Path(temp);local=root/'local';roaming=root/'roaming';local.mkdir();roaming.mkdir()
-        data=local/'Soulu'/'User Data';profile=data/'Profiles'/'personal';profile.mkdir(parents=True)
+        data=local/'Sona Preview'/'User Data';profile=data/'Profiles'/'personal';profile.mkdir(parents=True)
         legacy={'theme':'dark','layout':'classic','mattePanel':False,'matteDefaultV15':True,
           'language':'ru','showBack':False,'showNewTab':False,'showDownloads':True,
           'vpnToolbarVisible':False,'addressPosition':'left','downloadsMode':'always',

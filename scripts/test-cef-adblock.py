@@ -141,7 +141,7 @@ site-a.test#@#.soulu-except
         invoke('switchProfile','personal');page=active_page(b+'/profile-a-initial');visit(page,b+'/profile-a');assert not fetch_ad(page)
         invoke('newIncognito');private=active_page(b+'/private-initial');visit(private,b+'/private');assert not fetch_ad(private)
         blocking('site-b.test',0);visit(private,b+'/private-allow');assert fetch_ad(private)
-        permanent=Path(root)/'Soulu'/'User Data'/'Profiles'/'personal'/'soulu-site-rules.json'
+        permanent=Path(root)/'Sona Preview'/'User Data'/'Profiles'/'personal'/'soulu-site-rules.json'
         assert 'site-b.test' not in json.loads(permanent.read_text(encoding='utf-8'))['blocking']['sites']
         evidence['profile_isolation']=True;evidence['incognito_no_permanent_leak']=True
         stop();start();invoke('switchProfile','personal');page=active_page(b+'/restored-initial')
@@ -149,7 +149,7 @@ site-a.test#@#.soulu-except
         visit(page,b+'/restart-b');assert not fetch_ad(page)
         evidence['restart']=True
         # Simulate a corrupt persisted update; no network update can rescue this run.
-        stop();cache=Path(root)/'Soulu'/'User Data'/'AdBlock'/'filters-v1.json';cache.parent.mkdir(parents=True,exist_ok=True)
+        stop();cache=Path(root)/'Sona Preview'/'User Data'/'AdBlock'/'filters-v1.json';cache.parent.mkdir(parents=True,exist_ok=True)
         cache.write_text('<html>broken cache</html>',encoding='utf-8');start();invoke('switchProfile','personal');page=active_page(b+'/restored-initial')
         visit(page,b+'/corrupt-offline');status=actual_snapshot()
         assert status['ready'] and status['source']=='bundled' and status['lastUpdateError']

@@ -1,19 +1,19 @@
 {
-  "revision": 20261018,
-  "source": "ui/branding/soulu-master.svg",
-  "source_sha256": "3eb273158c4c5fd479fb10898ba1ce5d498f857c80d416043eac7fc5945bfae1",
+  "revision": 20261114,
+  "source": "ui/branding/sona-master.png",
+  "source_sha256": "d93eb7c70d51e2df988dd31329c5baf82e380bd5d9bb52a17e535c570efbd93b",
   "png_sha256": {
-    "16": "50ba9c602eeb6ec978af889eab9befadd114226e61befb839c17660ee8409814",
-    "20": "fc70ec654aea9c5bd53fa073a70b66460680a9ade9750016d9c322e837905415",
-    "24": "25c9c6b4acd87a632ffaf34e9e41c55ccab993fa74c8f4f8e3b9826073204bad",
-    "32": "fa6bbad6fff23f512e5d78850cf26b6c4b195b30530f0ae60033baedf2064893",
-    "40": "3b5c4558b27ab0a12aa56673fa81301b0dfbf63bba84c9c222a05d60e012fc72",
-    "48": "a9f182a66f67af919b8f20c823d07c8c1087d51ed0e25e7d1f9e81a781e6553a",
-    "64": "5107d4432d2ebac3cc9cead0f48889d3bf74638a78feef94f55985f32045e414",
-    "128": "1fa92fc22608a60a2224f48b275a6ab1fdf24eb4ef3db3643dde84f39acbeab9",
-    "256": "6f5e111c1a9f818632675c8c6d8fff922fcf760687043a1a204bf7de4fd8605b",
-    "512": "8fda9605631b435737669ae1faa2e14ed2055f94393b2677105e2cf93b0c7384",
-    "1024": "dd0b2a1f0e1d3603ceb79eeefcebfd661323c90821e2218a26238a1336963935"
+    "16": "00ee3342a9b732181473abc07e72cf4e5912a6e7a85505a6b8307c51e3b1d117",
+    "20": "e72a8aaadfebe689ebb9c2c3756662bb76ef2364d7d9be6234a1ac16c92a73bb",
+    "24": "4b930b174f78a7e2e34adbaa38f980d3f0f04769ed912fcd4b17b744fbe35b8c",
+    "32": "998f324f539db5833971f59b8c754ee246d35c8ac6cb64255bc4ee5c1d931c09",
+    "40": "7651fd8123c195a2158110a7298f498a63c6d8264a3d34d85ec50973de56431d",
+    "48": "858d4cff8016b8327c8f4153eb11eabec4e2b1d6c4d8c37738f443487f2e6055",
+    "64": "a8b00a8abbe48f038f19703afba759df09b9e6f4a1669ace029b24d92c3f2fd1",
+    "128": "ebd855e11a3df9b51a5ee2e8a0b2d15f555ea6e7483b248690eecccc13e17b50",
+    "256": "eadb93d6f7e3c96fd09bfe7d2f758bfa79546ffefcaaa3ad7defeedcb20d6fec",
+    "512": "a9fae0cfed6bcc62ed08e22fca437d805651ce2894a53a8319a7b3f535dc3401",
+    "1024": "55477c09c2a0aab7bf97e6d1aa9afd63af5d5aa823904f911e13667a767791cd"
   },
   "sizes": [
     16,
@@ -39,17 +39,21 @@
     512,
     1024
   ],
-  "margin": "max(1px, round(size * 0.02)) per side",
-  "ico_sha256": "3fb4a1c2b2c72b4858b6bb473c9a5c3911848c3f052b2441dde23089f532459d",
+  "margin": "0px; full optical diameter at every resolution",
+  "ico_sha256": "556ec0c08a5090835b5d84d3d3953eb91161a8c3b18ede3980e1fc532faa0e44",
   "aliases": [
-    "soulu-icon.png",
-    "soulu-icon-new.png",
+    "sona-icon.png",
+    "sona-icon-new.png",
     "browser-icon.png",
-    "soulu-icon.ico",
-    "soulu-app-icon.ico",
-    "soulu-installer-icon.ico",
-    "soulu-shortcut-icon.ico",
+    "sona-icon.ico",
+    "sona-app-icon.ico",
+    "sona-installer-icon.ico",
+    "sona-shortcut-icon.ico",
     "browser-icon.ico",
-    "browser-app-icon.ico"
+    "browser-app-icon.ico",
+    "sona-app-1.160.24.ico",
+    "sona-app-1.160.29.ico",
+    "sona-app-1.160.31.ico",
+    "sona-app-1.160.32.ico"
   ]
 }

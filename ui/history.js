@@ -24,7 +24,7 @@
     text('rangeLabel','Диапазон истории','History time range');text('historyName','История браузера','Browsing history');text('historyHint','Посещения за выбранный период.','Visits in the selected time range.');
     text('sitesName','Файлы cookie и данные сайтов','Cookies and site data');text('sitesHint','За всё время. Включая хранилища сайтов; большинство сайтов выйдет из аккаунта.','All time. Includes site storage; most sites will sign you out.');
     text('cacheName','Кэшированные файлы и изображения','Cached files and images');text('cacheHint','За всё время. Временные файлы страниц; следующая загрузка может быть медленнее.','All time. Temporary page files; the next load may take longer.');
-    text('autofillNote','Soulu пока не сохраняет автозаполнение форм. Сохранённые пароли не удаляются.','Soulu does not yet store form autofill data. Saved passwords are preserved.');
+    text('autofillNote','Sona Preview пока не сохраняет автозаполнение форм. Сохранённые пароли не удаляются.','Sona Preview does not yet store form autofill data. Saved passwords are preserved.');
     text('allTimeText','Я понимаю, что выбранные cookies, данные сайтов и кэш удалятся за всё время, независимо от диапазона истории.','I understand that selected cookies, site data and cache will be removed for all time, regardless of the history range.');
     text('cancelClear','Отмена','Cancel');text('confirmClear','Очистить','Clear');
     $('search').disabled=$('filter').disabled=$('clearData').disabled=!!state.incognito;

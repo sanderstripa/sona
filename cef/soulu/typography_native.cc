@@ -171,7 +171,7 @@ INT_PTR CALLBACK Procedure(HWND window,UINT message,WPARAM wParam,LPARAM lParam)
 int Show(Dialog& state){
   if(!Service().ready){
     // Last-resort OS error only when the required product resources are broken.
-    MessageBoxW(state.owner,L"Bundled Onest resources are missing or invalid.",L"Soulu",MB_OK|MB_ICONERROR);
+    MessageBoxW(state.owner,L"Bundled Onest resources are missing or invalid.",L"Sona Preview",MB_OK|MB_ICONERROR);
     return IDCANCEL;
   }
   // Zero controls in the template: children receive private fonts before show.
@@ -187,10 +187,10 @@ int Show(Dialog& state){
 }
 HFONT TypographyFont(typography::Metrics role,UINT dpi){return Service().Get(role,dpi);}
 int TypographyMessageBox(HWND owner,const wchar_t* text,const wchar_t* title,UINT flags,const void* tag){
-  Dialog state;state.owner=owner;state.text=text?text:L"";state.title=title?title:L"Soulu";state.flags=flags;state.tag=tag;return Show(state);
+  Dialog state;state.owner=owner;state.text=text?text:L"";state.title=title?title:L"Sona Preview";state.flags=flags;state.tag=tag;return Show(state);
 }
 bool TypographyPrompt(HWND owner,const std::wstring& text,const std::wstring& initial,std::wstring& result,const void* tag){
-  Dialog state;state.owner=owner;state.text=text;state.title=L"Soulu";state.initial=initial;state.prompt=true;state.flags=MB_OKCANCEL;
+  Dialog state;state.owner=owner;state.text=text;state.title=L"Sona Preview";state.initial=initial;state.prompt=true;state.flags=MB_OKCANCEL;
   state.tag=tag;if(Show(state)!=IDOK)return false;result=std::move(state.result);return true;
 }
 void TypographyCancelDialogs(const void* tag){

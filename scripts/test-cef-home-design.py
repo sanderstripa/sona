@@ -90,7 +90,7 @@ def main():
    wait(lambda:s.evaluate(home,"document.querySelectorAll('#favoritesGrid a').length===2"))
    reordered=bridge(home,'home.favorite.reorder',[7101,7102])
    check([row['id'] for row in reordered['favorites']]==[7101,7102],'Home favorites bridge saves a new order')
-   saved=json.loads((Path(root)/'Soulu/User Data/Profiles/personal/soulu-settings.json').read_text(encoding='utf-8'))
+   saved=json.loads((Path(root)/'Sona Preview/User Data/Profiles/personal/soulu-settings.json').read_text(encoding='utf-8'))
    check(saved['homeFavoriteIds']==[7101,7102],'Home favorites order persists in the profile')
    for name in ('provider','weather','favorites'):
     s.evaluate(home,"document.getElementById('"+name+"Toggle').click()")
@@ -112,7 +112,7 @@ def main():
    check(s.evaluate(home,"!!document.querySelector('#weatherIcon svg[data-condition]')"),'Weather summary and forecast use condition accents')
    check(s.evaluate(home,"document.querySelector('.weather-temperature').textContent.endsWith(String.fromCharCode(176)) && !document.querySelector('#weatherDetail').textContent.includes(String.fromCharCode(194))"),'Weather renders degree units without broken Unicode text')
    capture('weather-real-forecast',True)
-   check((Path(root)/'Soulu/User Data/Profiles/personal/soulu-weather.json').is_file(),'Normal profile weather cache persists')
+   check((Path(root)/'Sona Preview/User Data/Profiles/personal/soulu-weather.json').is_file(),'Normal profile weather cache persists')
    s.command(home,'Network.enable');s.command(home,'Network.emulateNetworkConditions',{'offline':True,'latency':0,'downloadThroughput':0,'uploadThroughput':0});s.command(home,'Page.reload')
    wait(lambda:s.evaluate(home,"typeof window.souluHomeApply==='function' && document.documentElement.classList.contains('typography-ready')"))
    check(s.evaluate(home,"document.querySelector('#logo').complete && !document.querySelector('#query').disabled"),'Offline reload renders local logo, font and usable input')

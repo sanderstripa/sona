@@ -24,7 +24,7 @@ def wait(fn,timeout=40):
  raise AssertionError('Page glass wait timeout')
 out=Path(sys.argv[2]);out.mkdir(parents=True,exist_ok=True);evidence={};p=None;ws=None;page=None
 with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as root:
- folder=Path(root)/'Soulu'/'User Data'/'Profiles'/'personal';folder.mkdir(parents=True);(folder/'soulu-settings.json').write_text(json.dumps({'onboarding':{'status':'skipped'},'layout':'adaptive','mattePanel':False,'theme':'light','bookmarksBarMode':'never'}))
+ folder=Path(root)/'Sona Preview'/'User Data'/'Profiles'/'personal';folder.mkdir(parents=True);(folder/'soulu-settings.json').write_text(json.dumps({'onboarding':{'status':'skipped'},'layout':'adaptive','mattePanel':False,'theme':'light','bookmarksBarMode':'never'}))
  try:
   log=(out/'process.log').open('w',encoding='utf-8');p=subprocess.Popen([str(Path(sys.argv[1]).resolve()),'--no-proxy-server','--log-file='+str((out/'cef.log').resolve())],stdout=log,stderr=subprocess.STDOUT,env=dict(os.environ,LOCALAPPDATA=root,SOULU_UI_TEST_PORT=str(s.DEBUG_PORT)))
   t=wait(lambda:next((x for x in s.targets() if '/ui/index.html' in x.get('url','')),None));ws=s.websocket.create_connection(t['webSocketDebuggerUrl'],timeout=30,origin=s.BASE)
