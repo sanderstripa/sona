@@ -1,0 +1,45 @@
+name: Identify the surface covering the Windows 11 test desktop
+on:
+  push:
+    branches: [codex/sona-acrylic-probe]
+    paths: ['.github/workflows/sona-foreground-probe.yml']
+permissions:
+  contents: read
+jobs:
+  desktop:
+    runs-on: windows-11-arm
+    timeout-minutes: 4
+    steps:
+      - shell: powershell
+        run: |
+          Add-Type -AssemblyName System.Drawing,System.Windows.Forms
+          Add-Type @'
+          using System;
+          using System.Text;
+          using System.Runtime.InteropServices;
+          public static class Desktop {
+            [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+            [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
+            [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr window, StringBuilder name, int max);
+            [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr window, StringBuilder name, int max);
+          }
+          '@
+          [uint32]$owner=0
+          $window=[Desktop]::GetForegroundWindow()
+          [void][Desktop]::GetWindowThreadProcessId($window,[ref]$owner)
+          $name=New-Object System.Text.StringBuilder 256
+          [void][Desktop]::GetClassName($window,$name,256)
+          $title=New-Object System.Text.StringBuilder 256
+          [void][Desktop]::GetWindowText($window,$title,256)
+          "Foreground class=$name title=$title process=$((Get-Process -Id $owner -ErrorAction SilentlyContinue).ProcessName)"
+          $bounds=[Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $shot=New-Object Drawing.Bitmap($bounds.Width,$bounds.Height)
+          $graphics=[Drawing.Graphics]::FromImage($shot)
+          $graphics.CopyFromScreen($bounds.Location,[Drawing.Point]::Empty,$bounds.Size)
+          $shot.Save("$PWD\desktop.png",[Drawing.Imaging.ImageFormat]::Png)
+          $graphics.Dispose()
+          $shot.Dispose()
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows11-foreground
+          path: desktop.png
