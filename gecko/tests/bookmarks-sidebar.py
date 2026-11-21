@@ -73,9 +73,39 @@ def drag_item(source, target):
 def read_entries():
  return bridge('browser.readingList', {'kind': 'get'})
 
+def enable_compositor_test_material():
+ import ctypes as C
+ from ctypes import wintypes as W
+ import winreg
+ path=r'Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+ key=winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER,path,0,winreg.KEY_QUERY_VALUE|winreg.KEY_SET_VALUE)
+ try:
+  previous=winreg.QueryValueEx(key,'EnableTransparency')
+ except FileNotFoundError:
+  previous=None
+ notify=C.windll.user32.SendMessageTimeoutW
+ notify.argtypes=[W.HWND,W.UINT,W.WPARAM,W.LPCWSTR,W.UINT,W.UINT,C.POINTER(C.c_size_t)]
+ notify.restype=C.c_ssize_t
+ def broadcast():
+  result=C.c_size_t()
+  notify(0xffff,0x1a,0,'ImmersiveColorSet',0x2,1000,C.byref(result))
+ winreg.SetValueEx(key,'EnableTransparency',0,winreg.REG_DWORD,1)
+ broadcast()
+ print('Windows CI transparency mode', {'original':previous,'remote':C.windll.user32.GetSystemMetrics(0x1000)},flush=True)
+ def restore():
+  try:
+   if previous is None:winreg.DeleteValue(key,'EnableTransparency')
+   else:winreg.SetValueEx(key,'EnableTransparency',0,previous[1],previous[0])
+   broadcast()
+  finally:
+   winreg.CloseKey(key)
+ return restore
+
 baseline = os.environ.get('SONA_SIDEBAR_BASELINE')=='1'
 report = {'passed': False, 'checks': {}}
+restore_material=lambda:None
 try:
+ if os.name=='nt' and not baseline:restore_material=enable_compositor_test_material()
  start()
  if not baseline:
   chrome('Services.prefs.setIntPref("ui.prefersReducedMotion",0)')
@@ -334,3 +364,4 @@ finally:
   (out / 'bookmarks-sidebar.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
   log.close()
   server.shutdown()
+  restore_material()
