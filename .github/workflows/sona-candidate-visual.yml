@@ -1,0 +1,28 @@
+name: Verify neutral matte toolbar and compact row in the existing candidate
+on:
+  push:
+    branches: [codex/sona-acrylic-probe]
+    paths: ['.github/workflows/sona-candidate-visual.yml','gecko/tests/candidate-visual.py']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  candidate:
+    runs-on: windows-2025
+    timeout-minutes: 8
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUTF8: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pillow marionette_driver
+      - run: gh run download 44842914762 --name sona42-windows-x64-candidate --dir candidate
+      - run: python gecko/tests/candidate-visual.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: candidate-visual-evidence
+          path: candidate-visual/
