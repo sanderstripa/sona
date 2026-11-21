@@ -46,12 +46,12 @@ for locale in ['ru','en-US']:
     shutil.copyfile(root/'gecko/chrome/locales'/locale/'branding/brand.ftl',chrome/'locales'/locale/'branding/brand.ftl')
 for name in ['tab-drag.sys.mjs','integration.js','AppChild.sys.mjs','browser.js','window-controls.sys.mjs','shell-host.js','settings-routing.js','vot.js','storage.js','host.css','build-info.sys.mjs','updates.js','DownloadPolicy.sys.mjs','downloads.js','page-glass.js','PageGlassChild.sys.mjs','PageGlassParent.sys.mjs']:
     source = (root / 'gecko/chrome' / name).read_text(encoding='utf-8')
-    (chrome / name).write_text(re.sub(r'0\.(?:13|14)\.0 Preview','Preview 1.160.42',source),encoding='utf-8')
+    (chrome / name).write_text(re.sub(r'0\.(?:13|14)\.0 Preview','Preview 1.160.43',source),encoding='utf-8')
 for path in chrome.rglob('*'):
     if path.suffix in {'.js','.html','.mjs'} and 'third_party' not in path.parts:
         source = path.read_text(encoding='utf-8')
         if '0.17.0' in source:
-            path.write_text(source.replace('0.17.0','1.160.42'),encoding='utf-8')
+            path.write_text(source.replace('0.17.0','1.160.43'),encoding='utf-8')
 def patch(path, before, after):
     source = path.read_text(encoding='utf-8')
     if before not in source:
@@ -137,7 +137,7 @@ for path in (out/'engine').rglob('*.exe'):
 build = json.loads((out/'BUILD.json').read_text(encoding='utf-8'))
 assert build['name'] == 'Sona 0.17.0 Preview'
 build.update(firefox='160.0',mozilla_archive='https://archive.mozilla.org/pub/firefox/releases/160.0/win64/ru/Firefox Setup 160.0.exe',mozilla_sha256='9aca6af4a633546ce9908894d735b0518c36b6a54f108566e517225983cf5173')
-build.update(name='Sona Preview 1.160.42',base_preview=17,sona_source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip())
+build.update(name='Sona Preview 1.160.43',base_preview=17,sona_source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip())
 (out/'BUILD.json').write_text(json.dumps(build,indent=2),encoding='utf-8')
 
 patch(ui/'renderer.js','mattePanel:true','mattePanel:false,showExtensions:false,showHome:false')
@@ -298,4 +298,4 @@ shutil.copyfile(root/'gecko/chrome/integration-ui.js',ui/'integration-ui.js')
 with (ui/'gecko-frontend.css').open('a',encoding='utf-8') as css: css.write((root/'gecko/chrome/frontend.css').read_text(encoding='utf-8'))
 
 # Versioned shortcut resources must exist for every new installer version.
-shutil.copyfile(root/'ui/sona-icon.ico',ui/'sona-app-1.160.42.ico')
+shutil.copyfile(root/'ui/sona-icon.ico',ui/'sona-app-1.160.43.ico')

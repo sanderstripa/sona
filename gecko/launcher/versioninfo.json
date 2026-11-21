@@ -3,13 +3,13 @@
     "FileVersion": {
       "Major": 1,
       "Minor": 160,
-      "Patch": 42,
+      "Patch": 43,
       "Build": 0
     },
     "ProductVersion": {
       "Major": 1,
       "Minor": 160,
-      "Patch": 42,
+      "Patch": 43,
       "Build": 0
     },
     "FileFlagsMask": "3f",
@@ -20,13 +20,13 @@
   },
   "StringFileInfo": {
     "CompanyName": "Sona",
-    "FileDescription": "Sona Preview 1.160.42",
-    "FileVersion": "1.160.42.0",
+    "FileDescription": "Sona Preview 1.160.43",
+    "FileVersion": "1.160.43.0",
     "InternalName": "Sona",
     "LegalCopyright": "Sona contributors. See included component licenses.",
     "OriginalFilename": "Sona.exe",
     "ProductName": "Sona",
-    "ProductVersion": "1.160.42.0"
+    "ProductVersion": "1.160.43.0"
   },
   "VarFileInfo": {
     "Translation": {
