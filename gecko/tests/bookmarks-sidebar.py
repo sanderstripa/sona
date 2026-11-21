@@ -180,12 +180,12 @@ try:
   assert user32.SetWindowPos(hwnd,C.c_void_p(-1),0,0,0,0,0x43)
   backing=tk.Tk()
   try:
-   backing.overrideredirect(True)
+   backing.title('Sona Acrylic reference window')
    backing.configure(background='#000000')
    backing.geometry('270x480')
    backing.update()
    assert user32.SetWindowPos(user32.GetAncestor(backing.winfo_id(),2),hwnd,
-                              origin.x-32,origin.y+110,305,480,0x50)
+                              origin.x-60,origin.y+95,490,560,0x50)
    backing.update()
    assert user32.SetCursorPos(origin.x+410,origin.y+85)
    user32.mouse_event(2,0,0,0,0)
@@ -194,13 +194,21 @@ try:
    check('sona_foreground_for_desktop_acrylic',user32.GetForegroundWindow()==hwnd)
    point=(origin.x+130,origin.y+365)
    reference=(origin.x-14,origin.y+365)
+   dwm=C.windll.dwmapi
+   dwm.DwmGetWindowAttribute.argtypes=[W.HWND,W.DWORD,W.LPVOID,W.DWORD]
+   kind=C.c_int()
+   hr=dwm.DwmGetWindowAttribute(hwnd,38,C.byref(kind),C.sizeof(kind))
+   print('Actual Sona HWND backdrop',{'result':hr,'kind':kind.value},flush=True)
+   check('windows_hwnd_uses_desktop_acrylic',hr==0 and kind.value==3,kind.value)
    dark_frame=ImageGrab.grab()
+   dark_frame.save(out/'native-backdrop-dark.png')
    dark_pixel=dark_frame.getpixel(point)
    dark_reference=dark_frame.getpixel(reference)
    backing.configure(background='#ffffff')
    backing.update()
    time.sleep(.65)
    light_frame=ImageGrab.grab()
+   light_frame.save(out/'native-backdrop-light.png')
    light_pixel=light_frame.getpixel(point)
    light_reference=light_frame.getpixel(reference)
    check('reference_window_behind_sona_changes_brightness',
