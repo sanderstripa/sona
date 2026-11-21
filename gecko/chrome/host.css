@@ -41,7 +41,6 @@
 :root{--tabpanel-background-color:transparent!important;--sidebar-background-color:transparent!important;--chrome-content-separator-color:transparent!important}
 /* The remote page keeps its normal geometry. Only the passive glass layers
    receive sampled page pixels. */
-:root[sona-page-glass] { background:var(--sona-bg,#f6f6f8)!important; }
 #sona-page-glass {
   position:fixed; pointer-events:none; z-index:9999;
   opacity:.32; filter:grayscale(1) blur(16px); clip-path:inset(0);

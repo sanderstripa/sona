@@ -78,7 +78,7 @@
 }
 
 @-moz-document url("chrome://browser/content/browser.xhtml") {
- :root[sona-ui-ready][sona-desktop-glass][sona-bookmarks-open] {
+ :root#main-window[sona-ui-ready][sona-desktop-glass] {
    appearance:none!important;
    background:transparent!important;
    border-radius:1px!important;
