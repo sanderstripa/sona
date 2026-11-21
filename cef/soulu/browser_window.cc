@@ -1916,7 +1916,7 @@ BrowserWindow::Geometry BrowserWindow::CurrentGeometry() const {
       layout == "classic" ? geometry::classicToolbar : geometry::mainToolbar;
   g.toolbar = static_cast<int>(std::round((height + (BookmarksBarVisible() ? geometry::bookmarks : 0)) * scale));
   if (Fullscreen()) g.toolbar = 0;
-  g.sidebar = sidebar_visible_ && bookmarks_sidebar_ ? px(300) : 0;
+  g.sidebar = sidebar_visible_ && bookmarks_sidebar_ ? std::min({px(276),std::max(px(156),g.width-px(510)),g.width*35/100}) : 0;
   g.panel = px(std::max(0, right_panel_width_));
   if (Fullscreen()) g.sidebar = g.panel = 0;
   const auto* active=const_cast<BrowserWindow*>(this)->ActiveTab();
@@ -2792,6 +2792,112 @@ void BrowserWindow::HandleBridge(const std::string& request,
     auto args = payload->GetDictionary();
     if (auto* tab = ActiveTab()) OpenTabFrom(tab->id, tab->browser, args->GetString("url"), args->GetBool("background"));
   }
+  else if (action == "browser.bookmarks.export") {
+    if(VisibleProfileId()=="__incognito__"){callback->Failure(403,"Bookmark export requires a regular window");return;}
+    auto rows=ProfileBookmarks();
+    std::map<int,std::vector<CefRefPtr<CefDictionaryValue>>> children;
+    for(size_t i=0;i<rows->GetSize();++i){
+      auto row=rows->GetDictionary(i);
+      if(row)children[row->GetInt("parentId")].push_back(row);
+    }
+    const auto html=[](const std::string& value){
+      std::string escaped;
+      for(char c:value)switch(c){
+        case '&':escaped+="&amp;";break;
+        case '<':escaped+="&lt;";break;
+        case '>':escaped+="&gt;";break;
+        case '"':escaped+="&quot;";break;
+        default:escaped+=c;break;
+      }
+      return escaped;
+    };
+    std::string document="<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<META HTTP-EQUIV=\"Content-Type\" CONTENT=\"text/html; charset=UTF-8\">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n";
+    const auto write=[&](auto&& self,int parent,int depth)->void{
+      if(depth>64)return;
+      document+="<DL><p>\n";
+      auto found=children.find(parent);
+      if(found!=children.end()){
+        auto& siblings=found->second;
+        std::stable_sort(siblings.begin(),siblings.end(),[](const auto& left,const auto& right){return left->GetInt("order")<right->GetInt("order");});
+        for(const auto& row:siblings){
+          const auto title=html(row->GetString("title").ToString());
+          if(row->GetString("type")=="folder"){
+            document+="<DT><H3>"+title+"</H3>\n";
+            self(self,row->GetInt("id"),depth+1);
+          }else{
+            const auto url=row->GetString("url").ToString();
+            if(!WebOrigin(url).empty())document+="<DT><A HREF=\""+html(url)+"\">"+title+"</A>\n";
+          }
+        }
+      }
+      document+="</DL><p>\n";
+    };
+    write(write,0,0);
+    IFileSaveDialog* picker=nullptr;
+    if(FAILED(CoCreateInstance(CLSID_FileSaveDialog,nullptr,CLSCTX_INPROC_SERVER,IID_PPV_ARGS(&picker)))){
+      callback->Failure(500,"File picker unavailable");return;
+    }
+    const COMDLG_FILTERSPEC filters[]={{L"Bookmarks HTML",L"*.html"}};
+    picker->SetFileTypes(1,filters);
+    picker->SetDefaultExtension(L"html");
+    picker->SetFileName(L"bookmarks.html");
+    if(FAILED(picker->Show(settings_overlay_?settings_overlay_->hwnd():hwnd_))){picker->Release();return ReplyEmpty(callback);}
+    IShellItem* item=nullptr;
+    PWSTR selected=nullptr;
+    std::filesystem::path path;
+    if(SUCCEEDED(picker->GetResult(&item))){
+      if(SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH,&selected))){path=selected;CoTaskMemFree(selected);}
+      item->Release();
+    }
+    picker->Release();
+    if(path.empty()){callback->Failure(400,"Choose a file");return;}
+    std::ofstream out(path,std::ios::binary|std::ios::trunc);
+    out<<document;
+    out.flush();
+    if(!out){callback->Failure(500,"Could not export bookmarks");return;}
+    return ReplyEmpty(callback);
+  }
+  else if (action == "browser.readingList") {
+    auto request=payload&&payload->GetType()==VTYPE_DICTIONARY?payload->GetDictionary():nullptr;
+    if(settings_source||!request){callback->Failure(400,"Reading list request required");return;}
+    const std::string kind=request->GetString("kind");
+    const auto profile=VisibleProfileId();
+    auto rows=CefListValue::Create();
+    if(profile=="__incognito__"){
+      if(kind=="get")return Reply(callback,Wrap(rows));
+      callback->Failure(403,"Reading list requires a regular window");return;
+    }
+    const auto file=ProfileRoot(profile)/L"sona-reading-list.json";
+    if(auto saved=ReadJson(file);saved&&saved->GetType()==VTYPE_LIST)rows=saved->GetList()->Copy();
+    else if(std::filesystem::exists(file)){callback->Failure(500,"Could not read reading list");return;}
+    if(kind=="get")return Reply(callback,Wrap(rows));
+    auto* tab=ActiveTab();
+    const std::string url=kind=="add"&&tab?tab->url:request->GetString("url").ToString();
+    if(WebOrigin(url).empty()||url.size()>65536){callback->Failure(400,"HTTP or HTTPS page required");return;}
+    size_t found=rows->GetSize();
+    for(size_t i=0;i<rows->GetSize();++i){
+      auto row=rows->GetDictionary(i);
+      if(row&&row->GetString("url")==url){found=i;break;}
+    }
+    if(kind=="add"){
+      if(found<rows->GetSize())return Reply(callback,Wrap(rows));
+      auto next=CefListValue::Create();
+      auto row=CefDictionaryValue::Create();
+      row->SetString("url",url);
+      row->SetString("title",tab&&!tab->title.empty()?tab->title:url);
+      row->SetBool("read",false);
+      next->SetDictionary(0,row);
+      for(size_t i=0;i<rows->GetSize();++i)next->SetValue(i+1,rows->GetValue(i)->Copy());
+      rows=next;
+    }else if(kind=="mark"||kind=="remove"){
+      if(found==rows->GetSize())return Reply(callback,Wrap(rows));
+      if(kind=="mark")rows->GetDictionary(found)->SetBool("read",request->GetBool("read"));
+      else rows->Remove(found);
+    }else{callback->Failure(400,"Unknown reading list action");return;}
+    if(!WriteJson(file,Wrap(rows->Copy()))){callback->Failure(500,"Could not save reading list");return;}
+    for(auto* window:windows_)if(window->VisibleProfileId()==profile)window->Emit("readingListChanged",EmptyValue());
+    return Reply(callback,Wrap(rows));
+  }
   else if (action == "browser.bookmarks.homeFavorite") {
     if(settings_source||!payload||payload->GetType()!=VTYPE_DICTIONARY){callback->Failure(400,"Bookmark favorite required");return;}
     auto data=payload->GetDictionary();auto* tab=ActiveTab();const auto profile=VisibleProfileId();
@@ -2876,9 +2982,12 @@ void BrowserWindow::HandleBridge(const std::string& request,
   }
   else if (action == "browser.bookmarks.open") Navigate(payload->GetString());
   else if (action == "browser.settings.openWindow") {
-    if(payload&&payload->GetType()==VTYPE_STRING&&payload->GetString()=="vpn")settings_requested_section_="vpn";
+    if(payload&&payload->GetType()==VTYPE_STRING){
+      const std::string section=payload->GetString();
+      if(section=="vpn"||section=="bookmarks"||section=="profiles")settings_requested_section_=section;
+    }
     OpenSettingsOverlay();
-    if(settings_browser_&&settings_overlay_&&settings_overlay_->ready()&&!settings_requested_section_.empty()){settings_browser_->GetMainFrame()->ExecuteJavaScript("window.souluSettings&&window.souluSettings.openSection('vpn')",settings_browser_->GetMainFrame()->GetURL(),0);settings_requested_section_.clear();}
+    if(settings_browser_&&settings_overlay_&&settings_overlay_->ready()&&!settings_requested_section_.empty()){settings_browser_->GetMainFrame()->ExecuteJavaScript("window.souluSettings&&window.souluSettings.openSection('" + settings_requested_section_ + "')",settings_browser_->GetMainFrame()->GetURL(),0);settings_requested_section_.clear();}
   }
   else if (action == "browser.settings.get") return Reply(callback, EffectiveSettings()->Copy(false));
   else if (action == "browser.settings.set") {

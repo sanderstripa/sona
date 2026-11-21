@@ -62,7 +62,46 @@
     switchTab: id => invoke("browser.switchTab", id),
     closeTab: id => invoke("browser.closeTab", id),
     pinTab: id => invoke("browser.pinTab", id),
-    setBookmarksSidebar: value => invoke("browser.bookmarks.sidebar", value),
+    setBookmarksSidebar: async value => {
+      await invoke("browser.bookmarks.sidebar", value);
+      return invoke("browser.state.get");
+    },
+    exportBookmarks: () => invoke("browser.bookmarks.export"),
+    readingList: (kind, payload) => invoke("browser.readingList", {kind,...payload}),
+    onBookmarksMotion: callback => subscribe("bookmarksMotion", callback),
+    onReadingListChanged: callback => subscribe("readingListChanged", callback),
+    manageBookmarks: () => invoke("browser.settings.openWindow", "bookmarks"),
+    changeBookmark: async data => {
+      const state=await invoke("browser.state.get");
+      const profile=state.incognito?"__incognito__":state.activeProfileId;
+      let rows=(await invoke("browser.bookmarks.get")).map(row=>({...row}));
+      let id=data.id;
+      const item=rows.find(row=>row.id===id);
+      if(id&&!item)throw Error("Bookmark no longer exists");
+      if(data.kind==="save"){
+        id??=rows.reduce((max,row)=>Math.max(max,row.id),0)+1;
+        const next={...item,id,title:data.title,parentId:data.parentId,
+          type:data.folder?"folder":"url",order:item?.order??rows.length,
+          createdAt:item?.createdAt??Date.now(),updatedAt:Date.now()};
+        if(!data.folder)next.url=data.url;
+        if(item)rows[rows.indexOf(item)]=next;else rows.push(next);
+      }else if(data.kind==="remove"){
+        const ids=new Set([id]);
+        for(let pass=0;pass<65;pass++){
+          const size=ids.size;
+          for(const row of rows)if(ids.has(row.parentId))ids.add(row.id);
+          if(ids.size===size)break;
+        }
+        rows=rows.filter(row=>!ids.has(row.id));
+      }else if(data.kind==="move"){
+        const siblings=rows.filter(row=>row.id!==id&&(row.parentId||0)===data.parentId).sort((a,b)=>a.order-b.order);
+        const anchor=siblings.findIndex(row=>row.id===(data.beforeId||data.afterId));
+        item.parentId=data.parentId;
+        siblings.splice(anchor<0?siblings.length:anchor+Number(Boolean(data.afterId)),0,item);
+        siblings.forEach((row,index)=>{row.order=index;});
+      }else throw Error("Unknown bookmark action");
+      return {id,rows:await invoke("browser.bookmarks.replace",{rows,profile})};
+    },
     toggleSidebar: () => invoke("browser.toggleSidebar"),
     setRightPanel: width => invoke("browser.setRightPanel", width),
     setSuggestionsHeight: height => invoke("browser.setSuggestionsHeight", height),

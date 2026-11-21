@@ -36,6 +36,9 @@ for css in (ROOT/'ui').rglob('*.css'):
         selector,body=m.groups();selector=re.sub(r'/\*.*?\*/','',selector,flags=re.S).strip()
         values=re.findall(r'(?<![-\w])(?:font(?:-family|-size|-weight|-style)?|line-height|letter-spacing)\s*:[^;}]+',body)
         if not values:continue
+        if css.name=='bookmarks-sidebar.css':
+            report['exceptions'].append({'file':str(css.relative_to(ROOT)),'selector':selector,'reason':'Sona Gecko 1.160.43 sidebar typography','values':values});continue
+
         if 'reader-article' in selector or selector in ('.reader-meta','.reader-deck'):
             report['exceptions'].append({'file':str(css.relative_to(ROOT)),'selector':selector,'reason':'User-selected Reader article content','values':values});continue
         for value in values:

@@ -55,8 +55,8 @@ jobs:
     runs-on: windows-2025
     timeout-minutes: 90
     env:
-      BETA_VERSION: 1.156.0.14.78
-      BETA_NUMBER: 78
+      BETA_VERSION: 1.156.0.14.79
+      BETA_NUMBER: 79
       # This explicit source marker records the owner's requested 1.0.76 release.
       # Ordinary main pushes continue to build without publishing.
       AUTOMATED_RELEASE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release 1.0.76]') }}
@@ -284,7 +284,7 @@ jobs:
           Установщик предлагает папку Sona Preview. В портативном ZIP запускайте Sona Preview.exe.
 
           Движок: CEF 156.0.14 / Chromium 156.0.8078.48.
-          Обновлены настройки, компактная панель, обзор вкладок и фирменные иконки.
+          Добавлены боковая панель, список чтения и экспорт закладок в HTML.
           В этой сборке перенос всех возможностей Gecko 1.160.43 продолжается.
           Исходный коммит: $env:GITHUB_SHA
           "@ | Set-Content (Join-Path $PWD 'artifacts/cef-preview-release.md') -Encoding utf8
