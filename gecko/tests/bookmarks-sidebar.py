@@ -228,6 +228,31 @@ try:
     print('Sona backdrop layer comparison',variant,measured,flush=True)
    chrome("""document.documentElement.style.removeProperty('opacity');
       document.getElementById('sona-shell-frame').style.removeProperty('visibility');return true;""")
+   class Accent(C.Structure):
+    _fields_=[('state',C.c_int),('flags',W.DWORD),('color',W.DWORD),('animation',C.c_int)]
+   class Composition(C.Structure):
+    _fields_=[('attribute',C.c_int),('data',C.c_void_p),('size',C.c_size_t)]
+   user32.SetWindowCompositionAttribute.argtypes=[W.HWND,C.POINTER(Composition)]
+   dwm.DwmSetWindowAttribute.argtypes=[W.HWND,W.DWORD,W.LPVOID,W.DWORD]
+   def request_accent(mode):
+    policy=Accent(mode,0,0x4cf5f5f5,0)
+    update=Composition(19,C.cast(C.pointer(policy),C.c_void_p),C.sizeof(policy))
+    return user32.SetWindowCompositionAttribute(hwnd,C.byref(update))
+   disabled=C.c_int(1)
+   assert dwm.DwmSetWindowAttribute(hwnd,38,C.byref(disabled),C.sizeof(disabled))==0
+   try:
+    for mode in (3,4):
+     accepted=request_accent(mode)
+     measured=[]
+     for color in ('#000000','#ffffff'):
+      backing.configure(background=color)
+      backing.update()
+      time.sleep(.65)
+      measured.append(ImageGrab.grab().getpixel(point))
+     print('Alternative Windows accent',mode,accepted,measured,flush=True)
+   finally:
+    request_accent(0)
+    dwm.DwmSetWindowAttribute(hwnd,38,C.byref(kind),C.sizeof(kind))
    check('sidebar_backdrop_tracks_window_behind_sona',
          sum(light_pixel[:3])-sum(dark_pixel[:3])>=24,
          {'dark':dark_pixel,'light':light_pixel})

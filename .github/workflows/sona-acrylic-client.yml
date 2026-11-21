@@ -41,6 +41,11 @@ jobs:
       - run: gh run download 44842914762 --name sona42-windows-x64-candidate --dir candidate
       - shell: pwsh
         run: ./gecko/tests/prepare-client-desktop.ps1
+      - shell: pwsh
+        run: |
+          $ui=[Windows.UI.ViewManagement.UISettings, Windows.UI.ViewManagement, ContentType=WindowsRuntime]::new()
+          "AdvancedEffectsEnabled=$($ui.AdvancedEffectsEnabled)"
+          Get-CimInstance Win32_VideoController | Select-Object Name,DriverVersion,VideoProcessor | Format-List
       - run: python gecko/tests/candidate-visual.py --sidebar
       - uses: actions/upload-artifact@v4
         if: always()
