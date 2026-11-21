@@ -16,14 +16,44 @@
   const contents=el('div','bookmark-tree'), actions=el('div','bookmark-actions');
   const menuHeading=el('div','bookmarks-heading');menuHeading.append(el('strong','','Закладки'));
   menu.append(menuHeading,menuSearch,contents,actions);
+  const reducedMotion=()=>matchMedia('(prefers-reduced-motion:reduce)').matches;
+  let sidebarAnimation, sidebarEpoch=0;
+  function animateSidebar(open) {
+    sidebarAnimation?.cancel();
+    if(reducedMotion())return Promise.resolve();
+    sidebarAnimation=menu.animate(open?
+      [{transform:'translateX(-100%)'},{transform:'translateX(0)'}]:
+      [{transform:'translateX(0)'},{transform:'translateX(-100%)'}],
+      {duration:220,easing:'cubic-bezier(.22,1,.36,1)'});
+    return sidebarAnimation.finished.catch(()=>{});
+  }
   const nextId=()=>rows.reduce((n,r)=>Math.max(n,Number(r.id)||0),0)+1;
   const children=id=>rows.filter(r=>(r.parentId||0)===id).sort((a,b)=>(a.order||0)-(b.order||0));
   const descendants=id=>{const found=new Set([id]);let changed=true;while(changed){changed=false;for(const r of rows)if(found.has(r.parentId)&&!found.has(r.id)){found.add(r.id);changed=true;}}return found;};
   const bookmarkProfile=()=>state.incognito?'__incognito__':state.activeProfileId;
   async function persist(next,profile=bookmarkProfile()){if(busy)throw Error('Дождитесь сохранения');busy=true;try{const saved=await api.replaceBookmarks(next,profile);if(bookmarkProfile()===profile){rows=saved;render();}return saved;}finally{busy=false;}}
   const updatePopover=()=>{const open=Boolean(document.querySelector('.bookmark-context'));shield.hidden=!(open||editor);return api.setPopover(open,'bookmarks');};
-  const closeMenu=()=>{pane='list';menu.hidden=true;api.setBookmarksSidebar(false);document.querySelector('.bookmark-context')?.remove();updatePopover();api.setSuggestionsHeight(0);};
-  async function openMenu(id=0,editor=false){await api.setOverview(false);rows=await api.getBookmarks();parent=id;manage=editor;pane='list';query='';menuSearch.value='';menu.hidden=false;await api.setBookmarksSidebar(true);await updatePopover();renderMenu();menuSearch.focus();}
+  async function closeMenu(){
+    const epoch=++sidebarEpoch;
+    if(!menu.hidden)await animateSidebar(false);
+    if(epoch!==sidebarEpoch)return;
+    pane='list';menu.hidden=true;await api.setBookmarksSidebar(false);
+    document.querySelector('.bookmark-context')?.remove();
+    updatePopover();api.setSuggestionsHeight(0);
+  }
+  async function openMenu(id=0,editor=false){
+    const epoch=++sidebarEpoch;
+    if(state.overviewVisible)await api.setOverview(false);
+    const bookmarks=await api.getBookmarks();
+    if(epoch!==sidebarEpoch)return;
+    rows=bookmarks;parent=id;manage=editor;pane='list';query='';menuSearch.value='';
+    const opening=menu.hidden;
+    menu.hidden=false;
+    if(opening)animateSidebar(true);
+    await api.setBookmarksSidebar(true);
+    if(epoch!==sidebarEpoch)return;
+    await updatePopover();renderMenu();menuSearch.focus();
+  }
   function icon(row){
     const n=el('span','bookmark-icon',row.type==='folder'?'▱':(row.title||row.url||'•').trim().slice(0,1).toLocaleUpperCase());
     if(row.type==='folder')return n;

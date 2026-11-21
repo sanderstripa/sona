@@ -270,6 +270,7 @@ jobs:
           Remove-Item -LiteralPath $zip
           Compress-Archive -Path "$expanded/*" -DestinationPath $zip -CompressionLevel Fastest
           $setup = Join-Path $out "Sona-Preview-$version-CEF-x64-Setup.exe"
+          $env:CONNECT_INSTALLER_CI_TEST = "1"
           & ./scripts/build-connect-installer.ps1 -PayloadPath $zip -Version $version -OutFile $setup
           $manifest = Get-Content -LiteralPath "$setup.build.json" -Raw | ConvertFrom-Json
           if ($manifest.payloadSHA256 -ne (Get-FileHash -LiteralPath $zip).Hash.ToLowerInvariant() -or

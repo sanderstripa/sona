@@ -18,6 +18,25 @@ for test in adapter.parent.glob('*_test.go'):
     test.write_text(text.replace('Soulu.exe', 'Sona Preview.exe'), encoding='utf-8')
 
 
+cleanup = core / 'core/files_windows.go'
+text = cleanup.read_text(encoding='utf-8')
+cleanup.write_text(text.replace('Uninstall Soulu.exe', 'Uninstall Sona Preview.exe'), encoding='utf-8')
+lifecycle = core / 'internal/adaptertest/lifecycle_windows.go'
+text = lifecycle.read_text(encoding='utf-8')
+lifecycle.write_text(text.replace('"Soulu"', '"Sona Preview"'), encoding='utf-8')
+setup = web / 'setup.js'
+text = setup.read_text(encoding='utf-8')
+for old, new in [
+    ('Выйдите из CONNECT через меню трея, отключите расширение Chrome и повторите.', 'Закройте все окна Sona Preview и повторите.'),
+    ('Quit CONNECT from its tray menu, disconnect the Chrome extension and retry.', 'Close all Sona Preview windows and retry.'),
+    ('Перед удалением выйдите из CONNECT через меню трея.', 'Перед удалением закройте все окна Sona Preview.'),
+    ('Quit CONNECT from its tray menu before uninstalling.', 'Close all Sona Preview windows before uninstalling.'),
+    ('Ваши соединения и настройки сохранятся.', 'Ваши профили, история и закладки сохранятся.'),
+    ('Your connections and settings will be kept.', 'Your profiles, history and bookmarks will be kept.'),
+]:
+    text = text.replace(old, new)
+setup.write_text(text, encoding='utf-8')
+
 product = core / 'products/soulu.json'
 config = json.loads(product.read_text(encoding='utf-8'))
 config.update(name='Sona Preview', repository='https://github.com/sanderstripa/sona', engine='CEF')

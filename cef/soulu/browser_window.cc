@@ -542,6 +542,7 @@ void BrowserWindow::LoadProfileSettings() {
     CefDictionaryValue::KeyList keys;saved->GetDictionary()->GetKeys(keys);
     for(const auto& key:keys)settings_->SetValue(key,saved->GetDictionary()->GetValue(key)->Copy());
   }
+  settings_->SetBool("mattePanel", false);
   if (settings_->GetString("layout") == "classic") settings_->SetString("layout", "adaptive");
   MigrateHomePreferences(saved&&saved->GetType()==VTYPE_DICTIONARY?saved->GetDictionary():nullptr);
   SaveSettings();ApplyWindowAppearance();ApplyContentTheme();
