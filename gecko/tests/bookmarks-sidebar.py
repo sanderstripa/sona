@@ -214,6 +214,20 @@ try:
    check('reference_window_behind_sona_changes_brightness',
          sum(light_reference[:3])-sum(dark_reference[:3])>=480,
          {'dark':dark_reference,'light':light_reference})
+   # Isolate the chrome iframe from the root Widget/WebRender path.
+   chrome("""document.getElementById('sona-shell-frame').style.visibility='hidden';return true;""")
+   for variant in ('native-root','force-transparent-widget'):
+    if variant=='force-transparent-widget':
+     chrome("""document.documentElement.style.setProperty('opacity','0.999','important');return true;""")
+    measured=[]
+    for color in ('#000000','#ffffff'):
+     backing.configure(background=color)
+     backing.update()
+     time.sleep(.55)
+     measured.append(ImageGrab.grab().getpixel(point))
+    print('Sona backdrop layer comparison',variant,measured,flush=True)
+   chrome("""document.documentElement.style.removeProperty('opacity');
+      document.getElementById('sona-shell-frame').style.removeProperty('visibility');return true;""")
    check('sidebar_backdrop_tracks_window_behind_sona',
          sum(light_pixel[:3])-sum(dark_pixel[:3])>=24,
          {'dark':dark_pixel,'light':light_pixel})
