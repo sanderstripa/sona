@@ -126,8 +126,8 @@ body[data-native-caption-hover=true] .browser-toolbar :is(#compactWindowMaximize
 /* Keep primary navigation next to the address, and media controls on each tab. */
 .classic-address-wrap{align-items:center}
 .classic-address-wrap>.classic-address-pill{flex:1 1 auto;min-width:0}
-.classic-address-wrap>#newTabButton{position:relative;inset:auto;transform:none;margin-left:5px;flex-shrink:0}
-.compact-tab-flow>#compactNewTabButton{flex-shrink:0;margin:0 2px}
+.classic-address-wrap>:is(#tabOverviewButton,#newTabButton){position:relative;inset:auto;transform:none;margin-left:5px;flex-shrink:0}
+.compact-tab-flow>:is(#compactTabOverviewButton,#compactNewTabButton){flex-shrink:0;margin:0 2px}
 .browser-toolbar .tab-activity{display:flex;align-items:center;gap:2px;flex:none}
 .browser-toolbar .tab-activity:empty{display:none}
 .browser-toolbar .tab-media,.browser-toolbar .tab-capture{display:grid;place-items:center;flex:0 0 24px;width:24px;height:26px;min-width:24px;padding:3px;border:0;border-radius:6px;background:transparent;color:var(--text)}
@@ -144,3 +144,5 @@ body[data-native-caption-hover=true] .browser-toolbar :is(#compactWindowMaximize
 .classic-toolbar .classic-tab .tab-media{visibility:visible}
 
 .browser-toolbar :is(.compact-window-button,.window-controls button).window-close:is(:hover,:active) {color:white}
+.browser-toolbar .sidebar-button .sidebar-icon-fill {fill:none;stroke:none}
+.browser-toolbar .sidebar-button[aria-expanded=true] .sidebar-icon-fill {fill:currentColor}

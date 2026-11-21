@@ -163,6 +163,7 @@ function renderCompactTabs(){
     const tab=wanted.find(x=>String(x.id)===id);
     if(!keys.has(id)||Boolean(n.dataset.activeTab)!==Boolean(tab?.active)){if(n.addressSuggestions){n.disposeAddress?.();hideSuggestions(n.addressSuggestions);n.addressSuggestions.remove();}n.remove();}
   });
+  const plus=$('#compactNewTabButton'),overview=$('#compactTabOverviewButton');
   let previous=compactTabsAnchor;
   for(const x of wanted){
     let node=compactToolbar.querySelector(x.active?`[data-active-tab="${x.id}"]`:`[data-compact-rendered][data-tab-id="${x.id}"]`);
@@ -178,7 +179,12 @@ function renderCompactTabs(){
     }
     if(previous.nextElementSibling!==node)previous.after(node);
     previous=node;
-    if(x.active){const plus=$('#compactNewTabButton');if(node.nextElementSibling!==plus)node.after(plus);previous=plus;}
+    if(x.active){
+      if(overview&&node.nextElementSibling!==overview)node.after(overview);
+      const anchor=overview||node;
+      if(anchor.nextElementSibling!==plus)anchor.after(plus);
+      previous=plus;
+    }
     let activity=node.querySelector('.tab-activity');if(!activity){activity=document.createElement('span');activity.className='tab-activity';x.active?node.querySelector('input').after(activity):node.append(activity);}
     const media=mediaMarkup(x);if(activity.innerHTML!==media){activity.innerHTML=media;bindMedia(activity);}
     node.dataset.tooltip=x.title||x.label||tr('newTab');
@@ -200,7 +206,6 @@ function renderCompactTabs(){
       reload.title=x.loading?tr('stop'):tr('reload');
     }
   }
-  const active=compactToolbar.querySelector('[data-active-tab]'),plus=$('#compactNewTabButton');if(active&&active.nextElementSibling!==plus)active.after(plus);
   const count=wanted.filter(x=>!x.active).length;
   $('#compactTabFlow').style.setProperty('--compact-flow-width',`${Math.min(620,466+count*33)}px`);
 }
