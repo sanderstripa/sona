@@ -29,8 +29,13 @@ for match in re.finditer(b'PK\x05\x06',raw):
 else:
     raise RuntimeError('Candidate installer payload missing')
 
+full_sidebar = '--sidebar' in sys.argv
 sys.argv[1:] = ['candidate-runtime/engine/SonaEngine.exe','candidate-visual']
 harness = Path(__file__).with_name('bookmarks-sidebar.py')
+if full_sidebar:
+    import runpy
+    runpy.run_path(str(harness),run_name='__main__')
+    raise SystemExit(0)
 exec(compile(harness.read_text(encoding='utf-8').split('\nbaseline =',1)[0],
              str(harness),'exec'),globals())
 
