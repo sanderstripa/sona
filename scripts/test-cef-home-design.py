@@ -82,6 +82,10 @@ def main():
    s.evaluate(shell,'browserShell.replaceBookmarks('+json.dumps([{'id':7101,'type':'url','title':'Документация','url':'https://www.python.org/','favicon':'','parentId':0,'order':0},{'id':7102,'type':'url','title':'Длинное название избранной закладки','url':'https://www.wikipedia.org/','favicon':'','parentId':0,'order':1}])+')')
    settings({'homeFavoriteIds':[7102,7101]})
    wait(lambda:s.evaluate(home,"document.querySelectorAll('#favoritesGrid a').length===2"))
+   reordered=bridge(home,'home.favorite.reorder',[7101,7102])
+   check([row['id'] for row in reordered['favorites']]==[7101,7102],'Home favorites bridge saves a new order')
+   saved=json.loads((Path(root)/'Soulu/User Data/Profiles/personal/soulu-settings.json').read_text(encoding='utf-8'))
+   check(saved['homeFavoriteIds']==[7101,7102],'Home favorites order persists in the profile')
    for name in ('provider','weather','favorites'):
     s.evaluate(home,"document.getElementById('"+name+"Toggle').click()")
     check(s.evaluate(home,"!document.getElementById('"+name+"Panel').hidden"),name+' panel opens')

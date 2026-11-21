@@ -5,6 +5,7 @@
 #include "include/wrapper/cef_helpers.h"
 #include <algorithm>
 #include <filesystem>
+#include <set>
 
 namespace soulu {
 namespace {
@@ -205,12 +206,41 @@ void BrowserWindow::HandleHomeBridge(int id,const std::string& request,
       HomeLocate([profile,file,context,config,done](CefRefPtr<CefDictionaryValue> location){HomeWeather(profile,file,context,config,location,done);});
     });return;
   }
-  if(action!="home.set"||!payload||payload->GetType()!=VTYPE_DICTIONARY){
+  auto config=PageSettings(*tab)->Copy(false);
+  auto patch=CefDictionaryValue::Create();
+  if(action=="home.favorite.reorder"){
+    if(tab->incognito || !payload || payload->GetType()!=VTYPE_LIST){
+      callback->Failure(400,"Favorite order required");return;
+    }
+    const auto requested=payload->GetList();
+    const auto state=HomeState(*tab);
+    const auto favorites=state->GetList("favorites");
+    if(requested->GetSize()!=favorites->GetSize()){
+      callback->Failure(409,"Favorites changed");return;
+    }
+    std::set<int> visible;
+    for(size_t i=0;i<favorites->GetSize();++i)
+      visible.insert(favorites->GetDictionary(i)->GetInt("id"));
+    auto remaining=visible;
+    for(size_t i=0;i<requested->GetSize();++i){
+      if(requested->GetType(i)!=VTYPE_INT || remaining.erase(requested->GetInt(i))!=1){
+        callback->Failure(409,"Favorites changed");return;
+      }
+    }
+    auto saved=config->GetList("homeFavoriteIds");
+    if(!saved || requested->GetSize()==0){Reply(callback,state);return;}
+    auto reordered=saved->Copy();
+    size_t next=0;
+    for(size_t i=0;i<saved->GetSize();++i)
+      if(visible.count(saved->GetInt(i)))reordered->SetInt(i,requested->GetInt(next++));
+    patch->SetList("homeFavoriteIds",reordered);
+  } else if(action=="home.set" && payload && payload->GetType()==VTYPE_DICTIONARY){
+    patch=payload->GetDictionary();
+    CefDictionaryValue::KeyList allowedKeys;patch->GetKeys(allowedKeys);
+    for(const auto& key:allowedKeys)if(key!="homeProvider"){callback->Failure(403,"Home setting not allowed");return;}
+  } else {
     callback->Failure(403,"Home action not allowed");return;
   }
-  auto patch=payload->GetDictionary(),config=PageSettings(*tab)->Copy(false);
-  CefDictionaryValue::KeyList allowedKeys;patch->GetKeys(allowedKeys);
-  for(const auto& key:allowedKeys)if(key!="homeProvider"){callback->Failure(403,"Home setting not allowed");return;}
   std::string error;
   if(!ValidateHomePatch(patch,config,error)){callback->Failure(400,error);return;}
   if(tab->incognito)private_page_settings_=config;

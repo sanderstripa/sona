@@ -9,8 +9,8 @@ body[data-layout=compact] { --toolbar-target:var(--geometry-main-target); --capt
   --caption-target: var(--geometry-caption-width);
   --caption-hover: color-mix(in srgb, var(--text) 8%, transparent);
   --caption-pressed: color-mix(in srgb, var(--text) 14%, transparent);
-  --caption-danger: color-mix(in srgb, #ef4964 22%, var(--solid));
-  --caption-danger-pressed: color-mix(in srgb, #ef4964 34%, var(--solid));
+  --caption-danger: #c42b1c;
+  --caption-danger-pressed: #a4261d;
 }
 .browser-toolbar :is(.toolbar-button,.compact-control,.tab-action,.address-menu-button,.navigation-toolbar-button) {
   position:relative; display:grid; place-items:center; flex:0 0 var(--toolbar-target);
@@ -36,15 +36,15 @@ body[data-layout=compact] { --toolbar-target:var(--geometry-main-target); --capt
 .classic-toolbar .tabs-zone {padding-block:2px}
 .classic-toolbar :is(.tab-strip,.classic-tab) {height:var(--toolbar-target)}
 .classic-toolbar .classic-tab .tab-action {flex:0 0 var(--toolbar-target)}
-/* A caption keeps its full edge-accessible rectangle. Only the feedback is circular. */
+/* Caption feedback covers the entire hit target. */
 .browser-toolbar :is(.compact-window-button,.window-controls button):not(.navigation-toolbar-button) {
   position:relative;display:grid;place-items:center;flex:0 0 var(--caption-target);
   width:var(--caption-target);height:var(--caption-height,var(--geometry-classic-caption));padding:0;border:0;border-radius:0;
   color:var(--text);background:transparent;transform:none;
 }
 .browser-toolbar :is(.compact-window-button,.window-controls button):not(.navigation-toolbar-button)::before {
-  content:"";position:absolute;width:var(--toolbar-target);height:var(--toolbar-target);
-  border-radius:var(--toolbar-radius);background:transparent;pointer-events:none;
+  content:"";position:absolute;inset:0;
+  background:transparent;pointer-events:none;
   transition:background var(--motion-micro) ease;
 }
 .browser-toolbar :is(.compact-window-button,.window-controls button):not(.navigation-toolbar-button):hover::before {background:var(--caption-hover)}
@@ -142,3 +142,5 @@ body[data-native-caption-hover=true] .browser-toolbar :is(#compactWindowMaximize
 .classic-toolbar .classic-tab.active:has(.tab-activity:not(:empty)){min-width:200px}
 .classic-toolbar .icons-only .classic-tab:not(.active):has(.tab-activity:not(:empty)),.classic-toolbar .classic-tab.pinned:not(.active):has(.tab-activity:not(:empty)){flex:0 0 auto;min-width:max-content;max-width:none;padding-left:6px;padding-right:6px}
 .classic-toolbar .classic-tab .tab-media{visibility:visible}
+
+.browser-toolbar :is(.compact-window-button,.window-controls button).window-close:is(:hover,:active) {color:white}
