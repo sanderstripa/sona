@@ -232,9 +232,3 @@ body[data-desktop-glass] .sona-bookmarks-sidebar {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-
-@media (prefers-reduced-motion: no-preference) {
-  body.sona-bookmarks-layout:not([data-bookmarks-moving]) {
-    transition: --sona-bookmarks-width 220ms cubic-bezier(.22,1,.36,1);
-  }
-}

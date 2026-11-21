@@ -28,6 +28,29 @@
     };
     const root=doc.querySelector('dl');if(!root)throw Error('Неверная структура HTML-экспорта.');const nodes=parse(root);if(!count)throw Error('В файле нет закладок.');return nodes;
   }
+  function parseBookmarks(text) {
+    if(!text.trimStart().startsWith('{'))return parseHtml(text);
+    const {roots}=JSON.parse(text);
+    if(!roots||typeof roots!=='object'||Array.isArray(roots))throw Error('Invalid Chromium bookmark export');
+    let count=0;
+    function read(nodes,depth=0) {
+      if(!Array.isArray(nodes)||depth>64)throw Error('Invalid bookmark folder structure');
+      const result=[];
+      for(const node of nodes){
+        if(++count>20000)throw Error('Too many bookmarks');
+        if(node?.type==='folder'){
+          result.push({type:'folder',name:String(node.name||''),children:read(node.children,depth+1)});
+        }else if(node?.type==='url'){
+          let url;
+          try{url=new URL(node.url);}catch{continue;}
+          if(!['http:','https:'].includes(url.protocol)||url.username||url.password)continue;
+          result.push({type:'url',name:String(node.name||url.href),url:url.href});
+        }
+      }
+      return result;
+    }
+    return read(Object.values(roots));
+  }
   async function open() {
     const ui=window.souluSettings,api=window.browserShell,{t,el,button,dialog}=ui;
     const call=(action,payload)=>api.browserImport(action,payload);
@@ -127,7 +150,7 @@
         if(portable){const profiles=(selected.profiles?.length?selected.profiles:[selected]).map(p=>({...p,text:label('Папка профиля · ','Profile folder · ')+p.name}));extraSources.push(...profiles);sourceChoices();return inspect(profiles[0]);}
         if(selected.kind!==kind)throw Error(label('Формат файла не соответствует выбранному источнику.','The file does not match the selected source format.'));
         const chosen={id:selected.id,kind,name:selected.name,text:label(kind!=='passwords'?'HTML · ':'CSV · ',kind!=='passwords'?'HTML · ':'CSV · ')+selected.name};
-        if(kind!=='passwords')chosen.nodes=parseHtml(selected.text);
+        if(kind!=='passwords')chosen.nodes=parseBookmarks(selected.text);
         extraSources.push(chosen);sourceChoices();selectFile(chosen);
       }catch(e){if(closed||token!==serial)return;pending=false;error(e);lock();}
     }

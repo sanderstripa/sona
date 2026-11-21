@@ -1918,6 +1918,13 @@ BrowserWindow::Geometry BrowserWindow::CurrentGeometry() const {
   if (Fullscreen()) g.toolbar = 0;
   g.sidebar = sidebar_visible_ && bookmarks_sidebar_ ? std::min({px(276),std::max(px(156),g.width-px(510)),g.width*35/100}) : 0;
   g.panel = px(std::max(0, right_panel_width_));
+  if(bookmarks_motion_duration_){
+    const auto now=GetTickCount64();
+    const auto elapsed=now>bookmarks_motion_start_?now-bookmarks_motion_start_:0;
+    const float fraction=std::min(1.f,float(elapsed)/bookmarks_motion_duration_);
+    const double from=bookmarks_motion_from_*scale;
+    g.sidebar=static_cast<int>(std::round(from+(g.sidebar-from)*motion::EaseOut(fraction)));
+  }
   if (Fullscreen()) g.sidebar = g.panel = 0;
   const auto* active=const_cast<BrowserWindow*>(this)->ActiveTab();
   g.shell_height = (active&&active->reader_active) || !permission_requests_.empty() || popover_visible_ || overview_visible_ || sidebar_visible_ || sidebar_motion_ || g.panel > 0 ? g.height :
@@ -2580,7 +2587,7 @@ void BrowserWindow::HandleBridge(const std::string& request,
     const std::string requested_kind=selection?selection->GetString("kind").ToString():"";
     if(!folder&&!requested_kind.empty()&&requested_kind!="bookmarks"&&requested_kind!="passwords"&&requested_kind!="tabs"){picker->Release();callback->Failure(400,"Unsupported import file category");return;}
     DWORD options=0;picker->GetOptions(&options);picker->SetOptions(options|FOS_FORCEFILESYSTEM|FOS_PATHMUSTEXIST|(folder?FOS_PICKFOLDERS:FOS_FILEMUSTEXIST));
-    const COMDLG_FILTERSPEC filters[]={{(requested_kind=="bookmarks"||requested_kind=="tabs")?L"Bookmarks HTML":requested_kind=="passwords"?L"Password CSV":L"Bookmarks HTML / password CSV",(requested_kind=="bookmarks"||requested_kind=="tabs")?L"*.html;*.htm":requested_kind=="passwords"?L"*.csv":L"*.html;*.htm;*.csv"}};
+    const COMDLG_FILTERSPEC filters[]={{(requested_kind=="bookmarks"||requested_kind=="tabs")?L"Bookmarks HTML / Chromium JSON":requested_kind=="passwords"?L"Password CSV":L"Bookmarks HTML / password CSV",(requested_kind=="bookmarks"||requested_kind=="tabs")?L"*.html;*.htm;*.json;Bookmarks":requested_kind=="passwords"?L"*.csv":L"*.html;*.htm;*.csv"}};
     if(!folder)picker->SetFileTypes(1,filters);
     if(FAILED(picker->Show(settings_overlay_?settings_overlay_->hwnd():hwnd_))){picker->Release();return Reply(callback,CefDictionaryValue::Create());}
     IShellItem* item=nullptr;PWSTR selected=nullptr;std::filesystem::path path;
@@ -2592,7 +2599,7 @@ void BrowserWindow::HandleBridge(const std::string& request,
         if(folder){portable=BrowserImportFolderSources(path);id=portable.front().id;result->SetString("name",portable.front().name);result->SetString("family",portable.front().family);
           auto list=CefListValue::Create();for(const auto& source:portable){auto row=CefDictionaryValue::Create();row->SetString("id",source.id);row->SetString("name",source.name);row->SetString("family",source.family);list->SetDictionary(list->GetSize(),row);}result->SetList("profiles",list);}
         else{auto ext=path.extension().wstring();std::transform(ext.begin(),ext.end(),ext.begin(),[](wchar_t c){return std::towlower(c);});
-          if(ext!=L".csv"&&ext!=L".html"&&ext!=L".htm")throw std::runtime_error("Choose an HTML bookmarks export or UTF-8 password CSV");
+          if(ext!=L".csv"&&ext!=L".html"&&ext!=L".htm"&&ext!=L".json"&&path.filename()!=L"Bookmarks")throw std::runtime_error("Choose an HTML bookmarks export or UTF-8 password CSV");
           if(((requested_kind=="bookmarks"||requested_kind=="tabs")&&ext==L".csv")||(requested_kind=="passwords"&&ext!=L".csv"))throw std::runtime_error("File does not match the selected import category");
           result->SetString("kind",ext==L".csv"?"passwords":requested_kind=="tabs"?"tabs":"bookmarks");result->SetString("name",CefString(path.filename().wstring()).ToString());
           // CSV plaintext never crosses the renderer bridge or becomes a preview.
@@ -2726,12 +2733,32 @@ void BrowserWindow::HandleBridge(const std::string& request,
   else if (action == "browser.bookmarks.sidebar" || action == "browser.toggleSidebar") {
     const bool tab_toggle = action == "browser.toggleSidebar";
     const bool show_bookmarks = !tab_toggle && payload && payload->GetType()==VTYPE_BOOL && payload->GetBool();
+    const bool old_bookmarks=sidebar_visible_&&bookmarks_sidebar_;
+    const auto old_geometry=CurrentGeometry();
     const bool closing_tabs = !tab_toggle && !show_bookmarks && sidebar_visible_ && !bookmarks_sidebar_;
     if (tab_toggle) {
       sidebar_visible_ = bookmarks_sidebar_ || !sidebar_visible_; bookmarks_sidebar_ = false;
     } else {
       sidebar_visible_ = show_bookmarks;
       if (!closing_tabs) bookmarks_sidebar_ = true;
+    }
+    const bool open_bookmarks=sidebar_visible_&&bookmarks_sidebar_;
+    if(old_bookmarks!=open_bookmarks){
+      BOOL animate=TRUE;
+      SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION,0,&animate,0);
+      bookmarks_motion_duration_=animate&&!Fullscreen()?220:0;
+      const auto lead=bookmarks_motion_duration_?50:0;
+      bookmarks_motion_start_=GetTickCount64()+lead;
+      bookmarks_motion_epoch_=static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::system_clock::now().time_since_epoch()).count())+lead;
+      bookmarks_motion_from_=old_geometry.sidebar/old_geometry.scale;
+      if(bookmarks_motion_duration_)SetTimer(hwnd_,7302,16,nullptr);else KillTimer(hwnd_,7302);
+      auto transition=CefDictionaryValue::Create();
+      transition->SetBool("open",open_bookmarks);
+      transition->SetInt("duration",bookmarks_motion_duration_);
+      transition->SetDouble("startAt",bookmarks_motion_epoch_);
+      transition->SetString("from",std::to_string(bookmarks_motion_from_)+"px");
+      Emit("bookmarksMotion",Wrap(transition));
     }
     { // Both bookmark and tab sidebars retain their host for the exit fade.
       sidebar_motion_ = true; const auto generation = ++sidebar_motion_generation_;
@@ -3483,7 +3510,17 @@ LRESULT CALLBACK BrowserWindow::WindowProc(HWND hwnd, UINT message, WPARAM wpara
       if (wparam == VK_F11 && (lparam & (1LL << 30))) return 0;
       if (self->HandleFullscreenKey(static_cast<int>(wparam))) return 0;
       break;
-    case WM_TIMER: if(wparam==7301){self->ApplyPerformancePolicy();return 0;}break;
+    case WM_TIMER:
+      if(wparam==7301){self->ApplyPerformancePolicy();return 0;}
+      if(wparam==7302){
+        if(GetTickCount64()>=self->bookmarks_motion_start_+self->bookmarks_motion_duration_){
+          self->bookmarks_motion_duration_=0;
+          KillTimer(hwnd,7302);
+        }
+        self->Layout();
+        return 0;
+      }
+      break;
     case ShellSurface::kPointerDown: self->CancelHomeFocus();return 0;
     case WM_ACTIVATE:
       if(LOWORD(wparam)==WA_INACTIVE)self->DismissAddressSuggestions();
