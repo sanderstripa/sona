@@ -46,6 +46,7 @@ try:
     requested = dwm.DwmSetWindowAttribute(front, 38, C.byref(kind), C.sizeof(kind))
     actual = C.c_int()
     read = dwm.DwmGetWindowAttribute(front, 38, C.byref(actual), C.sizeof(actual))
+    assert user.SetWindowPos(front, C.c_void_p(-1), 0, 0, 0, 0, 0x43)
     backing = user.GetAncestor(back.winfo_id(), 2)
     assert user.SetWindowPos(backing, front, 90, 80, 460, 380, 0x50)
     assert user.SetCursorPos(230, 230)

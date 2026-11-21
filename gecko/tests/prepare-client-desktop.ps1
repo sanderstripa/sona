@@ -7,6 +7,7 @@ public static class SonaClientDesktop {
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hwnd,out uint pid);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr hwnd,StringBuilder text,int count);
+    [DllImport("user32.dll")] public static extern void keybd_event(byte key,byte scan,uint flags,UIntPtr extra);
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd,uint msg,IntPtr w,IntPtr l);
 }
 '@
@@ -29,3 +30,8 @@ for ($i=0; $i -lt 4; $i++) {
     Start-Sleep -Milliseconds 700
 }
 "Native desktop available, foreground process: $($process.ProcessName)"
+if ($process.ProcessName -eq 'SearchHost') {
+    [SonaClientDesktop]::keybd_event(27,0,0,[UIntPtr]::Zero)
+    [SonaClientDesktop]::keybd_event(27,0,2,[UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 500
+}

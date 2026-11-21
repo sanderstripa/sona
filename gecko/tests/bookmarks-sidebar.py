@@ -177,6 +177,7 @@ try:
   time.sleep(.25)
   origin=W.POINT()
   assert user32.ClientToScreen(hwnd,C.byref(origin))
+  assert user32.SetWindowPos(hwnd,C.c_void_p(-1),0,0,0,0,0x43)
   backing=tk.Tk()
   try:
    backing.overrideredirect(True)
@@ -210,6 +211,7 @@ try:
          {'dark':dark_pixel,'light':light_pixel})
   finally:
    backing.destroy()
+   user32.SetWindowPos(hwnd,C.c_void_p(-2),0,0,0,0,0x43)
   screenshot('sona-sidebar-matte.png')
   content('scrollTo(0,140);return true;')
   check('page_fixture_scrolled',wait(lambda: content('return scrollY>=139')))
