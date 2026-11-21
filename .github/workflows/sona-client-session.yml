@@ -1,0 +1,28 @@
+name: Diagnose Windows 11 interactive desktop
+on:
+  push:
+    branches: [codex/sona-acrylic-probe]
+    paths: ['.github/workflows/sona-client-session.yml']
+permissions:
+  contents: read
+jobs:
+  desktop:
+    runs-on: windows-11-arm
+    timeout-minutes: 4
+    steps:
+      - shell: pwsh
+        run: |
+          Add-Type @'
+          using System;
+          using System.Runtime.InteropServices;
+          public static class SonaDesktop {
+            [DllImport("kernel32.dll")] public static extern uint WTSGetActiveConsoleSessionId();
+            [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+          }
+          '@
+          "Runner session: $((Get-Process -Id $PID).SessionId)"
+          "Active console session: $([SonaDesktop]::WTSGetActiveConsoleSessionId())"
+          "Foreground HWND: $([SonaDesktop]::GetForegroundWindow())"
+          Get-Process -Name explorer,dwm,winlogon -ErrorAction SilentlyContinue | Select-Object Name,SessionId | Format-Table
+          quser
+          exit 0
