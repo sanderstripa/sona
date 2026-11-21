@@ -96,7 +96,7 @@ CefRefPtr<CefDictionaryValue> BrowserWindow::PageSettings(const Tab& tab) const 
 }
 CefRefPtr<CefDictionaryValue> BrowserWindow::HomeState(const Tab& tab) const {
   auto config=PageSettings(tab), data=CefDictionaryValue::Create();
-  for(const char* key:{"theme","language","homeProvider","homeWeatherMode","homeWeatherCity","homeWeatherUnits"})
+  for(const char* key:{"theme","language","homeProvider","homeWeatherMode","homeWeatherCity","homeWeatherUnits","homeShowLogo","homeShowShortcuts"})
     if(config->HasKey(key))data->SetValue(key,config->GetValue(key)->Copy());
   if(!data->HasKey("homeProvider"))data->SetString("homeProvider","google");
   auto favorites=CefListValue::Create();auto ids=config->GetList("homeFavoriteIds");
