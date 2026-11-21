@@ -33,6 +33,7 @@ function readVPNJSON(text){
 async function save(){const write=async()=>{if(shared.storageError)throw Error('Encrypted settings could not be unlocked; the original file was preserved. '+shared.storageError);const disk=structuredClone(shared.config);const sdr=Cc['@mozilla.org/security/sdr;1'].getService(Ci.nsISecretDecoderRing);if(shared.lockedVPN){if(JSON.stringify(disk.vpn)!==shared.lockedVPNBaseline)throw Error('Не удалось восстановить сохранённые VPN-ключи. Исходные данные сохранены; импортируйте ключи из резервной копии.');disk.vpn=shared.lockedVPN;}else disk.vpn={protected:sdr.encryptString(vpnJSON(disk.vpn))};await IOUtils.writeJSON(settingsFile,disk,{tmpPath:settingsFile+'.tmp'});await IOUtils.setPermissions(settingsFile,0o600);};const operation=(shared.saveQueue||Promise.resolve()).then(write);shared.saveQueue=operation.catch(()=>{});return operation;}
 function layout(){const s=shared.config.settings,root=document.documentElement;root.toggleAttribute('sona-single',gBrowser.visibleTabs.filter(t=>!t.closing).length<2);root.toggleAttribute('sona-dark',resolveTheme(s.theme)==='dark');}
 function apply(){
+ shared.config.settings.mattePanel=false;
  layout();
  document.documentElement.toggleAttribute('sona-matte',!!shared.config.settings.mattePanel);try{Sona.material=ChromeUtils.importESModule('chrome://sona/content/window-controls.sys.mjs').material(window,!!shared.config.settings.mattePanel);}catch(error){Sona.material={error:String(error)};}
  const s=shared.config.settings,root=document.documentElement;

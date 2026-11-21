@@ -73,39 +73,9 @@ def drag_item(source, target):
 def read_entries():
  return bridge('browser.readingList', {'kind': 'get'})
 
-def enable_compositor_test_material():
- import ctypes as C
- from ctypes import wintypes as W
- import winreg
- path=r'Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
- key=winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER,path,0,winreg.KEY_QUERY_VALUE|winreg.KEY_SET_VALUE)
- try:
-  previous=winreg.QueryValueEx(key,'EnableTransparency')
- except FileNotFoundError:
-  previous=None
- notify=C.windll.user32.SendMessageTimeoutW
- notify.argtypes=[W.HWND,W.UINT,W.WPARAM,W.LPCWSTR,W.UINT,W.UINT,C.POINTER(C.c_size_t)]
- notify.restype=C.c_ssize_t
- def broadcast():
-  result=C.c_size_t()
-  notify(0xffff,0x1a,0,'ImmersiveColorSet',0x2,1000,C.byref(result))
- winreg.SetValueEx(key,'EnableTransparency',0,winreg.REG_DWORD,1)
- broadcast()
- print('Windows CI transparency mode', {'original':previous,'remote':C.windll.user32.GetSystemMetrics(0x1000)},flush=True)
- def restore():
-  try:
-   if previous is None:winreg.DeleteValue(key,'EnableTransparency')
-   else:winreg.SetValueEx(key,'EnableTransparency',0,previous[1],previous[0])
-   broadcast()
-  finally:
-   winreg.CloseKey(key)
- return restore
-
 baseline = os.environ.get('SONA_SIDEBAR_BASELINE')=='1'
 report = {'passed': False, 'checks': {}}
-restore_material=lambda:None
 try:
- if os.name=='nt' and not baseline:restore_material=enable_compositor_test_material()
  start()
  if not baseline:
   chrome('Services.prefs.setIntPref("ui.prefersReducedMotion",0)')
@@ -134,95 +104,7 @@ try:
  else:
   screenshot('sona-sidebar-after.png')
   check('synchronous_layout_at_rest', abs(after['left']-after['page']['left'])<2 and after['address']>before['address'] and abs(after['caption']-before['caption'])<2, after)
-  content("const probe=document.createElement('div');probe.id='matte-probe';probe.style.cssText='position:absolute;inset:0 0 auto;height:3000px;z-index:9999;pointer-events:none;background:repeating-linear-gradient(#fa3020 0 120px,#04b393 120px 240px)';document.body.append(probe);scrollTo(0,0);return true;")
-  page_top = chrome('return gBrowser.selectedBrowser.getBoundingClientRect().top')
-  call('browser.settings.set', {'mattePanel': True})
-  check('matte_preserves_viewport_position_and_top_controls',
-        wait(lambda: chrome(f"""return document.documentElement.hasAttribute('sona-page-glass')
-           && Math.abs(gBrowser.selectedBrowser.getBoundingClientRect().top-{page_top})<1
-           && document.getElementById('sona-page-glass').hidden""")))
-  backdrop=chrome("""
-    return {mica:document.documentElement.hasAttribute('windowsmica'),
-      desktop:document.documentElement.hasAttribute('sona-desktop-glass'),
-      background:getComputedStyle(document.documentElement).backgroundColor,
-      appearance:getComputedStyle(document.documentElement).appearance,
-      backdrop:Services.prefs.getIntPref('widget.windows.mica.toplevel-backdrop'),
-      material:Sona.material};
-  """)
-  print('Windows acrylic state',backdrop,flush=True)
-  check('sidebar_uses_windows_desktop_backdrop', wait(lambda: chrome("""
-    return document.documentElement.hasAttribute('sona-desktop-glass') &&
-      getComputedStyle(document.documentElement).backgroundColor==='rgba(0, 0, 0, 0)';
-  """) and shell("""
-    const style=getComputedStyle(document.querySelector('.sona-bookmarks-sidebar'));
-    return document.body.hasAttribute('data-desktop-glass') &&
-      style.backgroundColor.includes('0.43');
-  """)),backdrop)
-  # Windows compositor screenshots distinguish live desktop acrylic from a
-  # transparent CSS layer painted over a solid application background.
-  import ctypes as C
-  from ctypes import wintypes as W
-  from PIL import ImageGrab
-  import tkinter as tk
-  user32=C.windll.user32
-  user32.SetProcessDpiAwarenessContext(C.c_void_p(-4))
-  user32.ClientToScreen.argtypes=[W.HWND,C.POINTER(W.POINT)]
-  user32.GetAncestor.argtypes=[W.HWND,W.UINT]
-  user32.GetAncestor.restype=W.HWND
-  user32.SetWindowPos.argtypes=[W.HWND,W.HWND,C.c_int,C.c_int,C.c_int,C.c_int,W.UINT]
-  hwnd=int(chrome('return String(window.docShell.treeOwner.QueryInterface(Ci.nsIInterfaceRequestor).getInterface(Ci.nsIBaseWindow).nativeHandle)'),16)
-  user32.SetForegroundWindow.argtypes=[W.HWND]
-  user32.GetForegroundWindow.restype=W.HWND
-  chrome('window.moveTo(80,55)')
-  time.sleep(.25)
-  origin=W.POINT()
-  assert user32.ClientToScreen(hwnd,C.byref(origin))
-  backing=tk.Tk()
-  try:
-   backing.overrideredirect(True)
-   backing.configure(background='#000000')
-   backing.geometry('270x480')
-   backing.update()
-   assert user32.SetWindowPos(user32.GetAncestor(backing.winfo_id(),2),hwnd,
-                              origin.x-32,origin.y+110,305,480,0x50)
-   backing.update()
-   user32.SetForegroundWindow(hwnd)
-   time.sleep(.65)
-   check('sona_foreground_for_desktop_acrylic',user32.GetForegroundWindow()==hwnd)
-   point=(origin.x+130,origin.y+365)
-   reference=(origin.x-14,origin.y+365)
-   dark_frame=ImageGrab.grab()
-   dark_pixel=dark_frame.getpixel(point)
-   dark_reference=dark_frame.getpixel(reference)
-   backing.configure(background='#ffffff')
-   backing.update()
-   time.sleep(.65)
-   light_frame=ImageGrab.grab()
-   light_pixel=light_frame.getpixel(point)
-   light_reference=light_frame.getpixel(reference)
-   check('reference_window_behind_sona_changes_brightness',
-         sum(light_reference[:3])-sum(dark_reference[:3])>=480,
-         {'dark':dark_reference,'light':light_reference})
-   check('sidebar_backdrop_tracks_window_behind_sona',
-         sum(light_pixel[:3])-sum(dark_pixel[:3])>=24,
-         {'dark':dark_pixel,'light':light_pixel})
-  finally:
-   backing.destroy()
-  screenshot('sona-sidebar-matte.png')
-  content('scrollTo(0,140);return true;')
-  check('page_fixture_scrolled',wait(lambda: content('return scrollY>=139')))
-  check('matte_toolbar_samples_scrolled_contents', wait(lambda: chrome("""
-    const glass=document.getElementById('sona-page-glass');
-    if(!glass||glass.hidden||!glass.width||!glass.height)return false;
-    const [r,g,b,a]=glass.getContext('2d').getImageData(4,4,1,1).data;
-    return a===255&&r<100&&g>100&&b>90&&getComputedStyle(glass).filter.includes('grayscale(1)');
-  """)))
-  screenshot('sona-toolbar-matte-scrolled.png')
-  content('scrollTo(0,0);return true;')
-  check('matte_returns_to_neutral_at_top',
-        wait(lambda: chrome("return document.getElementById('sona-page-glass').hidden")))
-  call('browser.settings.set', {'mattePanel': False})
-  content("document.getElementById('matte-probe').remove();return true;")
+  check('sidebar_uses_opaque_material',chrome("return !document.documentElement.hasAttribute('sona-desktop-glass')"))
   call('browser.bookmarks.sidebar', False)
   wait(lambda: geometry()['left']<1 and geometry()['page']['left']<1)
   samples=run("""const actor=document.getElementById('sona-shell-frame').browsingContext.currentWindowGlobal.getActor('SonaApp');
@@ -364,4 +246,3 @@ finally:
   (out / 'bookmarks-sidebar.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
   log.close()
   server.shutdown()
-  restore_material()

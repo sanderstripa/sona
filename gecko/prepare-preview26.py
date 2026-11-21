@@ -80,6 +80,10 @@ index.write_text(index.read_text(encoding='utf-8').replace('data-matte="true"','
 
 settings_ui=ui/'settings.js'
 settings_source=settings_ui.read_text(encoding='utf-8')
+# The toolbar now uses a single opaque material in all profiles.
+settings_source = re.sub(r"row\('mattePanel',[^)]*\),", "", settings_source)
+settings_ui.write_text(settings_source, encoding='utf-8')
+assert "row('mattePanel'" not in settings_source
 if "opt('compact'" not in settings_source:
     patch(settings_ui, "opt('adaptive','Основная','Main')",
           "opt('adaptive','Основной','Main'),opt('compact','Компактный','Compact')")

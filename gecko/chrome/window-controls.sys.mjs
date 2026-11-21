@@ -64,16 +64,14 @@ export function prepareStartup(win) {
    if(hwnd.isNull?.() || String(hwnd)==='0')throw Error('Window handle pending');
    const abi=ctypes.winapi_abi||ctypes.default_abi;
 
-   // Hide the first frame in DWM without changing the window's compositing style.
-   const setAttribute=library('dwmapi.dll').declare('DwmSetWindowAttribute',abi,
-     ctypes.long,ctypes.uintptr_t,ctypes.uint32_t,ctypes.voidptr_t,ctypes.uint32_t);
-   const cloaked=ctypes.int32_t(1);
-   const setCloaked=value=>{
-    cloaked.value=value;
-    return setAttribute(hwnd,13,cloaked.address(),ctypes.int32_t.size);
-   };
-   if(setCloaked(1)!==0)throw Error('Window cloak pending');
-   state.uncloak=()=>setCloaked(0);
+   const user=library('user32.dll');
+   const get=user.declare('GetWindowLongW',abi,ctypes.long,ctypes.uintptr_t,ctypes.int);
+   const style=user.declare('SetWindowLongW',abi,ctypes.long,ctypes.uintptr_t,ctypes.int,ctypes.long);
+   const alpha=user.declare('SetLayeredWindowAttributes',abi,ctypes.bool,ctypes.uintptr_t,ctypes.uint32_t,ctypes.uint8_t,ctypes.uint32_t);
+   const previous=get(hwnd,-20);
+   style(hwnd,-20,previous|0x80000);
+   if(!alpha(hwnd,0,0,2)){style(hwnd,-20,previous);throw Error('Window opacity pending');}
+   state.uncloak=()=>{alpha(hwnd,0,255,2);style(hwnd,-20,previous);};
 
   } catch(error) {
    if(Date.now()-state.preparedAt<10000)startupTimeout(cloak,16);
