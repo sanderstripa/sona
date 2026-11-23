@@ -1473,6 +1473,7 @@ struct BrowserWindow::WindowTabDrag {
   int last_sort_x=0;
   bool detached = false;
   bool sorting_after_merge = false;
+  bool updating = false;
 };
 std::unique_ptr<BrowserWindow::WindowTabDrag> BrowserWindow::window_tab_drag_;
 namespace {
@@ -1506,7 +1507,7 @@ void BrowserWindow::SetTabDropLayout(CefRefPtr<CefDictionaryValue> data) {
 void BrowserWindow::StartWindowTabDrag(CefRefPtr<CefDictionaryValue> data) {
   if(!data||window_tab_drag_||!TabDragButtonDown()||Fullscreen()||settings_overlay_||NeedsOnboarding())return;
   auto* tab=FindTab(data->GetInt("id"));
-  if(!tab||!tab->browser||!tab->chrome_host||tab->profile_id!=VisibleProfileId())return;
+  if(!tab||tab->profile_id!=VisibleProfileId())return;
   SetTabDropLayout(data->GetDictionary("layout"));
   POINT pointer{};
   RECT window{};
@@ -1581,9 +1582,16 @@ void BrowserWindow::FinishWindowTabDrag() {
 void BrowserWindow::TickWindowTabDrag() {
   if(!window_tab_drag_||window_tab_drag_->owner.get()!=this){KillTimer(hwnd_,kTabDragTimer);return;}
   auto& drag=*window_tab_drag_;
+  if(drag.updating)return;
   auto* tab=FindTab(drag.id);
   POINT cursor{};
   if(!TabDragButtonDown()||!tab||!GetCursorPos(&cursor)||closing_){FinishWindowTabDrag();return;}
+  if(!tab->browser||!tab->chrome_host)return;
+  struct DragUpdateScope {
+    WindowTabDrag* drag;
+    ~DragUpdateScope(){if(window_tab_drag_.get()==drag)drag->updating=false;}
+  } update{&drag};
+  drag.updating=true;
   const auto client_point=[&](BrowserWindow* window){
     POINT converted=cursor;
     ScreenToClient(window->hwnd_,&converted);
@@ -1668,7 +1676,6 @@ void BrowserWindow::TickWindowTabDrag() {
     FinishWindowTabDrag();
     return;
   }
-  if(surface_&&GetCapture()==surface_->hwnd())ReleaseCapture();
   KillTimer(hwnd_,kTabDragTimer);
   drag.owner=detached;
   drag.detached=true;
@@ -1676,6 +1683,7 @@ void BrowserWindow::TickWindowTabDrag() {
   SetWindowPos(detached->hwnd_,nullptr,cursor.x-drag.offset.x,cursor.y-drag.offset.y,
     0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
   detached->CreateShellBrowser();
+  ShowWindow(detached->hwnd_,SW_SHOWNOACTIVATE);
   if(!SetTimer(detached->hwnd_,kTabDragTimer,16,nullptr))detached->FinishWindowTabDrag();
   if(tabs_.empty()){
     close_empty_after_drag_=true;
