@@ -195,6 +195,13 @@ def main():
             if ws:
                 try:ws.close()
                 except Exception:pass
-            if process.poll() is None:s.close_normally(process)
-            out.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
+            try:
+                if process.poll() is None:
+                    try:s.close_normally(process)
+                    finally:
+                        if process.poll() is None:
+                            process.kill()
+                            process.wait(timeout=10)
+            finally:
+                out.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
 if __name__=='__main__':main()

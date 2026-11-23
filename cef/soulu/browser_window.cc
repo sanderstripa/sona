@@ -1591,18 +1591,7 @@ void BrowserWindow::TickWindowTabDrag() {
   };
   const int id=drag.id;
   if(drag.detached){
-    if(shell_frame_ready_)for(const auto& slot:tab_drop_slots_)if(slot.id==id){
-      POINT anchor{slot.rect.left+std::clamp(drag.grab.x,0L,std::max(0L,slot.rect.right-slot.rect.left-1)),
-                   slot.rect.top+std::clamp(drag.grab.y,0L,std::max(0L,slot.rect.bottom-slot.rect.top-1))};
-      RECT bounds{};
-      if(ClientToScreen(hwnd_,&anchor)&&GetWindowRect(hwnd_,&bounds))
-        drag.offset={anchor.x-bounds.left,anchor.y-bounds.top};
-      break;
-    }
-    const LONG x=cursor.x-drag.offset.x,y=cursor.y-drag.offset.y;
-    RECT current_bounds{};
-    if(GetWindowRect(hwnd_,&current_bounds)&&(current_bounds.left!=x||current_bounds.top!=y))
-      SetWindowPos(hwnd_,nullptr,x,y,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
+    // Merge before moving the detached window over the destination strip.
     for(auto* window:windows_){
       if(window==this||!window->shell_frame_ready_||window->closing_||!IsWindowVisible(window->hwnd_)||
          IsIconic(window->hwnd_)||window->settings_overlay_||window->NeedsOnboarding()||
@@ -1625,9 +1614,25 @@ void BrowserWindow::TickWindowTabDrag() {
       if(!SetTimer(window->hwnd_,kTabDragTimer,16,nullptr))window->FinishWindowTabDrag();
       ShowWindow(hwnd_,SW_HIDE);
       close_empty_after_drag_=true;
-      if(shell_)CloseAll();
+      // CEF teardown may dispatch window messages. Leave the transfer and
+      // its timer callback before closing the now-empty shell.
+      if(shell_)CefPostTask(TID_UI,new FunctionTask([self=CefRefPtr<BrowserWindow>(this)]{
+        self->CloseAll();
+      }));
       return;
     }
+    if(shell_frame_ready_)for(const auto& slot:tab_drop_slots_)if(slot.id==id){
+      POINT anchor{slot.rect.left+std::clamp(drag.grab.x,0L,std::max(0L,slot.rect.right-slot.rect.left-1)),
+                   slot.rect.top+std::clamp(drag.grab.y,0L,std::max(0L,slot.rect.bottom-slot.rect.top-1))};
+      RECT bounds{};
+      if(ClientToScreen(hwnd_,&anchor)&&GetWindowRect(hwnd_,&bounds))
+        drag.offset={anchor.x-bounds.left,anchor.y-bounds.top};
+      break;
+    }
+    const LONG x=cursor.x-drag.offset.x,y=cursor.y-drag.offset.y;
+    RECT current_bounds{};
+    if(GetWindowRect(hwnd_,&current_bounds)&&(current_bounds.left!=x||current_bounds.top!=y))
+      SetWindowPos(hwnd_,nullptr,x,y,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
     return;
   }
 
@@ -1663,6 +1668,7 @@ void BrowserWindow::TickWindowTabDrag() {
     FinishWindowTabDrag();
     return;
   }
+  if(surface_&&GetCapture()==surface_->hwnd())ReleaseCapture();
   KillTimer(hwnd_,kTabDragTimer);
   drag.owner=detached;
   drag.detached=true;
