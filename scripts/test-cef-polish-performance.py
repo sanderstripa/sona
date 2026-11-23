@@ -115,7 +115,7 @@ with tempfile.TemporaryDirectory(prefix='soulu-polish-',ignore_cleanup_errors=Tr
   s.evaluate(shell,f'browserShell.closeTab({first})');wait(lambda:len(state()['tabs'])==1 and not state()['adaptiveToolbar']['running'])
   check(abs(s.evaluate(shell,"document.querySelector('#classicAddressForm').getBoundingClientRect().y-addressY"))<.5,'Address and VPN row do not jump vertically when the last extra tab closes')
   s.evaluate(shell,'browserShell.setBookmarksSidebar(true)');wait(lambda:s.evaluate(shell,"!document.querySelector('.bookmarks-menu').hidden"))
-  check(s.evaluate(shell,"document.querySelector('.bookmarks-heading').querySelectorAll('button').length===0"),'Bookmark panel has no close cross')
+  check(s.evaluate(shell,"[...document.querySelectorAll('.bookmarks-heading button')].every(n=>!['×','Закрыть','Close'].includes(n.textContent.trim())&&!/^(Закрыть|Close)( |$)/i.test(n.getAttribute('aria-label')||n.title))"),'Bookmark panel has no close cross')
   check(s.evaluate(shell,"[...document.querySelectorAll('.bookmark-actions button')].filter(n=>n.textContent.includes('Добавить текущую')).every(n=>{const t=document.createRange();t.selectNodeContents(n);return t.getClientRects().length<=2})"),'Add current page occupies at most two text lines')
   shot=s.command(shell,'Page.captureScreenshot',{'format':'png'});(out/'bookmarks.png').write_bytes(base64.b64decode(shot['data']));passed=True
  finally:

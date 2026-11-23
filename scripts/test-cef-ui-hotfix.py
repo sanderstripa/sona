@@ -41,17 +41,20 @@ def main():
    check(o.wait(lambda:s.evaluate(page,"matchMedia('(prefers-color-scheme:light)').matches")),'Light browser appearance reaches a supporting website')
    s.evaluate(page,'scrollTo(0,260)');time.sleep(.3)
    metric="({width:innerWidth,height:innerHeight,y:scrollY,videoTop:v.getBoundingClientRect().top,identity,time:v.currentTime})"
-   baseline=s.evaluate(page,metric);samples=[];cursor_samples=[]
+   baseline=s.evaluate(page,metric);samples=[];cursor_samples=[];cursor_details=[]
    bounds=o.client_rect(hwnd)
    for x in [80,180,300,450,600,760,300,100]:
-    u.SetCursorPos(bounds[0]+x,bounds[1]+24);time.sleep(.06)
+    assert u.SetCursorPos(bounds[0]+x-1,bounds[1]+24)
+    u.mouse_event(1,1,0,0,0)
+    time.sleep(.09)
     value=s.evaluate(page,metric);samples.append(value)
     cursor=Cursor();cursor.cbSize=C.sizeof(cursor);assert u.GetCursorInfo(C.byref(cursor))
     cursor_samples.append(bool(cursor.flags&1 and cursor.cursor))
-   report['hoverSamples']=samples;report['cursorVisible']=cursor_samples
+    cursor_details.append({'flags':cursor.flags,'handle':bool(cursor.cursor),'x':cursor.point.x,'y':cursor.point.y})
+   report['hoverSamples']=samples;report['cursorVisible']=cursor_samples;report['cursorDetails']=cursor_details
    check(all(all(abs(v[k]-baseline[k])<1 for k in ['width','height','y','videoTop']) and v['identity']==baseline['identity'] for v in samples),'Moving over the toolbar does not move or resize the playing video')
    check(samples[-1]['time']>baseline['time'],'Video continues playing during toolbar hover')
-   check(all(cursor_samples),'Native cursor remains visible across the upper toolbar')
+   check(all(cursor_samples),'Native cursor remains visible across the upper toolbar '+json.dumps(cursor_details))
    # Capture durations from real running animations, not declarations alone.
    def animate(method,value,selector):
     return s.evaluate(shell,"(async()=>{const pending=browserShell."+method+'('+json.dumps(value)+");const node=document.querySelector("+json.dumps(selector)+");for(let i=0;i<30;i++){await new Promise(requestAnimationFrame);const a=node.getAnimations();if(a.length){const durations=a.map(x=>x.effect.getTiming().duration);await pending;return durations}}await pending;return []})()")

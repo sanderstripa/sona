@@ -546,9 +546,9 @@ bool BrowserClient::OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
 CefRefPtr<CefRenderHandler> BrowserClient::GetRenderHandler() {
   return role_ == BrowserRole::kShell ? owner_->surface() : nullptr;
 }
-bool BrowserClient::OnCursorChange(CefRefPtr<CefBrowser>, CefCursorHandle cursor, cef_cursor_type_t, const CefCursorInfo&) {
+bool BrowserClient::OnCursorChange(CefRefPtr<CefBrowser>, CefCursorHandle cursor, cef_cursor_type_t type, const CefCursorInfo&) {
   if (role_ != BrowserRole::kShell || !owner_->surface()) return false;
-  owner_->surface()->Cursor(cursor); return true;
+  owner_->surface()->Cursor(type==CT_NONE?nullptr:cursor); return true;
 }
 
 bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,

@@ -307,6 +307,7 @@ jobs:
           if-no-files-found: error
 
       - name: Verify unpacked Chrome extensions in native Settings and ordinary tabs
+        if: ${{ (success() || (!cancelled() && github.ref == 'refs/heads/cef-preview-80' && steps.native_build.outcome == 'success')) }}
         shell: pwsh
         run: |
           python -m pip install --disable-pip-version-check websocket-client pillow pywinauto
@@ -363,7 +364,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify reported UI regressions and real background lifecycle controls
-        if: ${{ env.AUTOMATED_RELEASE != 'true' }}
+        if: ${{ (success() || (!cancelled() && github.ref == 'refs/heads/cef-preview-80' && steps.native_build.outcome == 'success')) && env.AUTOMATED_RELEASE != 'true' }}
         shell: pwsh
         run: |
           python browser/scripts/test-cef-polish-performance.py "$env:build_dir/Soulu.exe" browser/artifacts/polish-performance
@@ -377,7 +378,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Test Browser Import adapters and native bridge on isolated profiles
-        if: ${{ env.AUTOMATED_RELEASE != 'true' }}
+        if: ${{ (success() || (!cancelled() && github.ref == 'refs/heads/cef-preview-80' && steps.native_build.outcome == 'success')) && env.AUTOMATED_RELEASE != 'true' }}
         shell: pwsh
         run: |
           python -m pip install --disable-pip-version-check websocket-client pillow comtypes pywinauto
@@ -427,7 +428,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify live page glass, opaque themes, tabs and resize
-        if: ${{ env.AUTOMATED_RELEASE != 'true' }}
+        if: ${{ (success() || (!cancelled() && github.ref == 'refs/heads/cef-preview-80' && steps.native_build.outcome == 'success')) && env.AUTOMATED_RELEASE != 'true' }}
         shell: pwsh
         run: |
           python -m pip install --disable-pip-version-check websocket-client pillow
@@ -472,7 +473,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Test work-area input bounds and fullscreen restore in real Win32 CEF
-        if: ${{ env.AUTOMATED_RELEASE != 'true' }}
+        if: ${{ (success() || (!cancelled() && github.ref == 'refs/heads/cef-preview-80' && steps.native_build.outcome == 'success')) && env.AUTOMATED_RELEASE != 'true' }}
         shell: pwsh
         run: |
           python -m pip install --disable-pip-version-check websocket-client pillow
@@ -514,7 +515,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Test HTTPS filter update and last-known-good cache
-        if: ${{ env.AUTOMATED_RELEASE != 'true' }}
+        if: ${{ (success() || (!cancelled() && github.ref == 'refs/heads/cef-preview-80' && steps.native_build.outcome == 'success')) && env.AUTOMATED_RELEASE != 'true' }}
         shell: pwsh
         run: |
           python browser/scripts/test-cef-adblock-update.py "$env:build_dir/Soulu.exe" browser/artifacts/adblock-update.json
@@ -610,7 +611,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Test native encrypted vault, import and site policy
-        if: ${{ env.AUTOMATED_RELEASE != 'true' }}
+        if: ${{ (success() || (!cancelled() && github.ref == 'refs/heads/cef-preview-80' && steps.native_build.outcome == 'success')) && env.AUTOMATED_RELEASE != 'true' }}
         shell: pwsh
         run: |
           $exe = Get-ChildItem cef-build -Recurse -Filter Soulu.exe | Where-Object { $_.FullName -match 'Release' } | Select-Object -First 1
@@ -627,7 +628,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Test native Settings overlay lifecycle and background state
-        if: ${{ env.AUTOMATED_RELEASE != 'true' }}
+        if: ${{ (success() || (!cancelled() && github.ref == 'refs/heads/cef-preview-80' && steps.native_build.outcome == 'success')) && env.AUTOMATED_RELEASE != 'true' }}
         shell: pwsh
         run: |
           python -m pip install --disable-pip-version-check websocket-client pillow
@@ -636,14 +637,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Test motion through the native CEF shell and Settings
-        if: ${{ env.AUTOMATED_RELEASE != 'true' }}
+        if: ${{ (success() || (!cancelled() && github.ref == 'refs/heads/cef-preview-80' && steps.native_build.outcome == 'success')) && env.AUTOMATED_RELEASE != 'true' }}
         shell: pwsh
         run: |
           python browser/scripts/test-cef-motion.py "$env:build_dir/Soulu.exe" browser/artifacts/motion-evidence.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Test toolbar geometry, caption feedback, popup bounds and native drag
-        if: ${{ env.AUTOMATED_RELEASE != 'true' }}
+        if: ${{ (success() || (!cancelled() && github.ref == 'refs/heads/cef-preview-80' && steps.native_build.outcome == 'success')) && env.AUTOMATED_RELEASE != 'true' }}
         shell: pwsh
         run: |
           python browser/scripts/test-cef-toolbar.py "$env:build_dir/Soulu.exe" browser/artifacts/toolbar-evidence.json
@@ -688,7 +689,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Test first-run onboarding in native CEF
-        if: ${{ env.AUTOMATED_RELEASE != 'true' }}
+        if: ${{ (success() || (!cancelled() && github.ref == 'refs/heads/cef-preview-80' && steps.native_build.outcome == 'success')) && env.AUTOMATED_RELEASE != 'true' }}
         shell: pwsh
         run: |
           python -m pip install --disable-pip-version-check websocket-client

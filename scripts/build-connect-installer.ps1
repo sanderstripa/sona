@@ -53,7 +53,7 @@ if(Test-Path -LiteralPath $testPath){throw 'Unexpected installer engine test sou
 try{
  [IO.File]::WriteAllText($adapterPath,$adapterText,[Text.UTF8Encoding]::new($false))
  Copy-Item -LiteralPath (Join-Path $repo 'installer/tests/engine_upgrade_windows_test.go') -Destination $testPath
- if($Version -match '^1[.]156[.]0[.]14[.]'){
+ if($Version -match '^1[.]156[.]0[.][0-9]+[.][0-9]+$'){
   python (Join-Path $repo 'installer/prepare-cef-preview.py') $core
   if($LASTEXITCODE){throw 'Sona Preview installer preparation failed'}
  }
