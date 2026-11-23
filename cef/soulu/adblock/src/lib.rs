@@ -3,7 +3,7 @@ use adblock::{Engine, lists::{FilterSet, ParseOptions}, request::Request};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{ffi::{CStr, CString, c_char}, fs, io::Read, path::{Path, PathBuf},
-    sync::{Arc, OnceLock, RwLock}, time::{Duration, SystemTime, UNIX_EPOCH}};
+    sync::{Arc, Mutex, OnceLock, RwLock}, time::{Duration, SystemTime, UNIX_EPOCH}};
 
 const SOURCES: [&str; 3] = ["https://easylist.to/easylist/easylist.txt",
     "https://easylist.to/easylist/easyprivacy.txt",
@@ -13,6 +13,23 @@ const BASELINE: [&str; 3] = [include_str!("../filters/easylist.txt"),
 const INTERVAL: u64 = 24 * 60 * 60;
 const LIMIT: usize = 16 * 1024 * 1024;
 static STATE: OnceLock<RwLock<State>> = OnceLock::new();
+static UPDATE_PATH: OnceLock<PathBuf> = OnceLock::new();
+static UPDATE_LOCK: Mutex<()> = Mutex::new(());
+
+fn refresh_filters(path: &Path, force: bool) {
+    let Ok(_guard) = UPDATE_LOCK.lock() else { return; };
+    let Some(state) = STATE.get() else { return; };
+    if !force && state.read().is_ok_and(|s| now().saturating_sub(s.updated) < INTERVAL) {
+        return;
+    }
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| update(path)))
+        .unwrap_or_else(|_| Err("Filter update panic; retained working rules".into()));
+    if let Err(error) = result {
+        if let Ok(mut current) = state.write() {
+            current.error = error;
+        }
+    }
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 struct Bundle { schema: u32, updated: u64, lists: Vec<String>, digest: String }
@@ -158,13 +175,13 @@ pub unsafe extern "C" fn soulu_ab_init(cache: *const c_char, fixture: *const c_c
         Rules{engine:Engine::new_with_filter_set(set),..rules}
     };
     if STATE.set(RwLock::new(State {rules:Arc::new(rules),updated,error,origin:origin.into()})).is_err() { return false; }
-    if updates {std::thread::spawn(move || loop {
-        let due = STATE.get().and_then(|s|s.read().ok()).map(|s| now().saturating_sub(s.updated)>=INTERVAL).unwrap_or(false);
-        if due { if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(||update(&path))).unwrap_or_else(|_|Err("Filter update panic; retained working rules".into())) {
-            if let Some(state) = STATE.get() { if let Ok(mut s) = state.write() {s.error=e;} }
-        } }
-        std::thread::sleep(Duration::from_secs(3600));
-    });}
+    if updates {
+        let _ = UPDATE_PATH.set(path.clone());
+        std::thread::spawn(move || loop {
+            refresh_filters(&path, false);
+            std::thread::sleep(Duration::from_secs(3600));
+        });
+    }
     true
 }) }
 #[unsafe(no_mangle)]
@@ -192,6 +209,14 @@ pub unsafe extern "C" fn soulu_ab_cosmetic(url: *const c_char, tokens: *const c_
     }
     output(serde_json::to_string(&selectors).unwrap_or_else(|_|"[]".into()))
 }) }
+#[unsafe(no_mangle)]
+pub extern "C" fn soulu_ab_refresh() -> bool {
+    boundary(|| {
+        let Some(path) = UPDATE_PATH.get() else { return false; };
+        refresh_filters(path, true);
+        true
+    })
+}
 #[unsafe(no_mangle)]
 pub extern "C" fn soulu_ab_status() -> *mut c_char { boundary(|| {
     let Some(state) = STATE.get().and_then(|s|s.read().ok()) else {return output("{\"ready\":false}".into());};

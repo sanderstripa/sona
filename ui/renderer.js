@@ -210,6 +210,82 @@ function renderCompactTabs(){
   $('#compactTabFlow').style.setProperty('--compact-flow-width',`${Math.min(620,466+count*33)}px`);
 }
 
+function enableTabReordering(strip){
+  let drag=null,suppressClick=false;
+  const selector='[data-tab-id],[data-active-tab]';
+  const tabId=node=>Number(node.dataset.tabId||node.dataset.activeTab);
+  const clear=()=>{
+    if(!drag)return;
+    for(const {node} of drag.slots){
+      node.style.translate='';
+      node.classList.remove('tab-reordering','tab-reorder-peer');
+    }
+    drag=null;
+  };
+  strip.addEventListener('pointerdown',event=>{
+    if(!window.browserShell.reorderTab||event.button!==0||drag||
+       event.target.closest('button,input,select,textarea'))return;
+    const node=event.target.closest(selector);
+    if(!node||node.parentElement!==strip)return;
+    const selected=state.tabs.find(tab=>tab.id===tabId(node));
+    if(!selected)return;
+    const peers=[...strip.children].filter(candidate=>candidate.matches(selector)&&
+      state.tabs.some(tab=>tab.id===tabId(candidate)&&!!tab.pinned===!!selected.pinned));
+    const slots=peers.map(node=>({node,rect:node.getBoundingClientRect()}));
+    const index=peers.indexOf(node);
+    if(index<0)return;
+    suppressClick=false;
+    drag={node,slots,index,target:index,startX:event.clientX,startY:event.clientY,active:false};
+  });
+  strip.addEventListener('pointermove',event=>{
+    if(!drag)return;
+    if(!(event.buttons&1)){clear();return;}
+    const dx=event.clientX-drag.startX,dy=event.clientY-drag.startY;
+    if(!drag.active){
+      if(Math.abs(dx)<5||Math.abs(dx)<Math.abs(dy))return;
+      strip.setPointerCapture(event.pointerId);
+      drag.active=true;
+      drag.node.classList.add('tab-reordering');
+      for(const slot of drag.slots)if(slot.node!==drag.node)slot.node.classList.add('tab-reorder-peer');
+    }
+    event.preventDefault();
+    const bounds=strip.getBoundingClientRect();
+    if(event.clientY<bounds.top-25||event.clientY>bounds.bottom+25)return;
+    const {slots,index}=drag;
+    const rect=slots[index].rect;
+    const center=rect.left+rect.width/2+dx;
+    let target=index;
+    while(target>0&&center<slots[target-1].rect.left+slots[target-1].rect.width/2)--target;
+    while(target+1<slots.length&&center>slots[target+1].rect.left+slots[target+1].rect.width/2)++target;
+    drag.target=target;
+    for(let i=0;i<slots.length;++i){
+      let shift=0;
+      if(i===index)shift=dx;
+      else if(i>index&&i<=target)shift=-rect.width-(slots[index+1].rect.left-rect.right);
+      else if(i<index&&i>=target)shift=rect.width+(rect.left-slots[index-1].rect.right);
+      slots[i].node.style.translate=`${shift}px 0`;
+    }
+  });
+  strip.addEventListener('pointerup',()=>{
+    if(!drag)return;
+    const {node,slots,index,target,active}=drag;
+    suppressClick=active;
+    clear();
+    if(active&&target!==index)window.browserShell.reorderTab(tabId(node),tabId(slots[target].node)).catch(console.error);
+  });
+  strip.addEventListener('pointercancel',clear);
+  strip.addEventListener('lostpointercapture',clear);
+  strip.addEventListener('pointerleave',()=>{if(drag&&!drag.active)clear();});
+  strip.addEventListener('click',event=>{
+    if(!suppressClick)return;
+    suppressClick=false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  },true);
+}
+
+for(const strip of [tabStrip,classicPinnedTabs,$('#compactTabFlow')])enableTabReordering(strip);
+
 function renderTabs(){renderClassicTabs();renderCompactTabs();}
 function renderSidebar(){const signature=JSON.stringify([state.settings?.language,state.tabs.map(x=>[x.id,x.title,x.label,x.favicon,x.active])]);if(signature===sidebarSignature)return;sidebarSignature=signature;const box=$("#sidebarTabs");$("#sidebarCount").textContent=`${state.tabs.length} ${tr("opened")}`;box.innerHTML=state.tabs.map((x)=>`<div class="sidebar-tab${x.active?" active":""}">${fav(x,"sidebar-favicon")}<button data-select="${x.id}"><strong>${esc(x.title||tr("newTab"))}</strong><small>${esc(x.label)}</small></button><button data-close="${x.id}">×</button></div>`).join("");fallbacks(box);box.querySelectorAll("[data-select]").forEach((b)=>b.onclick=()=>window.browserShell.switchTab(+b.dataset.select));box.querySelectorAll("[data-close]").forEach((b)=>b.onclick=()=>window.browserShell.closeTab(+b.dataset.close));}
 let pendingState=null,stateFrame=0;

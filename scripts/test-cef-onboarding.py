@@ -71,7 +71,7 @@ def main():
             shell=start();page=socket('/ui/onboarding.html');wait(lambda:s.evaluate(page,"document.querySelector('main')?.getAttribute('aria-busy')==='false'"))
             check(ui(page)['flow']['status']=='not_started','New normal profile launches first-run')
             check(len(s.evaluate(shell,'browserShell.getState()')['tabs'])==1,'Onboarding uses one native tab')
-            check(s.evaluate(page,"document.querySelector('.brand img').getAttribute('src')==='branding/soulu-128.png'"),'Production brand asset used')
+            check(s.evaluate(page,"document.querySelector('.brand img').getAttribute('src')==='branding/sona-128.png'"),'Production brand asset used')
             check(s.evaluate(page,"performance.getEntriesByType('resource').every(r=>r.name.startsWith('file:'))"),'Onboarding has only local assets')
             s.evaluate(page,"document.querySelector('#title').focus()")
             s.command(page,'Input.dispatchKeyEvent',{'type':'keyDown','key':'Tab','windowsVirtualKeyCode':9})
@@ -119,20 +119,25 @@ def main():
                     elif path.exists():path.rename(inactive)
                 actual={r['browser'] for r in ui(page)['sources']}
                 check(actual==({selected} if selected else set()),f'Only {selected or "no"} supported browser profile is exposed')
-            # An unsupported provider with files must never appear.
-            brave=local/'BraveSoftware/Brave-Browser/User Data/Default';brave.mkdir(parents=True);(brave/'Login Data').write_bytes(b'unsupported')
-            check(ui(page)['sources']==[],'Unsupported browser is excluded')
+            # A profile with no saved passwords is still discoverable.
+            chrome=fixtures['Chrome'].parent
+            (chrome/'Bookmarks').write_text('{"roots":{}}')
+            check({r['browser'] for r in ui(page)['sources']}=={'Chrome'},'Bookmark-only profiles are discoverable')
+            (chrome/'Bookmarks').unlink()
             for path in fixtures.values():path.with_suffix('.inactive').rename(path)
             check({r['browser'] for r in ui(page)['sources']}=={'Chrome','Edge','Firefox'},'Multiple supported sources are discovered without multi-import claims')
             s.command(page,'Page.reload');wait(lambda:s.evaluate(page,"document.querySelector('main')?.getAttribute('aria-busy')==='false'"))
             click(page,'Далее');check(flow()['step']==3,'Selected source advances to types')
-            check(s.evaluate(page,"document.querySelectorAll('.type input:disabled').length===2"),'Unsupported bookmarks/history categories are disabled')
             click(page,'Назад');check(flow()['source']=='Chrome:Default','Back retains selected source')
-            click(page,'Далее');click(page,'Импортировать')
-            check(flow()['importReport']['imported']==1 and flow()['importReport']['protected']==1 and flow()['importReport']['status']=='partial','First-run invokes actual DPAPI importer and reports partial result')
+            click(page,'Далее');click(page,'Открыть импорт')
+            wait(lambda:s.evaluate(page,"document.querySelector('[data-category=passwords]:not(:disabled)')!==null"))
+            check(s.evaluate(page,"document.querySelector('#importFrom-option-0')!==null"),'First-run shows the Settings import dialog')
+            s.evaluate(page,"document.querySelector('[data-category=passwords]').click();document.querySelector('.import-consent input').click()")
+            click(page,'Импорт')
+            wait(lambda:s.evaluate(page,"document.querySelector('[data-import-state=result]')!==null"))
+            check(s.evaluate(page,"document.querySelector('.import-summary').textContent.includes('частично')"),'First-run reports the protected record as a partial import')
             check(secret not in (profile/'soulu-passwords.json').read_text(),'Imported passwords are encrypted on disk')
-            check(flow()['step']==3,'Partial result remains visible before continuing')
-            call(page,'import');check(flow()['importReport']['imported']==1,'Repeated import action returns saved report without importing again')
+            click(page,'Закрыть')
             click(page,'Продолжить');check(flow()['step']==4,'Partial import can continue')
             for label in ['Блокировать рекламу','Проверять разрешения сайтов']:
                 s.evaluate(page,"document.querySelector('input[aria-label="+json.dumps(label)+"]').click()")
@@ -150,7 +155,7 @@ def main():
             s.evaluate(page,"document.querySelector('#vpnKey').value="+json.dumps(sudoku)+";document.querySelector('#vpnKey').dispatchEvent(new Event('input'))")
             click(page,'Проверить ключ');check(s.evaluate(page,"document.querySelector('#message').textContent.includes('Формат ключа распознан')"),'Onboarding recognizes the now-supported native Sudoku protocol')
             click(page,'Пропустить');check(flow()['step']==6,'VPN skip reaches completion')
-            check(s.evaluate(page,"document.querySelector('.summary').textContent.includes('Импортировано паролей: 1') && document.querySelector('.summary').textContent.includes('частично') && document.querySelector('.summary').textContent.includes('Приватность настроена') && document.querySelector('.summary').textContent.includes('VPN можно добавить позже')"),'Summary reports actual partial/applied/skipped outcomes')
+            check(s.evaluate(page,"document.querySelector('.summary').textContent.includes('Приватность настроена') && document.querySelector('.summary').textContent.includes('VPN можно добавить позже')"),'Summary reports actual applied/skipped outcomes')
             for width,height,scale in [(1280,800,1),(800,500,1),(480,360,1),(900,600,1.5),(900,600,2)]:
                 s.command(page,'Emulation.setDeviceMetricsOverride',{'width':width,'height':height,'deviceScaleFactor':scale,'mobile':False})
                 check(s.evaluate(page,"document.documentElement.scrollWidth<=innerWidth && document.querySelector('.card').getBoundingClientRect().bottom<=innerHeight+1"),f'No overflow at {width}x{height} scale {scale}')
@@ -171,8 +176,8 @@ def main():
                 before=choices();opened=call(page,'default')
                 check(opened['ok'],'Default action opens Windows Default Apps')
                 with winreg.OpenKey(winreg.HKEY_CURRENT_USER,r'Software\RegisteredApplications') as k:
-                    check(winreg.QueryValueEx(k,'Soulu')[0]==r'Software\Soulu\Capabilities','Soulu capabilities are registered with Windows')
-                with winreg.OpenKey(winreg.HKEY_CURRENT_USER,r'Software\Classes\Soulu.Url\shell\open\command') as k:
+                    check(winreg.QueryValueEx(k,'Sona Preview')[0]==r'Software\Sona Preview\Capabilities','Sona Preview capabilities are registered with Windows')
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER,r'Software\Classes\SonaPreview.Url\shell\open\command') as k:
                     check(winreg.QueryValueEx(k,'')[0]=='"'+exe+'" "%1"','Default browser command uses this executable and URL argument')
                 check(choices()==before,'Default action does not bypass Windows user choice')
             finish(page);socket('/ui/home.html');check(flow()['status']=='completed','Completion opens ordinary Soulu')

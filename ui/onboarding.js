@@ -1,8 +1,9 @@
 (() => {
   'use strict';
   const $=id=>document.getElementById(id);
-  const invoke=(action,payload=null)=>new Promise((resolve,reject)=>window.cefQuery({request:JSON.stringify({action:'onboarding.'+action,payload}),persistent:false,onSuccess:v=>resolve(v?JSON.parse(v):null),onFailure:(_,m)=>reject(Error(m))}));
-  let flow={},sources=[],busy=false,vpnDraft='';
+  const request=(action,payload=null)=>new Promise((resolve,reject)=>window.cefQuery({request:JSON.stringify({action,payload}),persistent:false,onSuccess:v=>resolve(v?JSON.parse(v):null),onFailure:(_,m)=>reject(Error(m))}));
+  const invoke=(action,payload)=>request('onboarding.'+action,payload);
+  let flow={},sources=[],busy=false,vpnDraft='',activeProfileId='';
   const el=(tag,text,className)=>{const n=document.createElement(tag);if(text)n.textContent=text;if(className)n.className=className;return n;};
   const image=(src,className)=>{const n=el('img',null,className);n.src=src;n.alt='';return n;};
   function symbol(kind){
@@ -33,12 +34,12 @@
   function art(step){const container=$('art');container.replaceChildren();
     if(step===4){container.append(el('div',null,'glass-shield'),el('div',null,'orbit'));return;}
     if(step===5){const tunnel=el('div',null,'tunnel');tunnel.append(el('div',null,'glass-shield'));container.append(tunnel);return;}
-    container.append(image('branding/soulu-512.png','hero-logo'));
+    container.append(image('branding/sona-512.png','hero-logo'));
     if(step===2||step===3){const data=el('div',null,'data-art');for(const kind of ['bookmark','clock','key']){const tile=el('span');tile.append(symbol(kind));data.append(tile);}container.append(data);}
   }
-  function summary(){const ul=el('ul',null,'summary');const r=flow.importReport;
-    const values=[r?(r.imported>0?`Импортировано паролей: ${r.imported}${r.status!=='ok'?' · частично':''}`:'Пароли не импортированы'):(flow.importStarted?'Импорт прерван — проверь менеджер паролей':'Импорт пропущен'),flow.privacyApplied?'Приватность настроена':'Приватность: текущие настройки сохранены',flow.vpnAdded?'VPN добавлен':'VPN можно добавить позже'];
-    const successes=[!!r&&r.imported>0,flow.privacyApplied,flow.vpnAdded];
+  function summary(){const ul=el('ul',null,'summary');
+    const values=[flow.privacyApplied?'Приватность настроена':'Приватность: текущие настройки сохранены',flow.vpnAdded?'VPN добавлен':'VPN можно добавить позже'];
+    const successes=[flow.privacyApplied,flow.vpnAdded];
     values.forEach((text,i)=>{const li=el('li',null,successes[i]?'':'pending');li.append(el('span',successes[i]?'✓':'—'),document.createTextNode(text));ul.append(li);});$('controls').append(ul);
   }
   function render(clearMessage=true){
@@ -54,29 +55,26 @@
     const finish=skip=>invoke('finish',{skip});
     if(step===1){note('Первичная настройка займёт пару минут.');actions.append(button('Начать',()=>go(2),'primary'),button('Не сейчас',()=>finish(true)));}
     if(step===2){
-      for(const s of sources)check(controls,`${s.browser} · ${s.name}`,flow.source===s.id,()=>persist({source:s.id}),{icon:s.icon,radio:true,disabled:!!flow.importStarted});
-      if(flow.importStarted)note('Выбранный источник уже использован. Дополнительный импорт доступен в настройках.');
+      for(const s of sources)check(controls,`${s.browser} · ${s.name}`,flow.source===s.id,()=>persist({source:s.id}),{icon:s.icon,radio:true});
       if(sources.length)controls.append(button('Начать с чистого листа',()=>go(4),'link'));
-      actions.append(button('Назад',()=>go(1)),button('Пропустить',()=>go(4)),button(sources.length?'Далее':'Начать с чистого листа',()=>go(source?3:4),'primary'));
+      actions.append(button('Назад',()=>go(1)),button('Пропустить',()=>go(4)),button(sources.length?'Далее':'Выбрать файл',()=>go(3),'primary'));
     }
     if(step===3){
-      const chip=el('div',null,'source-chip');if(source?.icon)chip.append(image(source.icon));chip.append(document.createTextNode(`Источник: ${source?.browser||'недоступен'}${source?' · '+source.name:''}`));controls.append(chip);
-      const types=el('div',null,'types');controls.append(types);
-      check(types,'Закладки',false,()=>{}, {className:'type',symbol:'bookmark',detail:'Пока не поддерживается',disabled:true});
-      check(types,'История',false,()=>{}, {className:'type',symbol:'clock',detail:'Пока не поддерживается',disabled:true});
-      check(types,'Логины и пароли',flow.passwords!==false,v=>persist({passwords:v}),{className:'type',symbol:'key',disabled:!source||!!flow.importStarted});
-      note('Импорт выполняется локально. Защищённые и неподдерживаемые записи не обходятся. Дополнительный импорт доступен в настройках.');
-      if(flow.importReport){const r=flow.importReport;$('message').textContent=`Импортировано: ${r.imported}. Уже есть / пропущено: ${r.skipped}. Защищено: ${r.protected}. Ошибки: ${r.failed}.\n${r.status==='error'?r.message:'Можно продолжить настройку.'}`;}
-      else if(flow.importStarted)$('message').textContent='Импорт мог завершиться до закрытия браузера. Повторный импорт автоматически не запускается; проверь пароли в настройках.';
-      actions.append(button('Назад',()=>go(2)),button('Пропустить',()=>go(4)));
-      const primary=button(flow.importStarted?'Продолжить':'Импортировать',async()=>{if(flow.importStarted){await go(4);return;}await persist({passwords:flow.passwords!==false});await invoke('import');await reload();if(flow.importReport?.status==='ok'&&flow.importReport.imported>0)await go(4);else render();},'primary');
-      primary.dataset.unavailable=String(!flow.importStarted&&(!source||flow.passwords===false));actions.append(primary);
+      if(source){
+        const chip=el('div',null,'source-chip');
+        if(source.icon)chip.append(image(source.icon));
+        chip.append(document.createTextNode(`${source.browser} · ${source.name}`));
+        controls.append(chip);
+      }
+      note('Можно выбрать профиль браузера или файл с данными.');
+      actions.append(button('Назад',()=>go(2)),button('Продолжить',()=>go(4)),
+        button('Открыть импорт',()=>openImport(source?.id),'primary'));
     }
     if(step===4){controls.className='privacy';
       check(controls,'Блокировать рекламу',flow.adblock,v=>persist({adblock:v}),{symbol:'shield',detail:'Скрывать рекламные элементы на сайтах.'});
       check(controls,'Проверять разрешения сайтов',flow.askPermissions,v=>persist({askPermissions:v}),{symbol:'lock',detail:'Показывать запросы на доступ к камере, микрофону и геолокации. Если выключено — запрещать доступ.'});
       note('Расширенные правила и исключения доступны в настройках.');
-      actions.append(button('Назад',()=>go(source?3:2)),button('Пропустить',()=>go(5)),button('Продолжить',async()=>{await invoke('privacy');flow.privacyApplied=true;await go(5);},'primary'));
+      actions.append(button('Назад',()=>go(3)),button('Пропустить',()=>go(5)),button('Продолжить',async()=>{await invoke('privacy');flow.privacyApplied=true;await go(5);},'primary'));
     }else controls.className='';
     if(step===5){const input=el('input',null,'vpn-input');input.id='vpnKey';input.type='password';input.autocomplete='off';input.placeholder='Вставь ключ или ссылку подключения';input.setAttribute('aria-label','Ключ подключения VPN');input.value=vpnDraft;input.maxLength=16384;input.oninput=()=>{vpnDraft=input.value;$('message').textContent='';};controls.append(input);
       note('Поддерживаются ключи Xray (VLESS) и Sudoku');
@@ -89,12 +87,37 @@
     disable();
     if(focused)for(const n of document.querySelectorAll('input'))if(n.getAttribute('aria-label')===focused)n.focus();
   }
-  async function reload(){const state=await invoke('get');flow=state.flow;sources=state.sources;
-    if(!flow.source&&sources.length)flow.source=sources[0].id;
-    if(flow.passwords===undefined)flow.passwords=true;
+  async function reload(){const state=await invoke('get');flow=state.flow;sources=state.sources;activeProfileId=state.activeProfileId;
+    if(!sources.some(source=>source.id===flow.source))flow.source=sources[0]?.id||'';
     if(flow.adblock===undefined)flow.adblock=state.policy.blocking.enabled;
     if(flow.askPermissions===undefined)flow.askPermissions=['camera','microphone','geolocation','notifications'].every(k=>state.policy.defaults[k]===1);
   }
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault();return;}if(e.key==='Enter'&&e.target.tagName!=='BUTTON'&&!['checkbox','radio'].includes(e.target.type)){const primary=$('actions').querySelector('.primary');if(primary&&!primary.disabled){e.preventDefault();primary.click();}}});
-  run(async()=>{await reload();await persist({source:flow.source||'',passwords:flow.passwords,adblock:flow.adblock,askPermissions:flow.askPermissions});render();($('vpnKey')||$('actions').querySelector('.primary'))?.focus();}).catch(report);
+  function openImport(sourceHint){
+    return window.souluBrowserImport.open({
+      sourceHint,
+      currentProfileOnly:true,
+      api:{
+        getState:async()=>({activeProfileId,profiles:[{id:activeProfileId,name:'Текущий профиль'}]}),
+        browserImport:(action,payload)=>request('browser.import.'+action,payload)
+      },
+      ui:{
+        t:ru=>ru,
+        el,
+        button:(text,fn,kind)=>{
+          const control=el('button',text,kind);
+          control.type='button';
+          control.onclick=()=>Promise.resolve().then(fn).catch(report);
+          return control;
+        },
+        dialog:(title,build)=>{
+          $('actionTitle').textContent=title;
+          $('actionContent').replaceChildren();
+          build($('actionContent'));
+          $('actionDialog').showModal();
+        }
+      }
+    });
+  }
+  document.addEventListener('keydown',e=>{if($('actionDialog').open)return;if(e.key==='Escape'){e.preventDefault();return;}if(e.key==='Enter'&&e.target.tagName!=='BUTTON'&&!['checkbox','radio'].includes(e.target.type)){const primary=$('actions').querySelector('.primary');if(primary&&!primary.disabled){e.preventDefault();primary.click();}}});
+  run(async()=>{await reload();await persist({source:flow.source||'',adblock:flow.adblock,askPermissions:flow.askPermissions});render();($('vpnKey')||$('actions').querySelector('.primary'))?.focus();}).catch(report);
 })();

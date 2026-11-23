@@ -30,7 +30,9 @@ class SettingsOverlay final {
   void ResizeTick();
   void ClipPanel();
   void CaptureBackground();
-  HBITMAP backdrop_ = nullptr;
+  void PaintPanelShadow(HDC dc);
+  HBITMAP backdrop_ = nullptr, shadow_ = nullptr;
+  int panel_y_ = 0, shadow_panel_width_ = 0, shadow_panel_height_ = 0, shadow_radius_ = 0;
   int backdrop_width_ = 0, backdrop_height_ = 0;
   HWND owner_ = nullptr, hwnd_ = nullptr, browser_ = nullptr;
   std::function<void()> closed_, request_close_;

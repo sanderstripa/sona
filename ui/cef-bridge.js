@@ -53,6 +53,8 @@
     passwordSources: () => invoke("browser.import.sources"),
     passwordBrowsers: () => invoke("browser.import.browsers"),
     importPasswords: value => invoke("browser.import.passwords", value),
+    adblockStatus: () => invoke("browser.adblock.status"),
+    updateAdblockFilters: () => invoke("browser.adblock.update"),
     browserImport: (action, value) => invoke("browser.import." + action, value),
     getSiteRules: () => invoke("browser.sites.get"),
     setSiteRule: value => invoke("browser.sites.set", value),
@@ -61,6 +63,7 @@
     checkUpdates: () => invoke("browser.update.check"),
     switchTab: id => invoke("browser.switchTab", id),
     closeTab: id => invoke("browser.closeTab", id),
+    reorderTab: (id,target) => invoke("browser.reorderTab",{id,target}),
     pinTab: id => invoke("browser.pinTab", id),
     setBookmarksSidebar: async value => {
       await invoke("browser.bookmarks.sidebar", value);

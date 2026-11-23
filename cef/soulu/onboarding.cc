@@ -6,6 +6,7 @@
 #include <shlobj.h>
 #include <algorithm>
 #include <functional>
+#include <exception>
 
 namespace soulu {
 namespace {
@@ -54,7 +55,7 @@ bool BrowserWindow::OpenDefaultBrowserSettings() {
   if(!RegisterDefaultBrowser())return false;
   SHChangeNotify(SHCNE_ASSOCCHANGED,SHCNF_IDLIST,nullptr,nullptr);
   return reinterpret_cast<INT_PTR>(ShellExecuteW(hwnd_,L"open",
-      L"ms-settings:defaultapps?registeredAppUser=Soulu",nullptr,nullptr,SW_SHOWNORMAL))>32;
+      L"ms-settings:defaultapps?registeredAppUser=Sona%20Preview",nullptr,nullptr,SW_SHOWNORMAL))>32;
 }
 bool BrowserWindow::IsOnboardingUi(const std::string& url) const {
   return url==InternalUrl("soulu://onboarding");
@@ -83,30 +84,52 @@ void BrowserWindow::HandleOnboardingBridge(int id,const std::string& request,
   if(!json||json->GetType()!=VTYPE_DICTIONARY){callback->Failure(400,"Invalid request");return;}
   auto root=json->GetDictionary();const std::string action=root->GetString("action");
   auto payload=root->GetDictionary("payload");auto flow=OnboardingState();
+  if(action=="browser.import.catalog"||action=="browser.import.capabilities"||
+     action=="browser.import.file"||action=="browser.import.portable"||
+     action=="browser.import.progress"||action=="browser.import.cancel"||
+     action=="browser.import.run") {
+    if(action=="browser.import.run"&&(!payload||payload->GetString("target")!=active_profile_id_)) {
+      callback->Failure(403,"First-run import requires the active profile");return;
+    }
+    HandleBridge(request,callback,true);return;
+  }
   auto save=[&](){if(!SaveOnboarding(flow)){callback->Failure(500,"Unable to save first-run progress");return false;}return true;};
   if(action=="onboarding.get") {
     auto result=CefDictionaryValue::Create();result->SetDictionary("flow",flow);
-    auto browsers=DiscoverImportBrowsers(),sources=DiscoverPasswordSources(),eligible=CefListValue::Create();
-    for(size_t i=0;i<sources->GetSize();++i){auto source=sources->GetDictionary(i);
-      for(size_t n=0;n<browsers->GetSize();++n){auto browser=browsers->GetDictionary(n);
-        if(browser->GetBool("installed")&&browser->GetString("browser")==source->GetString("browser")){
-          auto row=source->Copy(false);row->SetString("icon",browser->GetString("icon"));
-          eligible->SetDictionary(eligible->GetSize(),row);break;
-        }}
-    }
-    result->SetList("sources",eligible);result->SetDictionary("policy",policies_[active_profile_id_]->Snapshot());
-    Reply(callback,result);return;
+    result->SetString("activeProfileId",active_profile_id_);
+    result->SetDictionary("policy",policies_[active_profile_id_]->Snapshot());
+    CefRefPtr<BrowserWindow> self=this;
+    CefPostTask(TID_FILE_BACKGROUND,new OnboardingTask([self,callback,result](){
+      auto eligible=CefListValue::Create();
+      try {
+        auto browser_icons=DiscoverImportBrowsers();
+        for(const auto& source:BrowserImportSources()){
+          auto row=CefDictionaryValue::Create();
+          row->SetString("id",source.id);
+          row->SetString("name",source.name);
+          row->SetString("browser",source.browser);
+          for(size_t n=0;n<browser_icons->GetSize();++n){
+            auto browser=browser_icons->GetDictionary(n);
+            if(browser->GetString("browser")==source.browser){
+              row->SetString("icon",browser->GetString("icon"));break;
+            }
+          }
+          eligible->SetDictionary(eligible->GetSize(),row);
+        }
+      }catch(const std::exception&){
+        // The file picker remains usable if profile discovery fails.
+      }
+      result->SetList("sources",eligible);
+      CefPostTask(TID_UI,new OnboardingTask([self,callback,result](){self->Reply(callback,result);}));
+    }));return;
   }
   if(action=="onboarding.progress") {
     if(!payload){callback->Failure(400,"Progress required");return;}
     const int step=payload->GetInt("step");
     if(step<1||step>6){callback->Failure(400,"Invalid step");return;}
-    if(flow->GetBool("importStarted")&&payload->HasKey("source")&&payload->GetString("source")!=flow->GetString("source")){
-      callback->Failure(409,"This source was already used. Additional import is available in Settings.");return;
-    }
     // Only draft choices are writable from JS; outcomes belong to native code.
     flow->SetInt("step",step);
-    for(const auto* key:{"source","passwords","adblock","askPermissions"})
+    for(const auto* key:{"source","adblock","askPermissions"})
       if(payload->HasKey(key)){
         if((std::string(key)=="source"&&payload->GetType(key)!=VTYPE_STRING)||
            (std::string(key)!="source"&&payload->GetType(key)!=VTYPE_BOOL)){
@@ -115,37 +138,6 @@ void BrowserWindow::HandleOnboardingBridge(int id,const std::string& request,
         flow->SetValue(key,payload->GetValue(key)->Copy());
       }
     if(save())Reply(callback,flow);return;
-  }
-  if(action=="onboarding.import") {
-    if(std::any_of(windows_.begin(),windows_.end(),[](BrowserWindow* window){return window->importing_;})){callback->Failure(409,"Import in progress");return;}
-    if(flow->GetDictionary("importReport")){Reply(callback,flow);return;}
-    // Revalidate detected ∩ supported at the time of the operation.
-    const std::string source=flow->GetString("source");bool eligible=false;
-    auto sources=DiscoverPasswordSources(),browsers=DiscoverImportBrowsers();
-    for(size_t i=0;i<sources->GetSize();++i){auto row=sources->GetDictionary(i);
-      if(row->GetString("id")!=source)continue;
-      for(size_t n=0;n<browsers->GetSize();++n){auto b=browsers->GetDictionary(n);
-        if(b->GetBool("installed")&&b->GetString("browser")==row->GetString("browser"))eligible=true;}}
-    if(!eligible||!flow->GetBool("passwords")){callback->Failure(400,"Select an available password source");return;}
-    // Persist intent before importing. A crash never automatically retries it.
-    if(flow->GetBool("importStarted")){callback->Failure(409,"Previous import may have completed. Continue or use Settings to retry.");return;}
-    flow->SetBool("importStarted",true);if(!save())return;
-    importing_=true;const std::string target=active_profile_id_;CefRefPtr<BrowserWindow> self=this;
-    CefPostTask(TID_FILE_BACKGROUND,new OnboardingTask([self,callback,target,source](){
-      auto report=ImportPasswords(source,target);
-      CefPostTask(TID_UI,new OnboardingTask([self,callback,target,report](){
-        // Profile switches cannot redirect completion into another profile.
-        auto config=ReadJson(ProfileRoot(target)/L"soulu-settings.json");
-        bool saved=false;
-        if(config&&config->GetType()==VTYPE_DICTIONARY){auto d=config->GetDictionary()->Copy(false);
-          auto f=d->GetDictionary("onboarding");
-          if(f){f->SetDictionary("importReport",report->Copy(false));saved=WriteJson(ProfileRoot(target)/L"soulu-settings.json",Value(d));
-            if(saved&&target==self->active_profile_id_)self->settings_=d;}}
-        self->importing_=false;
-        if(saved)self->Reply(callback,report);else callback->Failure(500,"Import ran but its report could not be saved. Continue without retrying.");
-        if(self->close_after_import_)self->CloseAll();
-      }));
-    }));return;
   }
   if(importing_){callback->Failure(409,"Wait for import to finish");return;}
   if(action=="onboarding.privacy") {
@@ -160,7 +152,7 @@ void BrowserWindow::HandleOnboardingBridge(int id,const std::string& request,
   if(action=="onboarding.vpn") {
     if(!payload||payload->GetString("link").empty()||payload->GetString("link").size()>16384){callback->Failure(400,"VPN key required");return;}
     auto native=CefDictionaryValue::Create();native->SetString("action","save_profile");
-    native->SetString("id",flow->GetString("vpnId"));native->SetString("name","Soulu VPN");
+    native->SetString("id",flow->GetString("vpnId"));native->SetString("name","Connect VPN");
     native->SetString("url",payload->GetString("link"));
     // The existing helper is the authority for protocol validation and storage.
     auto saved=SendVpnHelper(native);
@@ -176,7 +168,7 @@ void BrowserWindow::HandleOnboardingBridge(int id,const std::string& request,
     auto result=CefDictionaryValue::Create();
     if(!RegisterDefaultBrowser()){callback->Failure(500,"Unable to register Soulu with Windows Default Apps");return;}
     SHChangeNotify(SHCNE_ASSOCCHANGED,SHCNF_IDLIST,nullptr,nullptr);
-    const auto opened=reinterpret_cast<INT_PTR>(ShellExecuteW(hwnd_,L"open",L"ms-settings:defaultapps?registeredAppUser=Soulu",nullptr,nullptr,SW_SHOWNORMAL));
+    const auto opened=reinterpret_cast<INT_PTR>(ShellExecuteW(hwnd_,L"open",L"ms-settings:defaultapps?registeredAppUser=Sona%20Preview",nullptr,nullptr,SW_SHOWNORMAL));
     result->SetBool("ok",opened>32);result->SetString("message","Выбери Soulu в стандартных приложениях Windows и назначь его для HTTP и HTTPS.");
     Reply(callback,result);return;
   }

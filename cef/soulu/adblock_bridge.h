@@ -6,5 +6,6 @@ bool InitializeAdBlock(const std::string& cache,const std::string& fixture="",bo
 bool MatchAdBlock(const std::string& url,const std::string& source,int type,
                   const std::string& method,std::string* rule=nullptr);
 CefRefPtr<CefDictionaryValue> AdBlockStatus();
+bool RefreshAdBlock();
 CefRefPtr<CefListValue> CosmeticSelectors(const std::string& url,const std::string& tokens);
 }

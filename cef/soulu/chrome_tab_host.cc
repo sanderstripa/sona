@@ -205,14 +205,16 @@ class Host final:public ChromeTabHost,public CefWindowDelegate,public CefBrowser
     return TRUE;
   }
   void FocusNativeContent(){
-    focusing_=true;window_->Activate();
+    focusing_=true;
+    const HWND widget=window_->GetWindowHandle();
+    if(view_)view_->RequestFocus();
     if(auto browser=view_?view_->GetBrowser():nullptr)browser->GetHost()->SetFocus(true);
-    // A Views widget reparented to a foreign Win32 host cannot become the
-    // top-level active HWND. Forward keyboard focus to its visible renderer,
-    // as Windows would when the user clicks the web page.
-    NativeFocusTarget target;
-    EnumChildWindows(window_->GetWindowHandle(),FindRenderer,reinterpret_cast<LPARAM>(&target));
-    if(target.window&&::GetFocus()!=target.window)::SetFocus(target.window);
+    const HWND focused=::GetFocus();
+    if(focused!=widget&&!IsChild(widget,focused)){
+      NativeFocusTarget target;
+      EnumChildWindows(widget,FindRenderer,reinterpret_cast<LPARAM>(&target));
+      if(target.window)::SetFocus(target.window);
+    }
     focusing_=false;KeepBelowShell();
   }
   void Resize(){

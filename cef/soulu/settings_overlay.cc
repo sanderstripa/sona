@@ -4,14 +4,54 @@
 #include <windowsx.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <vector>
 
 namespace soulu {
+namespace {
+HBITMAP CreateSurface(HDC dc, int width, int height, uint32_t** pixels) {
+  BITMAPINFO info{};
+  info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+  info.bmiHeader.biWidth = width;
+  info.bmiHeader.biHeight = -height;
+  info.bmiHeader.biPlanes = 1;
+  info.bmiHeader.biBitCount = 32;
+  void* buffer = nullptr;
+  HBITMAP bitmap = CreateDIBSection(dc, &info, DIB_RGB_COLORS, &buffer, nullptr, 0);
+  *pixels = static_cast<uint32_t*>(buffer);
+  return bitmap;
+}
+
+void BlurLines(const uint32_t* source, uint32_t* target,
+               int length, int lines, int stride, int step, int radius) {
+  for (int line = 0; line < lines; ++line) {
+    auto src = source + line * step;
+    auto dst = target + line * step;
+    int blue = 0, green = 0, red = 0;
+    auto add = [&](int x, int sign) {
+      const auto pixel = src[std::clamp(x, 0, length - 1) * stride];
+      blue += sign * static_cast<int>(pixel & 255);
+      green += sign * static_cast<int>((pixel >> 8) & 255);
+      red += sign * static_cast<int>((pixel >> 16) & 255);
+    };
+    for (int x = -radius; x <= radius; ++x) add(x, 1);
+    const int samples = 2 * radius + 1;
+    for (int x = 0; x < length; ++x) {
+      dst[x * stride] = (red / samples << 16) | (green / samples << 8) | (blue / samples);
+      add(x - radius, -1);
+      add(x + radius + 1, 1);
+    }
+  }
+}
+}
+
 SettingsOverlay::SettingsOverlay(HWND owner, std::function<void()> closed,
     std::function<void()> request_close)
     : owner_(owner), closed_(std::move(closed)), request_close_(std::move(request_close)) {}
 SettingsOverlay::~SettingsOverlay() {
   if (IsWindow(hwnd_)) DestroyWindow(hwnd_);
   if (backdrop_) DeleteObject(backdrop_);
+  if (shadow_) DeleteObject(shadow_);
 }
 void SettingsOverlay::CaptureBackground() {
   RECT bounds{};
@@ -23,22 +63,73 @@ void SettingsOverlay::CaptureBackground() {
   HDC screen = GetDC(nullptr);
   if (!screen) return;
   HDC memory = CreateCompatibleDC(screen);
-  backdrop_width_ = std::max(1, width / 16);
-  backdrop_height_ = std::max(1, height / 16);
+  backdrop_width_ = std::max(1, width / 2);
+  backdrop_height_ = std::max(1, height / 2);
   if (memory) {
-    backdrop_ = CreateCompatibleBitmap(screen, backdrop_width_, backdrop_height_);
+    uint32_t* pixels = nullptr;
+    backdrop_ = CreateSurface(screen, backdrop_width_, backdrop_height_, &pixels);
     if (backdrop_) {
       HGDIOBJ previous = SelectObject(memory, backdrop_);
       SetStretchBltMode(memory, HALFTONE);
+      SetBrushOrgEx(memory, 0, 0, nullptr);
       const BOOL copied = StretchBlt(memory, 0, 0, backdrop_width_, backdrop_height_,
           screen, origin.x, origin.y, width, height, SRCCOPY);
+      GdiFlush();
       SelectObject(memory, previous);
-      if (!copied) { DeleteObject(backdrop_); backdrop_ = nullptr; }
+      if (copied) {
+        const int radius = std::max(1, MulDiv(7, GetDpiForWindow(owner_), 96));
+        std::vector<uint32_t> horizontal(static_cast<size_t>(backdrop_width_) * backdrop_height_);
+        for (int pass = 0; pass < 2; ++pass) {
+          BlurLines(pixels, horizontal.data(), backdrop_width_, backdrop_height_, 1, backdrop_width_, radius);
+          BlurLines(horizontal.data(), pixels, backdrop_height_, backdrop_width_, backdrop_width_, 1, radius);
+        }
+      } else {
+        DeleteObject(backdrop_);
+        backdrop_ = nullptr;
+      }
     }
     DeleteDC(memory);
   }
   ReleaseDC(nullptr, screen);
 }
+void SettingsOverlay::PaintPanelShadow(HDC dc) {
+  if (!browser_ || state_ == State::Loading || panel_y_ + panel_height_ <= 0) return;
+  const int radius = std::max(1, MulDiv(22, GetDpiForWindow(owner_), 96));
+  const int width = panel_width_ + 2 * radius;
+  const int height = panel_height_ + 2 * radius;
+  if (!shadow_ || shadow_panel_width_ != panel_width_ || shadow_radius_ != radius ||
+      shadow_panel_height_ != panel_height_) {
+    if (shadow_) DeleteObject(shadow_);
+    uint32_t* pixels = nullptr;
+    shadow_ = CreateSurface(dc, width, height, &pixels);
+    if (!shadow_) return;
+    shadow_panel_width_ = panel_width_;
+    shadow_panel_height_ = panel_height_;
+    shadow_radius_ = radius;
+    const int corner = MulDiv(12, GetDpiForWindow(owner_), 96);
+    for (int y = 0; y < height; ++y) {
+      const int dy = std::max({radius - y, y - (radius + panel_height_ - corner), 0});
+      for (int x = 0; x < width; ++x) {
+        const int inset = y > radius + panel_height_ - corner ? corner : 0;
+        const int dx = std::max({radius + inset - x, x - (radius + panel_width_ - inset), 0});
+        const float edge_distance = dx && dy ? std::hypot(float(dx), float(dy))
+                                              : static_cast<float>(std::max(dx, dy));
+        const float distance = std::max(0.f, edge_distance - inset);
+        const float strength = std::max(0.f, 1.f - distance / radius);
+        pixels[y * width + x] = static_cast<uint32_t>(76 * strength * strength) << 24;
+      }
+    }
+  }
+  if (HDC memory = CreateCompatibleDC(dc)) {
+    HGDIOBJ previous = SelectObject(memory, shadow_);
+    const BLENDFUNCTION alpha{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    AlphaBlend(dc, (width_ - width) / 2, panel_y_ - radius + radius / 4,
+        width, height, memory, 0, 0, width, height, alpha);
+    SelectObject(memory, previous);
+    DeleteDC(memory);
+  }
+}
+
 bool SettingsOverlay::Create() {
   CaptureBackground();
   WNDCLASSEXW wc = {sizeof(wc)};
@@ -130,15 +221,21 @@ void SettingsOverlay::ClipPanel() {
 void SettingsOverlay::PlacePanel() {
   if (!browser_) return;
   const float distance = reduced_ ? std::min(12, panel_height_) : panel_height_;
-  int y = static_cast<int>(std::round(-(1-progress_) * distance));
-  if (state_ == State::Loading) y = -panel_height_;
-  SetWindowPos(browser_, HWND_TOP, (width_-panel_width_)/2, y,
+  const int old_y = panel_y_;
+  panel_y_ = state_ == State::Loading ? -panel_height_ :
+      static_cast<int>(std::round(-(1-progress_) * distance));
+  SetWindowPos(browser_, HWND_TOP, (width_-panel_width_)/2, panel_y_,
       panel_width_, panel_height_, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+  const int margin = MulDiv(30, GetDpiForWindow(owner_), 96);
+  RECT changed{0, std::min(old_y, panel_y_) - margin, width_,
+               std::max(old_y, panel_y_) + panel_height_ + margin};
+  InvalidateRect(hwnd_, &changed, FALSE);
 }
 void SettingsOverlay::Tick() {
   const float fraction = std::min(1.f, static_cast<float>(GetTickCount64()-start_) / duration_);
-  const float eased = fraction >= 1 ? 1 : motion::EaseOut(fraction);
-  progress_ = state_ == State::Closing ? close_start_ * (1-eased) : eased;
+  progress_ = state_ == State::Closing
+      ? close_start_ * motion::EaseOut(1-fraction)
+      : motion::EaseOut(fraction);
   ++ticks_;
   PlacePanel();
   if (fraction < 1) return;
@@ -173,6 +270,7 @@ LRESULT CALLBACK SettingsOverlay::Proc(HWND hwnd, UINT message, WPARAM wp, LPARA
       } else {
         FillRect(dc, &paint.rcPaint, GetSysColorBrush(COLOR_WINDOW));
       }
+      self->PaintPanelShadow(dc);
       EndPaint(hwnd, &paint);
       return 0;
     }

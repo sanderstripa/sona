@@ -163,6 +163,24 @@ class Query {
   int Int(int c){return sqlite3_column_int(s_,c);}
   sqlite3_int64 Int64(int c){return sqlite3_column_int64(s_,c);}
   double Number(int c){return sqlite3_column_double(s_,c);}
+  void BindUrl(const std::string& url) {
+    sqlite3_reset(s_);
+    if(sqlite3_bind_text(s_,1,url.c_str(),static_cast<int>(url.size()),SQLITE_TRANSIENT)!=SQLITE_OK)
+      throw std::runtime_error("Unable to look up favicon");
+  }
+  std::string PngDataUrl(int column) {
+    const auto* bytes=static_cast<const unsigned char*>(sqlite3_column_blob(s_,column));
+    const int size=sqlite3_column_bytes(s_,column);
+    static constexpr unsigned char signature[]{137,80,78,71,13,10,26,10};
+    if(!bytes||size<24||size>47*1024||!std::equal(signature,signature+sizeof(signature),bytes))return {};
+    const auto dimension=[&](int offset){
+      uint32_t value=0;
+      for(int i=0;i<4;++i)value=(value<<8)|bytes[offset+i];
+      return value;
+    };
+    if(dimension(16)==0||dimension(16)>512||dimension(20)==0||dimension(20)>512)return {};
+    return "data:image/png;base64,"+CefBase64Encode(bytes,size).ToString();
+  }
  private:sqlite3_stmt* s_=nullptr;
 };
 CefRefPtr<CefDictionaryValue> Report(){auto r=CefDictionaryValue::Create();r->SetInt("imported",0);r->SetInt("skipped",0);r->SetInt("failed",0);r->SetString("status","ok");return r;}
@@ -432,10 +450,44 @@ CefRefPtr<CefDictionaryValue> BrowserImportCapabilities(const ImportSource& sour
     else{if(header.size()<8||header.compare(0,4,"SNSS"))throw std::runtime_error("Invalid Chromium session");auto version=U32(header,4);if(version!=1&&version!=3)throw std::runtime_error("Encrypted or unsupported session: use Open tabs HTML export");}
     add("tabs","available","Only normal-tab URLs; source records are checked when Import starts");
   }catch(const std::exception& e){add("tabs",std::string(e.what())=="Session data not found"?"not_found":"blocked",e.what());}
-  add("favicons","unsupported","Separate favicon database conversion unavailable; safe HTML icons can be imported");
+
   add("preferences","unsupported","Foreign settings have no verified mapping");
   add("other","unsupported","Downloads and extension transfer have no verified binding");return caps;
 }
+namespace {
+void AddImportedFavicons(const ImportSource& source, CefRefPtr<CefListValue> nodes,
+                         const std::shared_ptr<ImportControl>& control) {
+  const bool firefox=source.family=="firefox";
+  auto path=source.root/(firefox?L"favicons.sqlite":L"Favicons");
+  if(!File(path)||control->cancelled)return;
+  try {
+    DatabaseSnapshot database(path);
+    Query icon(database.db(),firefox
+      ? "SELECT i.data FROM moz_pages_w_icons p JOIN moz_icons_to_pages m ON m.page_id=p.id "
+        "JOIN moz_icons i ON i.id=m.icon_id WHERE p.page_url=?1 ORDER BY abs(i.width-32) LIMIT 4"
+      : "SELECT b.image_data FROM icon_mapping m JOIN favicon_bitmaps b ON b.icon_id=m.icon_id "
+        "WHERE m.page_url=?1 ORDER BY abs(b.width-32),b.last_updated DESC LIMIT 4");
+    size_t remaining=8*1024*1024;
+    std::function<void(CefRefPtr<CefListValue>)> visit=[&](CefRefPtr<CefListValue> list) {
+      for(size_t i=0;i<list->GetSize()&&remaining&&!control->cancelled;++i) {
+        auto node=list->GetDictionary(i);
+        if(node->GetString("type")=="folder"){visit(node->GetList("children"));continue;}
+        icon.BindUrl(node->GetString("url").ToString());
+        while(icon.Next()){
+          auto data=icon.PngDataUrl(0);
+          if(data.empty())continue;
+          if(data.size()<=remaining){remaining-=data.size();node->SetString("favicon",data);}
+          break;
+        }
+      }
+    };
+    visit(nodes);
+  } catch(const std::exception&) {
+    // A locked or older favicon cache does not block importing bookmark links.
+  }
+}
+}
+
 CefRefPtr<CefListValue> ReadImportBookmarks(const ImportSource& source,const std::shared_ptr<ImportControl>& control){
   auto nodes=CefListValue::Create();size_t total=0;
   if(source.family=="chromium"){
@@ -475,6 +527,7 @@ CefRefPtr<CefListValue> ReadImportBookmarks(const ImportSource& source,const std
       }ancestors.erase(parent);
     };walk(root,nodes,0);
   }else throw std::runtime_error("Unsupported source adapter");
+  AddImportedFavicons(source,nodes,control);
   return nodes;
 }
 CefRefPtr<CefListValue> MergeImportBookmarks(CefRefPtr<CefListValue> existing,CefRefPtr<CefListValue> nodes,const std::string& target,CefRefPtr<CefDictionaryValue> report,const std::shared_ptr<ImportControl>& control){
@@ -493,11 +546,17 @@ CefRefPtr<CefListValue> MergeImportBookmarks(CefRefPtr<CefListValue> existing,Ce
       if(type=="url"&&WebOrigin(url).empty()){Increment(report,"skipped");continue;}
       Key key={parent,type,title,type=="folder"?"":url};CefRefPtr<CefDictionaryValue> match;
       auto found=index.find(key);if(found!=index.end())match=found->second;int order=orders[parent];
-      if(match){Increment(report,"skipped");Increment(report,type=="url"?"bookmarksSkipped":"foldersSkipped");}else{
+      const std::string icon=n->GetString("favicon");
+      const bool valid_icon=icon.size()<=65536&&(icon.rfind("data:image/png;base64,",0)==0||icon.rfind("data:image/x-icon;base64,",0)==0);
+      if(match){
+        if(valid_icon&&match->GetString("favicon").ToString().rfind("data:",0)!=0)match->SetString("favicon",icon);
+        Increment(report,"skipped");Increment(report,type=="url"?"bookmarksSkipped":"foldersSkipped");
+      }else{
         if(++target_count>20000||id>=2147483647)throw std::runtime_error("Target bookmark capacity reached");
         match=CefDictionaryValue::Create();match->SetInt("id",id++);match->SetString("type",type);match->SetString("title",title);match->SetString("url",url);match->SetInt("parentId",parent);match->SetInt("order",order);match->SetString("profileId",target);match->SetDouble("createdAt",HistoryNow());
-        std::string icon=n->GetString("favicon");if(icon.size()<=65536&&(icon.rfind("data:image/png;base64,",0)==0||icon.rfind("data:image/x-icon;base64,",0)==0))match->SetString("favicon",icon);
-        merged->SetDictionary(merged->GetSize(),match->Copy(false));index[key]=match;orders[parent]=order+1;Increment(report,"imported");Increment(report,type=="url"?"bookmarksImported":"foldersImported");
+        if(valid_icon)match->SetString("favicon",icon);
+        const size_t position=merged->GetSize();
+        merged->SetDictionary(position,match->Copy(false));index[key]=merged->GetDictionary(position);orders[parent]=order+1;Increment(report,"imported");Increment(report,type=="url"?"bookmarksImported":"foldersImported");
       }if(type=="folder")walk(n->GetList("children"),match->GetInt("id"),depth+1);
     }
   };walk(nodes,0,0);return merged;

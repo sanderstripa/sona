@@ -101,6 +101,22 @@ class FunctionTask final : public CefTask {
   std::function<void()> function_;
   IMPLEMENT_REFCOUNTING(FunctionTask);
 };
+class BookmarkFaviconDownload final : public CefDownloadImageCallback {
+ public:
+  explicit BookmarkFaviconDownload(std::function<void(std::string)> done):done_(std::move(done)){}
+  void OnDownloadImageFinished(const CefString&, int status, CefRefPtr<CefImage> image) override {
+    if(status<200||status>=300||!image)return;
+    int width=0,height=0;
+    auto png=image->GetAsPNG(1.0f,true,width,height);
+    if(!png||png->GetSize()>32*1024||width<=0||height<=0||width>64||height>64)return;
+    std::string bytes(png->GetSize(),'\0');
+    if(png->GetData(bytes.data(),bytes.size(),0)!=bytes.size())return;
+    done_("data:image/png;base64,"+CefBase64Encode(bytes.data(),bytes.size()).ToString());
+  }
+ private:
+  std::function<void(std::string)> done_;
+  IMPLEMENT_REFCOUNTING(BookmarkFaviconDownload);
+};
 // Observe the actual lifecycle acknowledgement; never report a rejected freeze as applied.
 class LifecycleJob final : public CefDevToolsMessageObserver {
  public:
@@ -1509,11 +1525,39 @@ void BrowserWindow::UpdateAddress(int id, const std::string& url) {
   EmitState();
 }
 void BrowserWindow::UpdateFavicon(int id, const std::string& url) {
-  if (auto* tab = FindTab(id)) {
-    tab->favicon=url;bool changed=false;
-    if(!url.empty()&&!tab->incognito)for(size_t i=0;i<bookmarks_->GetSize();++i){auto mark=bookmarks_->GetDictionary(i);
-      if(mark&&mark->GetString("profileId")==tab->profile_id&&mark->GetString("url")==tab->url&&mark->GetString("favicon")!=url){mark->SetString("favicon",url);changed=true;}}
-    if(changed){SaveBookmarks(bookmarks_);RefreshHomePages();}
+  auto* tab=FindTab(id);
+  if(tab){
+    tab->favicon=url;
+    const std::string page=tab->url,profile=tab->profile_id;
+    const auto needs_icon=[&](CefRefPtr<CefDictionaryValue> mark) {
+      return mark&&mark->GetString("profileId")==profile&&mark->GetString("url")==page&&
+        mark->GetString("favicon").ToString().rfind("data:",0)!=0;
+    };
+    if(!tab->incognito&&tab->browser&&!WebOrigin(url).empty()&&!WebOrigin(page).empty()){
+      bool needed=false;
+      for(size_t i=0;i<bookmarks_->GetSize()&&!needed;++i)needed=needs_icon(bookmarks_->GetDictionary(i));
+      if(needed){
+        CefRefPtr<BrowserWindow> self=this;
+        tab->browser->GetHost()->DownloadImage(url,true,64,false,new BookmarkFaviconDownload(
+          [self,profile,page](std::string data){
+            if(self->closing_||std::any_of(windows_.begin(),windows_.end(),[](BrowserWindow* w){return w->importing_;}))return;
+            auto rows=self->bookmarks_->Copy();
+            bool changed=false;
+            for(size_t i=0;i<rows->GetSize();++i){
+              auto mark=rows->GetDictionary(i);
+              if(mark&&mark->GetString("profileId")==profile&&mark->GetString("url")==page&&
+                 mark->GetString("favicon").ToString().rfind("data:",0)!=0){
+                mark->SetString("favicon",data);changed=true;
+              }
+            }
+            if(changed&&self->SaveBookmarks(rows))for(auto* window:windows_){
+              window->bookmarks_=rows->Copy();
+              window->RefreshHomePages();
+              window->EmitState();
+            }
+          }));
+      }
+    }
   }
   UpdateHistory(id);
   EmitState();
@@ -1655,7 +1699,9 @@ bool BrowserWindow::SaveBookmarks(CefRefPtr<CefListValue> rows) const {
   const auto temp=UserDataDirectory()/L"bookmarks.json.tmp";
   {std::ofstream file(temp,std::ios::binary|std::ios::trunc); auto persistent=CefListValue::Create();
     for(size_t i=0;i<rows->GetSize();++i) {auto row=rows->GetDictionary(i);if(row && row->GetString("profileId")!="__incognito__") persistent->SetDictionary(persistent->GetSize(),row->Copy(false));}
-    file<<CefWriteJSON(Wrap(persistent),JSON_WRITER_PRETTY_PRINT); file.flush(); if(!file.good()) return false;}
+    auto json=CefWriteJSON(Wrap(persistent),JSON_WRITER_PRETTY_PRINT);
+    if(json.empty()||json.size()>32*1024*1024)return false;
+    file<<json; file.flush(); if(!file.good()) return false;}
   return MoveFileExW(temp.c_str(),path.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)!=FALSE;
 }
 
@@ -2565,6 +2611,18 @@ void BrowserWindow::HandleBridge(const std::string& request,
       auto result=CefDictionaryValue::Create();result->SetString("id",profile.id);result->SetString("name",profile.name);return Reply(callback,result);
     }catch(const std::exception&){if(profiles_.size()>previous_size)profiles_.resize(previous_size);policies_.erase(id);callback->Failure(500,"Could not create the import target; existing profiles were preserved");return;}
   }
+  else if(action=="browser.adblock.status"||action=="browser.adblock.update") {
+    if(!settings_source){callback->Failure(403,"Filter updates require settings");return;}
+    if(action=="browser.adblock.status")return Reply(callback,AdBlockStatus());
+    CefPostTask(TID_FILE_BACKGROUND,new FunctionTask([self=CefRefPtr<BrowserWindow>(this),callback](){
+      const bool enabled=RefreshAdBlock();
+      auto status=AdBlockStatus();
+      CefPostTask(TID_UI,new FunctionTask([self,callback,enabled,status](){
+        if(!enabled){callback->Failure(503,"Filter updates are unavailable");return;}
+        self->Reply(callback,status);
+      }));
+    }));return;
+  }
   else if(action=="browser.import.catalog"){
     CefPostTask(TID_FILE_BACKGROUND,new FunctionTask([self=CefRefPtr<BrowserWindow>(this),callback](){
       try{auto rows=BrowserImportCatalog();CefPostTask(TID_UI,new FunctionTask([self,callback,rows](){self->Reply(callback,Wrap(rows));}));}
@@ -2721,6 +2779,22 @@ void BrowserWindow::HandleBridge(const std::string& request,
   }
   else if (action == "browser.switchTab") SwitchTab(payload->GetInt());
   else if (action == "browser.closeTab") CloseTab(payload->GetInt());
+  else if (action == "browser.reorderTab") {
+    auto move=payload&&payload->GetType()==VTYPE_DICTIONARY?payload->GetDictionary():nullptr;
+    if(!move){callback->Failure(400,"Missing tab position");return;}
+    auto dragged=FindTab(move->GetInt("id")),target=FindTab(move->GetInt("target"));
+    const auto profile=VisibleProfileId();
+    if(!dragged||!target||dragged->profile_id!=profile||target->profile_id!=profile||
+       dragged->incognito!=target->incognito||dragged->pinned!=target->pinned){
+      callback->Failure(404,"Tab position is no longer available");return;
+    }
+    if(dragged!=target){
+      const size_t from=dragged-tabs_.data(),to=target-tabs_.data();
+      if(from<to)std::rotate(tabs_.begin()+from,tabs_.begin()+from+1,tabs_.begin()+to+1);
+      else std::rotate(tabs_.begin()+to,tabs_.begin()+from,tabs_.begin()+from+1);
+      EmitState();
+    }
+  }
   else if (action == "browser.pinTab") {
     auto* tab = payload && payload->GetType()==VTYPE_INT ? FindTab(payload->GetInt()) : nullptr;
     const auto visible_profile = VisibleProfileId();

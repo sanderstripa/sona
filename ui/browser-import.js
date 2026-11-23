@@ -51,8 +51,8 @@
     }
     return read(Object.values(roots));
   }
-  async function open() {
-    const ui=window.souluSettings,api=window.browserShell,{t,el,button,dialog}=ui;
+  async function open({ui=window.souluSettings,api=window.browserShell,sourceHint='',currentProfileOnly=false}={}) {
+    const {t,el,button,dialog}=ui;
     const call=(action,payload)=>api.browserImport(action,payload);
     const state=await api.getState();
     const targets=(state.profiles||[]).filter(p=>p.id!=='__incognito__');
@@ -92,7 +92,11 @@
       };
     }
     function hideMenus(){from?.hide();to?.hide();}
-    function targetChoices(){to.setOptions([...targets.map(p=>({id:p.id,text:p.name+(p.id===activeTarget?label(' · текущий',' · current'):'' )})),{id:'__new__',text:label('+ Новый профиль Sona Preview','+ New Sona Preview profile'),separator:true}]);}
+    function targetChoices(){
+      const choices=targets.map(p=>({id:p.id,text:p.name+(p.id===activeTarget?label(' · текущий',' · current'):'')}));
+      if(!currentProfileOnly)choices.push({id:'__new__',text:label('+ Новый профиль Sona Preview','+ New Sona Preview profile'),separator:true});
+      to.setOptions(choices);
+    }
     function sourceChoices(){from.setOptions([...sourceOptions,...extraSources,{id:'__html__',text:label('HTML-файл с закладками…','Bookmarks HTML file…'),separator:true},{id:'__tabs_html__',text:label('HTML-файл с вкладками…','Open tabs HTML file…')},{id:'__csv__',text:label('CSV-файл с паролями…','Passwords CSV file…')},{id:'__portable__',text:label('Другая папка профиля…','Other profile folder…')},{id:'__refresh__',text:label('Обновить список браузеров','Refresh browser list')}]);}
     function lock() {
       const busy=phase!=='form';
@@ -214,7 +218,8 @@
     dialog(label('Импорт из другого браузера','Import from another browser'),host=>{
       box=host;box.classList.add('browser-import');modal.classList.add('browser-import-dialog');box.dataset.importState='form';
       form=el('div',undefined,'import-form');from=dropdown('importFrom',label('Из','From'),chooseSource);to=dropdown('importTo',label('В','To'),async entry=>{to.setValue(entry.id);createField.hidden=entry.id!=='__new__';lock();if(entry.id==='__new__')newName.focus();});
-      form.append(from.row,to.row);
+      form.append(from.row);
+      if(!currentProfileOnly)form.append(to.row);
       createField=el('label',undefined,'import-new-profile');createField.hidden=true;newName=el('input');newName.type='text';newName.maxLength=80;newName.placeholder=label('Название нового профиля','New profile name');newName.setAttribute('aria-label',label('Название нового профиля','New profile name'));newName.oninput=lock;createField.append(newName,el('small',label('Будет создан при запуске импорта','Created when you start the import')));form.append(createField);
       const section=el('section',undefined,'import-categories-section');section.append(el('p',label('Что импортировать','What to import'),'import-section-label'));categoryList=el('div');section.append(categoryList);form.append(section);
       consentBox=el('div',undefined,'import-csv-consent');consentBox.hidden=true;consentBox.append(el('p',label('Пароли сохраняются с защитой Windows. Для защищённых записей потребуется CSV-экспорт из браузера; CSV содержит открытый текст.','CSV contains unencrypted passwords. Existing credentials are preserved; the file is not deleted.'),'note'));
@@ -228,7 +233,12 @@
     const escape=e=>{if(phase==='running'||phase==='creating'){e.preventDefault();if(phase==='running')requestCancel().catch(error);}};
     closeButton.onclick=wrap(requestCancel);modal.addEventListener('pointerdown',outside);modal.addEventListener('cancel',escape);
     const cleanup=()=>{closed=true;++serial;clearInterval(timer);if(phase==='running')call('cancel').catch(()=>{});box.classList.remove('browser-import');modal.classList.remove('browser-import-dialog');closeButton.onclick=previousClose;modal.removeEventListener('pointerdown',outside);modal.removeEventListener('cancel',escape);modal.removeEventListener('close',cleanup);};modal.addEventListener('close',cleanup);
-    await discover();if(!closed)from.toggle.focus();
+    await discover();
+    if(!closed&&sourceHint) {
+      const choice=sourceOptions.find(p=>p.id===sourceHint);
+      if(choice)await inspect(choice);
+    }
+    if(!closed)from.toggle.focus();
   }
   window.souluBrowserImport={open,parseHtml};
 })();

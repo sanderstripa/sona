@@ -6,6 +6,7 @@ bool soulu_ab_init(const char*,const char*,bool);
 char* soulu_ab_check(const char*,const char*,const char*,const char*);
 char* soulu_ab_cosmetic(const char*,const char*);
 char* soulu_ab_status();
+bool soulu_ab_refresh();
 void soulu_ab_free(char*);
 }
 namespace soulu {
@@ -37,6 +38,7 @@ bool MatchAdBlock(const std::string& url,const std::string& source,int type,
   if(rule&&result)*rule=result->GetString("rule");
   return result&&result->GetBool("matched");
 }
+bool RefreshAdBlock() { return soulu_ab_refresh(); }
 CefRefPtr<CefDictionaryValue> AdBlockStatus() {
   auto value=Parse(soulu_ab_status());
   return value&&value->GetType()==VTYPE_DICTIONARY?value->GetDictionary():CefDictionaryValue::Create();
