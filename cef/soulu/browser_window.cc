@@ -1474,6 +1474,7 @@ struct BrowserWindow::WindowTabDrag {
   bool detached = false;
   bool sorting_after_merge = false;
   bool updating = false;
+  POINT traced_cursor{LONG_MIN,LONG_MIN};
 };
 std::unique_ptr<BrowserWindow::WindowTabDrag> BrowserWindow::window_tab_drag_;
 namespace {
@@ -1613,8 +1614,21 @@ void BrowserWindow::TickWindowTabDrag() {
   };
   const int id=drag.id;
   if(drag.detached){
+    const bool moved=drag.traced_cursor.x!=cursor.x||drag.traced_cursor.y!=cursor.y;
+    drag.traced_cursor=cursor;
     // Merge before moving the detached window over the destination strip.
     for(auto* window:windows_){
+      if(moved&&window!=this){
+        const POINT p=client_point(window);
+        const RECT b=window->tab_drop_band_;
+        std::ostringstream trace;
+        trace<<"target point "<<p.x<<","<<p.y<<" band "<<b.left<<","<<b.top<<","<<b.right<<","<<b.bottom
+             <<" ready "<<window->shell_frame_ready_<<" closing "<<window->closing_
+             <<" visible "<<IsWindowVisible(window->hwnd_)<<" iconic "<<IsIconic(window->hwnd_)
+             <<" settings "<<bool(window->settings_overlay_)<<" onboarding "<<window->NeedsOnboarding()
+             <<" same profile "<<(window->VisibleProfileId()==tab->profile_id);
+        TraceTabTransfer(trace.str().c_str());
+      }
       if(window==this||!window->shell_frame_ready_||window->closing_||!IsWindowVisible(window->hwnd_)||
          IsIconic(window->hwnd_)||window->settings_overlay_||window->NeedsOnboarding()||
          window->VisibleProfileId()!=tab->profile_id||
