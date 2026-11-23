@@ -250,8 +250,8 @@ try:
 
         focus_fixture('#passwordFixture')
         wait(lambda:page_focus_ready(page,hwnd))
-        send_keys('Typed17',with_spaces=True,vk_packet=False)
-        try:wait(lambda:s.evaluate(page,'document.querySelector("#passwordFixture").value==="Typed17"'))
+        send_keys('typed17',with_spaces=True,vk_packet=False)
+        try:wait(lambda:s.evaluate(page,'document.querySelector("#passwordFixture").value==="typed17"'))
         except AssertionError:
             raise AssertionError('Native password typing value: '+repr(s.evaluate(page,'document.querySelector("#passwordFixture").value')))
         focus_fixture('#copyFixture')

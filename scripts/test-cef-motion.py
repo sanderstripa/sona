@@ -151,6 +151,10 @@ def main():
             def surface():return s.evaluate(shell,'new Promise((resolve,reject)=>cefQuery({request:JSON.stringify({action:"browser.surfaceDiagnostics"}),onSuccess:v=>resolve(JSON.parse(v)),onFailure:(_,m)=>reject(Error(m))}))')
             for layout in ['compact','classic']:
                 s.evaluate(shell,'browserShell.setSettings({layout:'+json.dumps(layout)+'})')
+                # Layout changes intentionally resize the web viewport once.
+                # Measure only after that transition; the assertion below is
+                # specifically about sidebar animation keeping it unchanged.
+                time.sleep(.35)
                 dimensions=s.evaluate(page,'[innerWidth,innerHeight]')
                 for cycle in range(30):
                     s.evaluate(shell,'browserShell.toggleSidebar()');time.sleep(.025)

@@ -535,8 +535,10 @@ CefRefPtr<CefListValue> MergeImportBookmarks(CefRefPtr<CefListValue> existing,Ce
   for(auto key:{"bookmarksImported","foldersImported","bookmarksSkipped","foldersSkipped"})report->SetInt(key,0);
   auto merged=existing->Copy();int id=1;size_t target_count=0,seen=0;
   using Key=std::tuple<int,std::string,std::string,std::string>;
-  std::map<Key,CefRefPtr<CefDictionaryValue>> index;std::map<int,int> orders;
-  for(size_t i=0;i<merged->GetSize();++i){auto row=merged->GetDictionary(i);if(row){if(row->GetInt("id")>=2147483646)throw std::runtime_error("Bookmark ID capacity reached");id=std::max(id,row->GetInt("id")+1);if(row->GetString("profileId")==target){++target_count;int parent=row->GetInt("parentId");std::string type=row->GetString("type");index[{parent,type,row->GetString("title"),type=="folder"?"":row->GetString("url").ToString()}]=row;orders[parent]=std::max(orders[parent],row->GetInt("order")+1);}}}
+  // Keep stable list positions rather than CefDictionaryValue views. Appending
+  // another row may invalidate a previously borrowed view on some CEF builds.
+  std::map<Key,size_t> index;std::map<int,int> orders;
+  for(size_t i=0;i<merged->GetSize();++i){auto row=merged->GetDictionary(i);if(row){if(row->GetInt("id")>=2147483646)throw std::runtime_error("Bookmark ID capacity reached");id=std::max(id,row->GetInt("id")+1);if(row->GetString("profileId")==target){++target_count;int parent=row->GetInt("parentId");std::string type=row->GetString("type");index[{parent,type,row->GetString("title"),type=="folder"?"":row->GetString("url").ToString()}]=i;orders[parent]=std::max(orders[parent],row->GetInt("order")+1);}}}
   std::function<void(CefRefPtr<CefListValue>,int,int)> walk=[&](CefRefPtr<CefListValue> list,int parent,int depth){
     if(depth>64)throw std::runtime_error("Bookmarks nesting exceeds 64");
     for(size_t i=0;i<list->GetSize();++i){if(control->cancelled)return;if(++seen>20000)throw std::runtime_error("Too many imported bookmarks");auto n=list->GetDictionary(i);
@@ -545,7 +547,7 @@ CefRefPtr<CefListValue> MergeImportBookmarks(CefRefPtr<CefListValue> existing,Ce
       if(type=="folder"&&n->GetType("children")!=VTYPE_LIST)throw std::runtime_error("Folder children missing");
       if(type=="url"&&WebOrigin(url).empty()){Increment(report,"skipped");continue;}
       Key key={parent,type,title,type=="folder"?"":url};CefRefPtr<CefDictionaryValue> match;
-      auto found=index.find(key);if(found!=index.end())match=found->second;int order=orders[parent];
+      auto found=index.find(key);if(found!=index.end())match=merged->GetDictionary(found->second);int order=orders[parent];
       const std::string icon=n->GetString("favicon");
       const bool valid_icon=icon.size()<=65536&&(icon.rfind("data:image/png;base64,",0)==0||icon.rfind("data:image/x-icon;base64,",0)==0);
       if(match){
@@ -556,7 +558,7 @@ CefRefPtr<CefListValue> MergeImportBookmarks(CefRefPtr<CefListValue> existing,Ce
         match=CefDictionaryValue::Create();match->SetInt("id",id++);match->SetString("type",type);match->SetString("title",title);match->SetString("url",url);match->SetInt("parentId",parent);match->SetInt("order",order);match->SetString("profileId",target);match->SetDouble("createdAt",HistoryNow());
         if(valid_icon)match->SetString("favicon",icon);
         const size_t position=merged->GetSize();
-        merged->SetDictionary(position,match->Copy(false));index[key]=merged->GetDictionary(position);orders[parent]=order+1;Increment(report,"imported");Increment(report,type=="url"?"bookmarksImported":"foldersImported");
+        merged->SetDictionary(position,match->Copy(false));index[key]=position;match=merged->GetDictionary(position);orders[parent]=order+1;Increment(report,"imported");Increment(report,type=="url"?"bookmarksImported":"foldersImported");
       }if(type=="folder")walk(n->GetList("children"),match->GetInt("id"),depth+1);
     }
   };walk(nodes,0,0);return merged;
