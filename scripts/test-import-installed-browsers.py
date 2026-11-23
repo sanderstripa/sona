@@ -64,10 +64,10 @@ def main():
                 return ws
             try:
                 shell = connect("/ui/index.html")
-                tests.wait(lambda: s.evaluate(shell, "typeof browserShell?.openSettingsWindow==='function'"))
+                tests.wait(lambda: s.evaluate(shell, "typeof window.browserShell?.openSettingsWindow==='function'"))
                 s.evaluate(shell, "browserShell.openSettingsWindow()")
                 settings = connect("/ui/settings.html")
-                tests.wait(lambda: s.evaluate(settings, "document.body.classList.contains('ready')"))
+                tests.wait(lambda: s.evaluate(settings, "document.body?.classList.contains('ready')"))
                 for name, (root, url, before) in sources.items():
                     if first:
                         payload = dict(source=name+":Default", target="personal", bookmarks=True, history=True)
