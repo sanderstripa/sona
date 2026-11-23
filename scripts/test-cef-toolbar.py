@@ -158,14 +158,18 @@ def main():
             dragged=wait(lambda:E("(async()=> (await browserShell.getState()).tabs.find(t=>t.url.includes('#sona-tab-drag'))?.id)()"))
             selector=f'#tabStrip [data-tab-id="{dragged}"]'
             wait(lambda:E('!!document.querySelector('+json.dumps(selector)+')'))
+            wait(lambda:E(f"(async()=> (await browserShell.getState()).tabs.some(t=>t.id==={dragged} && t.active && !t.mainLoading))()"))
             u.SetForegroundWindow(hwnd)
             scale=u.GetDpiForWindow(hwnd)/96
             client=W.POINT(0,0);u.ClientToScreen(hwnd,C.byref(client))
             source=bounds(selector);band=bounds('.tabs-zone')
             x=client.x+round((source['x']+source['w']/2)*scale)
             y=client.y+round((source['y']+source['h']/2)*scale)
+            wait(lambda:E(f"document.elementFromPoint({(x-client.x)/scale},{(y-client.y)/scale})?.closest('[data-tab-id]')?.dataset.tabId === '{dragged}'"))
+            E("window.__testTabPointer = null; document.addEventListener('pointerdown', e => { window.__testTabPointer = e.target.closest('[data-tab-id]')?.dataset.tabId; }, {once:true,capture:true})")
             u.SetCursorPos(x,y);time.sleep(.15);u.mouse_event(2,0,0,0,0)
             try:
+                wait(lambda:E('window.__testTabPointer')==str(dragged))
                 u.SetCursorPos(x-20,y);time.sleep(.16)
                 u.SetCursorPos(x-20,client.y+round((band['y']+band['h']+17)*scale))
                 time.sleep(.25)

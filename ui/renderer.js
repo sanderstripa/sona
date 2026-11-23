@@ -261,7 +261,11 @@ function enableTabReordering(strip){
     if(index<0)return;
     suppressClick=false;
     drag={node,slots,index,target:index,startX:event.clientX,startY:event.clientY,active:false};
+    event.preventDefault();
     window.browserShell.startWindowTabDrag?.(selected.id,tabDropLayout()).catch(console.error);
+  });
+  strip.addEventListener('dragstart',event=>{
+    if(event.target.closest(selector))event.preventDefault();
   });
   strip.addEventListener('pointermove',event=>{
     if(!drag)return;
