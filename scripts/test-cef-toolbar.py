@@ -154,7 +154,7 @@ def main():
             E('browserShell.setSettings({layout:"classic"})')
             wait(lambda:E("document.body.dataset.layout==='classic'"))
             u.SetWindowPos(hwnd,None,35,35,860,620,0x14)
-            E('browserShell.openTab("https://example.invalid/#sona-tab-drag",true)')
+            E('browserShell.openTab("https://example.invalid/#sona-tab-drag")')
             dragged=wait(lambda:E("(async()=> (await browserShell.getState()).tabs.find(t=>t.url.includes('#sona-tab-drag'))?.id)()"))
             selector=f'#tabStrip [data-tab-id="{dragged}"]'
             wait(lambda:E('!!document.querySelector('+json.dumps(selector)+')'))
@@ -170,7 +170,8 @@ def main():
             u.SetCursorPos(x,y);time.sleep(.15);u.mouse_event(2,0,0,0,0)
             try:
                 wait(lambda:E('window.__testTabPointer')==str(dragged))
-                u.SetCursorPos(x-20,y);time.sleep(.16)
+                u.SetCursorPos(x-20,y)
+                wait(lambda:E('document.querySelector('+json.dumps(selector)+')?.classList.contains("tab-reordering")'))
                 u.SetCursorPos(x-20,client.y+round((band['y']+band['h']+17)*scale))
                 time.sleep(.25)
                 check(len(windows())==1,'Tab holds within the vertical deadzone')
