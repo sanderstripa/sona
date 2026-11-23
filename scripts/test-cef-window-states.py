@@ -61,6 +61,7 @@ class Fixture(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         body = b'''<!doctype html><style>html,body{margin:0;background:#46a6cf}video{width:300px}</style>
 <canvas id=c width=160 height=90></canvas><video id=v muted autoplay></video>
+<div><input id=copyFixture value='Paste42'><input id=passwordFixture type=password autocomplete=off></div>
 <script>const ctx=c.getContext('2d');setInterval(()=>{ctx.fillStyle='#46a6cf';ctx.fillRect(0,0,160,90)},30);v.srcObject=c.captureStream(25);v.play();</script>'''
         self.send_response(200)
         self.send_header('Content-Type', 'text/html')
@@ -200,7 +201,7 @@ def ready_caption(shell,hwnd,selector):
     titlebar=Titlebar();titlebar.size=C.sizeof(titlebar)
     u.SendMessageW(hwnd,0x33f,0,C.addressof(titlebar))
     caption=titlebar.buttons[3]
-    expected=round((48 if selector=='#windowMaximize' else 58)*u.GetDpiForWindow(hwnd)/96)
+    expected=round(32*u.GetDpiForWindow(hwnd)/96)
     assert abs(caption.bottom-caption.top-expected)<=1,('Caption layout not yet synchronized',caption.bottom-caption.top,expected)
     assert caption.left<=point.x<caption.right and caption.top<=point.y<caption.bottom,('Caption DOM/native bounds not yet synchronized',point.x,point.y)
     assert u.SendMessageW(hwnd,0x84,0,((point.y&0xffff)<<16)|(point.x&0xffff))==9,'Native maximize hit target not yet synchronized'
@@ -230,6 +231,32 @@ try:
             raise
         hwnd = wait(lambda:next(iter(windows(process.pid)),None))
         s.navigate(page, f'http://127.0.0.1:{server.server_port}/')
+        from pywinauto.keyboard import send_keys
+        s.evaluate(shell,'browserShell.setSettings({layout:"compact",mattePanel:false,bookmarksBarPosition:"hidden"})')
+        wait(lambda:s.evaluate(shell,'document.body.dataset.layout==="compact"'))
+        scale=u.GetDpiForWindow(hwnd)/96
+        toolbar=round(58*scale)
+        viewport(page,hwnd,toolbar)
+
+        def focus_fixture(field):
+            foreground(hwnd)
+            x,y=s.evaluate(page,'(()=>{const r=document.querySelector('+json.dumps(field)+').getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]})()')
+            screen=W.POINT(round(x*scale),toolbar+round(y*scale))
+            assert u.ClientToScreen(hwnd,C.byref(screen))
+            assert u.SetCursorPos(screen.x,screen.y)
+            u.mouse_event(2,0,0,0,0)
+            u.mouse_event(4,0,0,0,0)
+            wait(lambda:s.evaluate(page,'document.activeElement?.matches('+json.dumps(field)+')'))
+
+        focus_fixture('#passwordFixture')
+        send_keys('Typed17',with_spaces=True,vk_packet=False)
+        wait(lambda:s.evaluate(page,'passwordFixture.value==="Typed17"'))
+        focus_fixture('#copyFixture')
+        send_keys('^a^c',vk_packet=False)
+        focus_fixture('#passwordFixture')
+        send_keys('^a^v',vk_packet=False)
+        wait(lambda:s.evaluate(page,'passwordFixture.value==="Paste42"'))
+        checks.append(dict(native_password_typing=True,native_password_paste=True))
         for layout in ['compact','classic']:
             for matte in [False,True]:
                 for theme in ['light','dark','system']:
