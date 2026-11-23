@@ -1,3 +1,4 @@
+#include "chromium_import/csv_field_parser.h"
 #include "examples/soulu/browser_import.h"
 #include "examples/soulu/history_store.h"
 #include "examples/soulu/import_source_file.h"
@@ -583,16 +584,30 @@ CefRefPtr<CefDictionaryValue> ImportBrowserHistory(const ImportSource& source,co
   return report;
 }
 CefRefPtr<CefDictionaryValue> ImportPasswordCsv(const std::filesystem::path& path,const std::string& target,const std::shared_ptr<ImportControl>& control){
-  auto report=Report();std::string text,field;std::vector<std::vector<std::string>> rows;
-  struct Wiper{std::string& text;std::string& field;std::vector<std::vector<std::string>>& rows;~Wiper(){if(!text.empty())SecureZeroMemory(text.data(),text.size());if(!field.empty())SecureZeroMemory(field.data(),field.size());for(auto& r:rows)for(auto& v:r)if(!v.empty())SecureZeroMemory(v.data(),v.size());}}wipe{text,field,rows};
+  auto report=Report();std::string text;std::vector<std::vector<std::string>> rows;
+  struct Wiper{std::string& text;std::vector<std::vector<std::string>>& rows;~Wiper(){if(!text.empty())SecureZeroMemory(text.data(),text.size());for(auto& r:rows)for(auto& v:r)if(!v.empty())SecureZeroMemory(v.data(),v.size());}}wipe{text,rows};
   try{if(!ValidProfileId(target))throw std::runtime_error("Invalid target profile");if(!LocalImportPath(DataRoot()))throw std::runtime_error("Target must use local storage without symbolic links");text=ReadText(path,20*1024*1024);
-    rows.emplace_back();bool quoted=false,closed=false,start=true;
-    auto cell=[&](){rows.back().push_back(std::move(field));field.clear();closed=false;start=true;if(rows.back().size()>32)throw std::runtime_error("Too many CSV columns");};
-    for(size_t i=0;i<text.size();++i){char c=text[i];if(quoted){if(c=='"'){if(i+1<text.size()&&text[i+1]=='"'){field+='"';++i;}else{quoted=false;closed=true;}}else field+=c;}
-      else if(c==','||c=='\n'||c=='\r'){cell();if(c!=','){if(c=='\r'&&i+1<text.size()&&text[i+1]=='\n')++i;rows.emplace_back();if(rows.size()>20001)throw std::runtime_error("Too many CSV entries");}}
-      else if(c=='"'&&start){quoted=true;start=false;}else{if(closed||c=='"')throw std::runtime_error("Invalid CSV quoting");field+=c;start=false;}
-      if(field.size()>65536)throw std::runtime_error("CSV field too long");
-    }if(quoted)throw std::runtime_error("Unclosed CSV quote");if(!field.empty()||closed||!rows.back().empty())cell();else rows.pop_back();
+    std::string_view remaining(text);
+    if (remaining.substr(0, 3) == "\xef\xbb\xbf") remaining.remove_prefix(3);
+    while (!remaining.empty()) {
+      const auto line = password_manager::ConsumeCSVLine(&remaining);
+      if (line.empty()) continue;
+      if (rows.size() >= 20001) throw std::runtime_error("Too many CSV entries");
+      auto& row = rows.emplace_back();
+      password_manager::CSVFieldParser parser(line);
+      while (parser.HasMoreFields()) {
+        std::string_view value;
+        if (!parser.NextField(&value)) throw std::runtime_error("Invalid CSV field");
+        if (value.size() > 131072) throw std::runtime_error("CSV field too long");
+        auto& decoded = row.emplace_back();
+        decoded.reserve(value.size());
+        for (size_t i = 0; i < value.size(); ++i) {
+          decoded.push_back(value[i]);
+          if (value[i] == '"' && i + 1 < value.size() && value[i + 1] == '"') ++i;
+        }
+        if (decoded.size() > 65536) throw std::runtime_error("CSV field too long");
+      }
+    }
     if(rows.empty())throw std::runtime_error("Empty CSV");std::map<std::string,size_t> header;
     for(size_t i=0;i<rows[0].size();++i){auto name=rows[0][i];std::transform(name.begin(),name.end(),name.begin(),[](unsigned char c){return static_cast<char>(tolower(c));});if(!header.emplace(name,i).second)throw std::runtime_error("Duplicate CSV headers");}
     std::string urlKey=header.count("url")?"url":"origin";

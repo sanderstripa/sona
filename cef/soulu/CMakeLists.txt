@@ -57,6 +57,7 @@ set(SOULU_SRCS
   password_import.cc
   import_source_file.h
   browser_import.h
+  chromium_import/csv_field_parser.cc
   browser_import.cc
   browser_import_tests.cc
   data_tests.cc
@@ -154,6 +155,9 @@ add_custom_command(TARGET ${EXAMPLE_TARGET} POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_directory
           "${CMAKE_CURRENT_SOURCE_DIR}/adblock/notices"
           "$<TARGET_FILE_DIR:${EXAMPLE_TARGET}>/licenses/adblock"
+  COMMAND ${CMAKE_COMMAND} -E copy
+          "${CMAKE_CURRENT_SOURCE_DIR}/chromium_import/LICENSE"
+          "$<TARGET_FILE_DIR:${EXAMPLE_TARGET}>/licenses/chromium-import.LICENSE"
   COMMAND ${CMAKE_COMMAND} -E copy_directory
           "${CMAKE_CURRENT_SOURCE_DIR}/assets/ui/third_party/notices"
           "$<TARGET_FILE_DIR:${EXAMPLE_TARGET}>/licenses/translation"
