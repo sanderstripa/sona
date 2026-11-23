@@ -249,13 +249,19 @@ try:
             wait(lambda:s.evaluate(page,'document.activeElement?.matches('+json.dumps(field)+')'))
 
         focus_fixture('#passwordFixture')
+        wait(lambda:page_focus_ready(page,hwnd))
         send_keys('Typed17',with_spaces=True,vk_packet=False)
-        wait(lambda:s.evaluate(page,'document.querySelector("#passwordFixture").value==="Typed17"'))
+        try:wait(lambda:s.evaluate(page,'document.querySelector("#passwordFixture").value==="Typed17"'))
+        except AssertionError:
+            raise AssertionError('Native password typing value: '+repr(s.evaluate(page,'document.querySelector("#passwordFixture").value')))
         focus_fixture('#copyFixture')
         send_keys('^a^c',vk_packet=False)
         focus_fixture('#passwordFixture')
+        wait(lambda:page_focus_ready(page,hwnd))
         send_keys('^a^v',vk_packet=False)
-        wait(lambda:s.evaluate(page,'document.querySelector("#passwordFixture").value==="Paste42"'))
+        try:wait(lambda:s.evaluate(page,'document.querySelector("#passwordFixture").value==="Paste42"'))
+        except AssertionError:
+            raise AssertionError('Native password paste value: '+repr(s.evaluate(page,'document.querySelector("#passwordFixture").value')))
         checks.append(dict(native_password_typing=True,native_password_paste=True))
         for layout in ['compact','classic']:
             for matte in [False,True]:

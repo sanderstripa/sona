@@ -144,7 +144,9 @@ body[data-native-caption-hover=true] .browser-toolbar :is(#compactWindowMaximize
 .classic-toolbar .classic-tab .tab-media{visibility:visible}
 
 .compact-toolbar-surface > .compact-window-button + .compact-window-button {
-  margin-inline-start: 8px;
+  /* CEF adds the one-pixel surface gap. 7 + 1 + 32 keeps the Torrent
+     centre-to-centre distance at exactly 40 px. */
+  margin-inline-start: 7px;
 }
 
 .classic-navigation-right > .window-controls {

@@ -129,6 +129,8 @@ def main():
             s.command(page,'Page.reload');wait(lambda:s.evaluate(page,"document.querySelector('main')?.getAttribute('aria-busy')==='false'"))
             click(page,'Далее');check(flow()['step']==3,'Selected source advances to types')
             click(page,'Назад');check(flow()['source']=='Chrome:Default','Back retains selected source')
+            capability=s.evaluate(page,"new Promise((resolve,reject)=>cefQuery({request:JSON.stringify({action:'browser.import.capabilities',payload:{source:'Chrome:Default'}}),onSuccess:v=>resolve(JSON.parse(v)),onFailure:(_,m)=>reject(Error(m))}))")
+            check(capability['passwords']['status']=='available','First-run sees directly readable protected Chrome passwords: '+json.dumps(capability['passwords']))
             click(page,'Далее');click(page,'Открыть импорт')
             wait(lambda:s.evaluate(page,"document.querySelector('[data-category=passwords]:not(:disabled)')!==null"))
             check(s.evaluate(page,"document.querySelector('#importFrom-option-0')!==null"),'First-run shows the Settings import dialog')

@@ -21,5 +21,5 @@ with tempfile.TemporaryDirectory(prefix='soulu-import-fixture-') as temporary:
     data=json.loads(report.read_text(encoding='utf-8'))
     output.parent.mkdir(parents=True,exist_ok=True)
     output.write_text(json.dumps(data,indent=2),encoding='utf-8')
-    print('Import native checks:',data.get('checks'),'; passed:',data.get('ok'))
+    print('Import native checks:',data.get('checks'),'; passed:',data.get('ok'),'; failed:',data.get('failedCheck'))
     raise SystemExit(0 if result.returncode==0 and data.get('ok') else 2)

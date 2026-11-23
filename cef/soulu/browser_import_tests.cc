@@ -138,7 +138,9 @@ int RunBrowserImportTests(const std::filesystem::path& output){
     struct LiveClose{sqlite3* db;~LiveClose(){sqlite3_close(db);}} liveClose{live};
     check(sqlite3_exec(live,"PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; INSERT INTO visits VALUES(1,13344473600124000)",nullptr,nullptr,nullptr)==SQLITE_OK,"live-source-wal-write");
     check(BrowserImportCapabilities(source)->GetDictionary("history")->GetString("status")=="available","open-browser-readable-capability");
-    check(sqlite3_exec(live,"BEGIN IMMEDIATE",nullptr,nullptr,nullptr)==SQLITE_OK,"fixture-active-source-writer");
+    sqlite3_busy_timeout(live,2000);int begin=SQLITE_BUSY;
+    for(int attempt=0;attempt<4&&begin==SQLITE_BUSY;++attempt){begin=sqlite3_exec(live,"BEGIN IMMEDIATE",nullptr,nullptr,nullptr);if(begin==SQLITE_BUSY)Sleep(50);}
+    check(begin==SQLITE_OK,"fixture-active-source-writer");
     auto busyCaps=BrowserImportCapabilities(source);
     check(busyCaps->GetDictionary("history")->GetString("status")=="blocked"&&busyCaps->GetDictionary("bookmarks")->GetString("status")=="available","busy-database-is-disabled-before-import-while-bookmarks-stay-available");
     check(sqlite3_exec(live,"ROLLBACK",nullptr,nullptr,nullptr)==SQLITE_OK,"fixture-source-writer-release");

@@ -3870,6 +3870,20 @@ LRESULT CALLBACK BrowserWindow::WindowProc(HWND hwnd, UINT message, WPARAM wpara
       else if (auto* tab = self->ActiveTab(); tab && tab->browser)
         self->FocusContent(tab);
       return 0;
+    case WM_MOUSEACTIVATE: {
+      // Chromium Views is hosted in a reparented child widget. Windows can
+      // activate the owner while leaving keyboard focus on the OSR toolbar.
+      // Restore the live renderer only when the pointer is inside the content
+      // rectangle, so address and caption clicks retain their own focus.
+      POINT point={};GetCursorPos(&point);ScreenToClient(hwnd,&point);
+      const auto geometry=self->CurrentGeometry();
+      RECT content={geometry.content.x,geometry.content.y,
+          geometry.content.x+geometry.content.width,
+          geometry.content.y+geometry.content.height};
+      if(!self->settings_overlay_&&PtInRect(&content,point))
+        if(auto* tab=self->ActiveTab();tab&&tab->browser)self->FocusContent(tab);
+      break;
+    }
     case WM_DWMCOMPOSITIONCHANGED: self->ApplyWindowAppearance(); return 0;
     case WM_SETTINGCHANGE: self->ApplyWindowAppearance(); self->ApplyContentTheme(); break;
     case WM_CLOSE: TypographyCancelOwnedDialogs(hwnd);self->CloseAll();return 0;
