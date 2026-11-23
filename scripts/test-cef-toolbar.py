@@ -42,7 +42,7 @@ def main():
         assert ok,label
         report['checks'].append(label);print('PASS:',label,flush=True)
     with tempfile.TemporaryDirectory(prefix='soulu-toolbar-',ignore_cleanup_errors=True) as temp:
-        env=dict(os.environ,LOCALAPPDATA=temp,APPDATA=str(Path(temp)/'roaming'),SOULU_UI_TEST_PORT=str(s.DEBUG_PORT))
+        env=dict(os.environ,LOCALAPPDATA=temp,APPDATA=str(Path(temp)/'roaming'),SOULU_UI_TEST_PORT=str(s.DEBUG_PORT),SOULU_TAB_DRAG_TRACE=temp)
         process=subprocess.Popen([str(exe),'--no-proxy-server'],env=env)
         ws=None
         try:
@@ -203,5 +203,9 @@ def main():
                             process.kill()
                             process.wait(timeout=10)
             finally:
+                trace=Path(temp)/'tab-transfer.log'
+                if trace.exists():
+                    report['tabTransferTrace']=trace.read_text(encoding='utf-8').splitlines()
+                    print('Tab transfer trace:',report['tabTransferTrace'],flush=True)
                 out.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
 if __name__=='__main__':main()

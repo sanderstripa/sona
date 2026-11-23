@@ -1480,6 +1480,13 @@ namespace {
 constexpr UINT_PTR kTabDragTimer=7303;
 constexpr int kTabDetachDistance=25;
 
+void TraceTabTransfer(const char* stage) {
+  wchar_t enabled[12]={}, root[32768]={};
+  if(GetEnvironmentVariableW(L"SOULU_UI_TEST_PORT",enabled,12)&&
+     GetEnvironmentVariableW(L"SOULU_TAB_DRAG_TRACE",root,32768)<32768&&root[0])
+    std::ofstream(std::filesystem::path(root)/L"tab-transfer.log",std::ios::app)<<stage<<'\n';
+}
+
 bool TabDragButtonDown() {
   return (GetAsyncKeyState(GetSystemMetrics(SM_SWAPBUTTON)?VK_RBUTTON:VK_LBUTTON)&0x8000)!=0;
 }
@@ -1531,9 +1538,11 @@ bool BrowserWindow::MoveTabToWindow(int id,BrowserWindow* destination) {
      settings_overlay_||destination->settings_overlay_||Fullscreen()||destination->Fullscreen())return false;
   auto* client=static_cast<BrowserClient*>(it->browser->GetHost()->GetClient().get());
   if(!client||!client->CanMoveTab())return false;
+  TraceTabTransfer("reparent begin");
   if(!it->chrome_host->Reparent(destination->hwnd_,[destination](auto browser,auto host){
        destination->AttachChromePopup(browser,host);
      }))return false;
+  TraceTabTransfer("reparent done");
   HomeCancelVoice(it->browser->GetIdentifier());
   CancelSitePermissions(id);
   const int adjacent=AdjacentTab(id);
@@ -1541,6 +1550,7 @@ bool BrowserWindow::MoveTabToWindow(int id,BrowserWindow* destination) {
   const bool incognito=it->incognito;
   const auto profile=it->profile_id;
   client->MoveTabTo(destination);
+  TraceTabTransfer("client moved");
   destination->tabs_.push_back(std::move(*it));
   tabs_.erase(it);
   for(auto& [key,last]:last_normal_active_)if(last==id)last=adjacent;
@@ -1556,13 +1566,17 @@ bool BrowserWindow::MoveTabToWindow(int id,BrowserWindow* destination) {
     else active_tab_id_=replacement->id;
   }
   destination->ActivateMedia(id);
+  TraceTabTransfer("media active");
   destination->Layout();
+  TraceTabTransfer("destination layout done");
   destination->EmitState();
+  TraceTabTransfer("destination state emitted");
   if(shell_){
     Emit("tabDragMoved",EmptyValue());
     Layout();
     EmitState();
   }
+  TraceTabTransfer("source state emitted");
   return true;
 }
 
@@ -1612,8 +1626,10 @@ void BrowserWindow::TickWindowTabDrag() {
         return item&&item->pinned==tab->pinned&&target_point.x<(candidate.rect.left+candidate.rect.right)/2;
       });
       const int before=slot==window->tab_drop_slots_.end()?0:slot->id;
+      TraceTabTransfer("merge begin");
       if(!MoveTabToWindow(id,window))continue;
       if(before)window->ReorderTab(id,before);
+      TraceTabTransfer("merge reordered");
       KillTimer(hwnd_,kTabDragTimer);
       drag.owner=window;
       drag.detached=false;
@@ -1621,11 +1637,14 @@ void BrowserWindow::TickWindowTabDrag() {
       drag.last_sort_x=target_point.x;
       if(!SetTimer(window->hwnd_,kTabDragTimer,16,nullptr))window->FinishWindowTabDrag();
       ShowWindow(hwnd_,SW_HIDE);
+      TraceTabTransfer("merged source hidden");
       close_empty_after_drag_=true;
       // CEF teardown may dispatch window messages. Leave the transfer and
       // its timer callback before closing the now-empty shell.
       if(shell_)CefPostTask(TID_UI,new FunctionTask([self=CefRefPtr<BrowserWindow>(this)]{
+        TraceTabTransfer("merged source close begin");
         self->CloseAll();
+        TraceTabTransfer("merged source close dispatched");
       }));
       return;
     }
