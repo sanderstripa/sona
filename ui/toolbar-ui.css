@@ -6,11 +6,11 @@ body[data-layout=compact] { --toolbar-target:var(--geometry-main-target); --capt
   --toolbar-radius: 50%;
   --toolbar-stroke: 1;
   --toolbar-disabled: .32;
-  --caption-target: var(--geometry-caption-width);
+  --caption-target: 32px;
   --caption-hover: color-mix(in srgb, var(--text) 8%, transparent);
   --caption-pressed: color-mix(in srgb, var(--text) 14%, transparent);
-  --caption-danger: #c42b1c;
-  --caption-danger-pressed: #a4261d;
+  --caption-danger: light-dark(#f6d1d9,#54242f);
+  --caption-danger-pressed: light-dark(#edbcca,#69313d);
 }
 .browser-toolbar :is(.toolbar-button,.compact-control,.tab-action,.address-menu-button,.navigation-toolbar-button) {
   position:relative; display:grid; place-items:center; flex:0 0 var(--toolbar-target);
@@ -39,11 +39,11 @@ body[data-layout=compact] { --toolbar-target:var(--geometry-main-target); --capt
 /* Caption feedback covers the entire hit target. */
 .browser-toolbar :is(.compact-window-button,.window-controls button):not(.navigation-toolbar-button) {
   position:relative;display:grid;place-items:center;flex:0 0 var(--caption-target);
-  width:var(--caption-target);height:var(--caption-height,var(--geometry-classic-caption));padding:0;border:0;border-radius:0;
+  width:var(--caption-target);height:var(--caption-target);padding:0;border:0;border-radius:50%;
   color:var(--text);background:transparent;transform:none;
 }
 .browser-toolbar :is(.compact-window-button,.window-controls button):not(.navigation-toolbar-button)::before {
-  content:"";position:absolute;inset:0;
+  content:"";position:absolute;inset:0;border-radius:50%;
   background:transparent;pointer-events:none;
   transition:background var(--motion-micro) ease;
 }
@@ -71,8 +71,8 @@ body :is(.sidebar,.side-panel,.vpn-panel,.settings-panel,.bookmarks-menu,.tab-ov
 /* Toolbar action glyphs grow together; the address capsule keeps its density. */
 .browser-toolbar :is(.compact-active-tab,.classic-address-pill){--toolbar-glyph:var(--geometry-address-glyph)}
 /* Close is centered over Home's 44px favorites target, inset 20px. */
-.compact-toolbar-surface{padding-right:calc(var(--geometry-page-right-inset) + (44px - var(--caption-target)) / 2)}
-.classic-navigation-right{padding-right:calc(var(--geometry-page-right-inset) + (44px - var(--caption-target)) / 2)}
+.compact-toolbar-surface{padding-right:14px}
+.classic-navigation-right{padding-right:14px}
 
 /* All address actions share a viewport, footprint, center and stroke. */
 .browser-toolbar .window-close svg{width:20px!important;height:20px!important}
@@ -143,7 +143,13 @@ body[data-native-caption-hover=true] .browser-toolbar :is(#compactWindowMaximize
 .classic-toolbar .icons-only .classic-tab:not(.active):has(.tab-activity:not(:empty)),.classic-toolbar .classic-tab.pinned:not(.active):has(.tab-activity:not(:empty)){flex:0 0 auto;min-width:max-content;max-width:none;padding-left:6px;padding-right:6px}
 .classic-toolbar .classic-tab .tab-media{visibility:visible}
 
-.browser-toolbar :is(.compact-window-button,.window-controls button).window-close:is(:hover,:active) {color:white}
+.compact-toolbar-surface > .compact-window-button + .compact-window-button {
+  margin-inline-start: 5px;
+}
+
+.classic-navigation-right > .window-controls {
+  gap: 8px;
+}
 .browser-toolbar .sidebar-button .sidebar-icon-fill {fill:none;stroke:none}
 .browser-toolbar .sidebar-button[aria-expanded=true] .sidebar-icon-fill {fill:currentColor}
 

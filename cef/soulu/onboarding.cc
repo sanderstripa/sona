@@ -166,10 +166,10 @@ void BrowserWindow::HandleOnboardingBridge(int id,const std::string& request,
   }
   if(action=="onboarding.default") {
     auto result=CefDictionaryValue::Create();
-    if(!RegisterDefaultBrowser()){callback->Failure(500,"Unable to register Soulu with Windows Default Apps");return;}
+    if(!RegisterDefaultBrowser()){callback->Failure(500,"Unable to register Sona Preview with Windows Default Apps");return;}
     SHChangeNotify(SHCNE_ASSOCCHANGED,SHCNF_IDLIST,nullptr,nullptr);
     const auto opened=reinterpret_cast<INT_PTR>(ShellExecuteW(hwnd_,L"open",L"ms-settings:defaultapps?registeredAppUser=Sona%20Preview",nullptr,nullptr,SW_SHOWNORMAL));
-    result->SetBool("ok",opened>32);result->SetString("message","Выбери Soulu в стандартных приложениях Windows и назначь его для HTTP и HTTPS.");
+    result->SetBool("ok",opened>32);result->SetString("message","Выбери Sona Preview в стандартных приложениях Windows и назначь его для HTTP и HTTPS.");
     Reply(callback,result);return;
   }
   if(action=="onboarding.finish") {

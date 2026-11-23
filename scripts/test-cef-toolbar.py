@@ -60,7 +60,11 @@ def main():
                 pid=W.DWORD();u.GetWindowThreadProcessId(hwnd,C.byref(pid));name=C.create_unicode_buffer(128);u.GetClassNameW(hwnd,name,128)
                 if pid.value==process.pid and name.value=='SouluBrowserWindow':handles.append(hwnd)
                 return True
-            u.EnumWindows(visit,0);hwnd=handles[0]
+            def windows():
+                handles.clear()
+                u.EnumWindows(visit,0)
+                return [handle for handle in handles if u.IsWindowVisible(handle)]
+            hwnd=wait(lambda:next(iter(windows()),None))
             def capture(name):
                 E('new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))')
                 shot=s.command(ws,'Page.captureScreenshot',{'format':'png'})
@@ -86,10 +90,10 @@ def main():
                         # not the first frame of the hover/pressed transition.
                         E('''(async()=>{const p=getComputedStyle(document.querySelector('''+json.dumps(selector)+'''),'::before');const d=p.transitionDuration.split(',')[0].trim();await new Promise(r=>setTimeout(r,parseFloat(d)*(d.endsWith('ms')?1:1000)+34));})()''')
                         data=E('''(()=>{const n=document.querySelector('''+json.dumps(selector)+'''),r=n.getBoundingClientRect(),g=n.querySelector('svg').getBoundingClientRect(),c=getComputedStyle(n),p=getComputedStyle(n,'::before');return {w:r.width,h:r.height,bg:c.backgroundColor,pw:p.width,ph:p.height,radius:p.borderRadius,fill:p.backgroundColor,glyph:{w:g.width,h:g.height,x:g.x-r.x,y:g.y-r.y},transform:getComputedStyle(n.querySelector('svg')).transform}})()''')
-                        check(data['w']==42 and data['h']==(48 if layout=='classic' else 58) and data['bg'] in ('rgba(0, 0, 0, 0)','transparent'),f'{layout}/{action}/{pseudo}: full caption target transparent')
-                        check(data['pw']==('30px' if layout=='classic' else '32px') and data['ph']==('30px' if layout=='classic' else '32px') and data['radius']=='50%' and data['transform']=='none',f'{layout}/{action}/{pseudo}: canonical circular feedback')
+                        check(data['w']==32 and data['h']==32 and data['bg'] in ('rgba(0, 0, 0, 0)','transparent'),f'{layout}/{action}/{pseudo}: Torrent-size caption target transparent')
+                        check(data['pw']=='32px' and data['ph']=='32px' and data['radius']=='50%' and data['transform']=='none',f'{layout}/{action}/{pseudo}: canonical circular feedback')
                         glyph=20 if action=='Close' else 18
-                        check(data['glyph']=={'w':glyph,'h':glyph,'x':(42-glyph)/2,'y':(data['h']-glyph)/2},f'{layout}/{action}/{pseudo}: stable centered glyph')
+                        check(data['glyph']=={'w':glyph,'h':glyph,'x':(32-glyph)/2,'y':(data['h']-glyph)/2},f'{layout}/{action}/{pseudo}: stable centered glyph')
                         colors.append(data['fill'])
                         if pseudo==['hover']:
                             label='Restore' if action=='Maximize' and E('document.querySelector('+json.dumps(selector)+'+" rect").getAttribute("width")==="10.5"') else action
@@ -143,6 +147,37 @@ def main():
                     report['matrix'].append({'layout':layout,'scale':scale,'kind':'CDP emulation'})
                     E("document.querySelector('.site-shield').dispatchEvent(new PointerEvent('pointerdown'))")
                 s.command(ws,'Emulation.clearDeviceMetricsOverride')
+            E('browserShell.setSettings({layout:"classic"})')
+            wait(lambda:E("document.body.dataset.layout==='classic'"))
+            u.SetWindowPos(hwnd,None,35,35,860,620,0x14)
+            E('browserShell.openTab("https://example.invalid/#sona-tab-drag",true)')
+            dragged=wait(lambda:E("(async()=> (await browserShell.getState()).tabs.find(t=>t.url.includes('#sona-tab-drag'))?.id)()"))
+            selector=f'#tabStrip [data-tab-id="{dragged}"]'
+            wait(lambda:E('!!document.querySelector('+json.dumps(selector)+')'))
+            u.SetForegroundWindow(hwnd)
+            scale=u.GetDpiForWindow(hwnd)/96
+            client=W.POINT(0,0);u.ClientToScreen(hwnd,C.byref(client))
+            source=bounds(selector);band=bounds('.tabs-zone')
+            x=client.x+round((source['x']+source['w']/2)*scale)
+            y=client.y+round((source['y']+source['h']/2)*scale)
+            u.SetCursorPos(x,y);time.sleep(.15);u.mouse_event(2,0,0,0,0)
+            try:
+                u.SetCursorPos(x-20,y);time.sleep(.16)
+                u.SetCursorPos(x-20,client.y+round((band['y']+band['h']+17)*scale))
+                time.sleep(.25)
+                check(len(windows())==1,'Tab holds within the vertical deadzone')
+                u.SetCursorPos(x-20,client.y+round((band['y']+band['h']+75)*scale))
+                wait(lambda:len(windows())==2)
+                wait(lambda:E(f"(async()=> !(await browserShell.getState()).tabs.some(t=>t.id==={dragged}))()"))
+                check(True,'Tab detaches into another native window before button release')
+                u.SetCursorPos(x,y)
+                wait(lambda:E(f"(async()=> (await browserShell.getState()).tabs.some(t=>t.id==={dragged}&&t.active))()"))
+                wait(lambda:len(windows())==1)
+                check(True,'The same live tab reattaches while the button remains held')
+            finally:
+                u.mouse_event(4,0,0,0,0)
+            E('browserShell.setSettings({layout:"compact"})')
+            wait(lambda:E("document.body.dataset.layout==='compact'"))
             click_target('#compactWindowClose',edge=True)
             wait(lambda:process.poll() is not None)
             check(True,'Close accepts input near the top-right target edge')

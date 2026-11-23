@@ -124,6 +124,7 @@ bool DownloadableLink(const std::string& url) {
 class BridgeHandler final : public CefMessageRouterBrowserSide::Handler {
  public:
   explicit BridgeHandler(CefRefPtr<BrowserWindow> owner, int id) : owner_(owner), id_(id) {}
+  void MoveTo(CefRefPtr<BrowserWindow> owner) { owner_=owner; }
   bool OnQuery(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, int64_t,
                const CefString& request, bool,
                CefRefPtr<Callback> callback) override {
@@ -157,6 +158,16 @@ class BridgeHandler final : public CefMessageRouterBrowserSide::Handler {
 BrowserClient::BrowserClient(CefRefPtr<BrowserWindow> owner, BrowserRole role, int tab_id)
     : owner_(owner), role_(role), tab_id_(tab_id),
       policy_(role!=BrowserRole::kShell?owner->PolicyForTab(tab_id):nullptr) {}
+
+bool BrowserClient::CanMoveTab() const {
+  return role_==BrowserRole::kContent&&pending_popups_.empty()&&!js_dialog_open_;
+}
+
+void BrowserClient::MoveTabTo(CefRefPtr<BrowserWindow> owner) {
+  CEF_REQUIRE_UI_THREAD();
+  owner_=owner;
+  if(bridge_)static_cast<BridgeHandler*>(bridge_.get())->MoveTo(owner);
+}
 
 bool BrowserClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,const CefKeyEvent& event,CefEventHandle,bool*) {
   if (event.type == KEYEVENT_RAWKEYDOWN && event.windows_key_code == VK_F11 &&

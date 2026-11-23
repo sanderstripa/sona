@@ -63,6 +63,9 @@
     checkUpdates: () => invoke("browser.update.check"),
     switchTab: id => invoke("browser.switchTab", id),
     closeTab: id => invoke("browser.closeTab", id),
+    updateTabDropLayout: layout => invoke("browser.tabDrag.layout",layout),
+    startWindowTabDrag: (id,layout) => invoke("browser.tabDrag.begin",{id,layout}),
+    onTabDragMoved: callback => subscribe("tabDragMoved",callback),
     reorderTab: (id,target) => invoke("browser.reorderTab",{id,target}),
     pinTab: id => invoke("browser.pinTab", id),
     setBookmarksSidebar: async value => {

@@ -210,10 +210,35 @@ function renderCompactTabs(){
   $('#compactTabFlow').style.setProperty('--compact-flow-width',`${Math.min(620,466+count*33)}px`);
 }
 
+const tabDropSelector='[data-tab-id],[data-active-tab]';
+const tabDropId=node=>Number(node.dataset.tabId||node.dataset.activeTab);
+function tabDropLayout(){
+  const compact=document.body.dataset.layout==='compact';
+  const area=compact?$('#compactTabFlow'):$('.tabs-zone');
+  const toolbar=compact?$('.compact-toolbar-surface'):area;
+  const bounds=element=>{
+    const {left,top,right,bottom}=element.getBoundingClientRect();
+    return {left:Math.round(left),top:Math.round(top),right:Math.round(right),bottom:Math.round(bottom)};
+  };
+  const tabs=[...area.querySelectorAll(tabDropSelector)].filter(node=>node.getClientRects().length);
+  return {band:bounds(toolbar),tabs:tabs.map(node=>({id:tabDropId(node),...bounds(node)}))};
+}
+let dropLayoutFrame=0,lastDropLayout='';
+function queueTabDropLayout(){
+  if(!window.browserShell.updateTabDropLayout||dropLayoutFrame)return;
+  dropLayoutFrame=requestAnimationFrame(()=>{
+    dropLayoutFrame=0;
+    const layout=tabDropLayout(),signature=JSON.stringify(layout);
+    if(lastDropLayout===signature)return;
+    lastDropLayout=signature;
+    window.browserShell.updateTabDropLayout(layout).catch(console.error);
+  });
+}
+
 function enableTabReordering(strip){
   let drag=null,suppressClick=false;
-  const selector='[data-tab-id],[data-active-tab]';
-  const tabId=node=>Number(node.dataset.tabId||node.dataset.activeTab);
+  const selector=tabDropSelector;
+  const tabId=tabDropId;
   const clear=()=>{
     if(!drag)return;
     for(const {node} of drag.slots){
@@ -236,6 +261,7 @@ function enableTabReordering(strip){
     if(index<0)return;
     suppressClick=false;
     drag={node,slots,index,target:index,startX:event.clientX,startY:event.clientY,active:false};
+    window.browserShell.startWindowTabDrag?.(selected.id,tabDropLayout()).catch(console.error);
   });
   strip.addEventListener('pointermove',event=>{
     if(!drag)return;
@@ -273,6 +299,7 @@ function enableTabReordering(strip){
     clear();
     if(active&&target!==index)window.browserShell.reorderTab(tabId(node),tabId(slots[target].node)).catch(console.error);
   });
+  window.browserShell.onTabDragMoved?.(()=>{if(drag)suppressClick=true;clear();});
   strip.addEventListener('pointercancel',clear);
   strip.addEventListener('lostpointercapture',clear);
   strip.addEventListener('pointerleave',()=>{if(drag&&!drag.active)clear();});
@@ -286,7 +313,8 @@ function enableTabReordering(strip){
 
 for(const strip of [tabStrip,classicPinnedTabs,$('#compactTabFlow')])enableTabReordering(strip);
 
-function renderTabs(){renderClassicTabs();renderCompactTabs();}
+function renderTabs(){renderClassicTabs();renderCompactTabs();queueTabDropLayout();}
+window.addEventListener('resize',queueTabDropLayout);
 function renderSidebar(){const signature=JSON.stringify([state.settings?.language,state.tabs.map(x=>[x.id,x.title,x.label,x.favicon,x.active])]);if(signature===sidebarSignature)return;sidebarSignature=signature;const box=$("#sidebarTabs");$("#sidebarCount").textContent=`${state.tabs.length} ${tr("opened")}`;box.innerHTML=state.tabs.map((x)=>`<div class="sidebar-tab${x.active?" active":""}">${fav(x,"sidebar-favicon")}<button data-select="${x.id}"><strong>${esc(x.title||tr("newTab"))}</strong><small>${esc(x.label)}</small></button><button data-close="${x.id}">×</button></div>`).join("");fallbacks(box);box.querySelectorAll("[data-select]").forEach((b)=>b.onclick=()=>window.browserShell.switchTab(+b.dataset.select));box.querySelectorAll("[data-close]").forEach((b)=>b.onclick=()=>window.browserShell.closeTab(+b.dataset.close));}
 let pendingState=null,stateFrame=0;
 function renderState(v){pendingState=v||pendingState||state;if(stateFrame)return;stateFrame=requestAnimationFrame(()=>{stateFrame=0;applyState(pendingState);pendingState=null;});}

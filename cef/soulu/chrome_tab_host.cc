@@ -94,6 +94,16 @@ class Host final:public ChromeTabHost,public CefWindowDelegate,public CefBrowser
     popup_deadline_=GetTickCount64()+15000;mouse_down_=MouseDown();
     const auto generation=++popup_generation_;WatchActionPopup(generation);
   }
+  bool Reparent(HWND parent,
+      std::function<void(CefRefPtr<CefBrowser>,CefRefPtr<ChromeTabHost>)> popup_ready) override {
+    CEF_REQUIRE_UI_THREAD();
+    if(closing_||!window_||!IsWindow(parent))return false;
+    DismissActionPopup();
+    if(!SetParent(window_->GetWindowHandle(),parent))return false;
+    parent_=parent;
+    popup_ready_=std::move(popup_ready);
+    return true;
+  }
   void Close() override{DismissActionPopup();closing_=true;if(view_&&view_->GetBrowser())view_->GetBrowser()->GetHost()->CloseBrowser(true);else if(window_)window_->Close();}
  private:
   void KeepBelowShell(){

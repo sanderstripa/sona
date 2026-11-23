@@ -188,6 +188,19 @@ class BrowserWindow final : public CefBaseRefCounted {
   ~BrowserWindow() override { if(current_==this)current_=nullptr; }
   inline static BrowserWindow* current_ = nullptr;
   inline static std::vector<BrowserWindow*> windows_;
+  struct TabDropSlot { int id; RECT rect; };
+  RECT tab_drop_band_{};
+  std::vector<TabDropSlot> tab_drop_slots_;
+  bool tab_drag_shell_ = false;
+  bool close_empty_after_drag_ = false;
+  struct WindowTabDrag;
+  static std::unique_ptr<WindowTabDrag> window_tab_drag_;
+  void SetTabDropLayout(CefRefPtr<CefDictionaryValue> data);
+  void StartWindowTabDrag(CefRefPtr<CefDictionaryValue> data);
+  void TickWindowTabDrag();
+  bool MoveTabToWindow(int id, BrowserWindow* destination);
+  void FinishWindowTabDrag();
+  void ReorderTab(int id, int target);
   std::string secondary_url_,secondary_profile_;
   bool secondary_incognito_=false;
   CefRefPtr<CefRequestContext> secondary_context_;
@@ -346,7 +359,7 @@ class BrowserWindow final : public CefBaseRefCounted {
   CefRefPtr<CefListValue> bookmarks_;
   CefRefPtr<CefListValue> downloads_;
   std::string active_profile_id_ = "personal";
-  int next_tab_id_ = 1;
+  inline static int next_tab_id_ = 1;
   int active_tab_id_ = 0;
   std::map<std::string, int> last_normal_active_;
   int right_panel_width_ = 0;

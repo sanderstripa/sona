@@ -1272,6 +1272,12 @@ void BrowserWindow::AttachShell(CefRefPtr<CefBrowser> browser) {
   surface_->Attach(browser);
   SetTimer(hwnd_,7301,1000,nullptr);
   InitializeProfiles();
+  if(tab_drag_shell_){
+    if(close_empty_after_drag_){CloseAll();return;}
+    Layout();
+    EmitState();
+    return;
+  }
   if(!secondary_url_.empty()){
     NewTab(secondary_url_,secondary_incognito_,true,secondary_context_,secondary_profile_);
     secondary_url_.clear();secondary_context_=nullptr;Layout();return;
@@ -1318,7 +1324,7 @@ void BrowserWindow::ShowWhenReady() {
   const auto* tab = ActiveTab();
   if (!tab || !tab->browser) return;
   Layout();
-  ShowWindow(hwnd_, restored_show_);
+  ShowWindow(hwnd_, tab_drag_shell_&&window_tab_drag_ ? SW_SHOWNOACTIVATE : restored_show_);
 }
 
 BrowserWindow::Tab* BrowserWindow::FindTab(int id) {
@@ -1459,6 +1465,227 @@ void BrowserWindow::SearchSelection(int id,CefRefPtr<CefBrowser> source,const st
   const std::string base=engine=="yandex"?"https://yandex.ru/search/?text=":engine=="bing"?"https://www.bing.com/search?q=":engine=="duckduckgo"?"https://duckduckgo.com/?q=":"https://www.google.com/search?q=";
   OpenTabFrom(id,source,base+CefURIEncode(text,true).ToString(),false);
 }
+struct BrowserWindow::WindowTabDrag {
+  CefRefPtr<BrowserWindow> owner;
+  int id;
+  POINT offset;
+  POINT grab;
+  int last_sort_x=0;
+  bool detached = false;
+  bool sorting_after_merge = false;
+};
+std::unique_ptr<BrowserWindow::WindowTabDrag> BrowserWindow::window_tab_drag_;
+namespace {
+constexpr UINT_PTR kTabDragTimer=7303;
+constexpr int kTabDetachDistance=25;
+
+bool TabDragButtonDown() {
+  return (GetAsyncKeyState(GetSystemMetrics(SM_SWAPBUTTON)?VK_RBUTTON:VK_LBUTTON)&0x8000)!=0;
+}
+}
+
+void BrowserWindow::SetTabDropLayout(CefRefPtr<CefDictionaryValue> data) {
+  if(!data)return;
+  const double scale=GetDpiForWindow(hwnd_)/96.0;
+  const auto rect=[scale](CefRefPtr<CefDictionaryValue> value) {
+    const auto pixel=[value,scale](const char* key) {
+      return static_cast<LONG>(std::lround(std::clamp(value->GetInt(key),-32768,32768)*scale));
+    };
+    return RECT{pixel("left"),pixel("top"),pixel("right"),pixel("bottom")};
+  };
+  auto band=data->GetDictionary("band");
+  auto slots=data->GetList("tabs");
+  if(!band||!slots||slots->GetSize()>1000)return;
+  tab_drop_band_=rect(band);
+  tab_drop_slots_.clear();
+  for(size_t i=0;i<slots->GetSize();++i)if(auto row=slots->GetDictionary(i)){
+    if(FindTab(row->GetInt("id")))tab_drop_slots_.push_back({row->GetInt("id"),rect(row)});
+  }
+}
+
+void BrowserWindow::StartWindowTabDrag(CefRefPtr<CefDictionaryValue> data) {
+  if(!data||window_tab_drag_||!TabDragButtonDown()||Fullscreen()||settings_overlay_||NeedsOnboarding())return;
+  auto* tab=FindTab(data->GetInt("id"));
+  if(!tab||!tab->browser||!tab->chrome_host||tab->profile_id!=VisibleProfileId())return;
+  SetTabDropLayout(data->GetDictionary("layout"));
+  POINT pointer{};
+  RECT window{};
+  if(!GetCursorPos(&pointer)||!GetWindowRect(hwnd_,&window))return;
+  window_tab_drag_=std::make_unique<WindowTabDrag>();
+  window_tab_drag_->owner=this;
+  window_tab_drag_->id=tab->id;
+  window_tab_drag_->offset={pointer.x-window.left,pointer.y-window.top};
+  POINT local=pointer;
+  ScreenToClient(hwnd_,&local);
+  for(const auto& slot:tab_drop_slots_)if(slot.id==tab->id){
+    window_tab_drag_->grab={local.x-slot.rect.left,local.y-slot.rect.top};
+    break;
+  }
+  if(!SetTimer(hwnd_,kTabDragTimer,16,nullptr))window_tab_drag_.reset();
+}
+
+bool BrowserWindow::MoveTabToWindow(int id,BrowserWindow* destination) {
+  const auto it=std::find_if(tabs_.begin(),tabs_.end(),[id](const Tab& tab){return tab.id==id;});
+  if(it==tabs_.end()||!it->browser||!it->chrome_host||closing_||destination->closing_||
+     settings_overlay_||destination->settings_overlay_||Fullscreen()||destination->Fullscreen())return false;
+  auto* client=static_cast<BrowserClient*>(it->browser->GetHost()->GetClient().get());
+  if(!client||!client->CanMoveTab())return false;
+  if(!it->chrome_host->Reparent(destination->hwnd_,[destination](auto browser,auto host){
+       destination->AttachChromePopup(browser,host);
+     }))return false;
+  HomeCancelVoice(it->browser->GetIdentifier());
+  CancelSitePermissions(id);
+  const int adjacent=AdjacentTab(id);
+  const bool was_active=id==active_tab_id_;
+  const bool incognito=it->incognito;
+  const auto profile=it->profile_id;
+  client->MoveTabTo(destination);
+  destination->tabs_.push_back(std::move(*it));
+  tabs_.erase(it);
+  for(auto& [key,last]:last_normal_active_)if(last==id)last=adjacent;
+  if(was_active)active_tab_id_=adjacent;
+  destination->active_tab_id_=id;
+  if(!incognito)destination->last_normal_active_[profile]=id;
+  if(!tabs_.empty()&&!active_tab_id_){
+    if(incognito)ReleaseIncognito();
+    auto replacement=std::find_if(tabs_.begin(),tabs_.end(),[&](const Tab& tab){
+      return !tab.incognito&&tab.profile_id==active_profile_id_;
+    });
+    if(replacement==tabs_.end())NewTab();
+    else active_tab_id_=replacement->id;
+  }
+  destination->ActivateMedia(id);
+  destination->Layout();
+  destination->EmitState();
+  if(shell_){
+    Emit("tabDragMoved",EmptyValue());
+    Layout();
+    EmitState();
+  }
+  return true;
+}
+
+void BrowserWindow::FinishWindowTabDrag() {
+  if(!window_tab_drag_||window_tab_drag_->owner.get()!=this)return;
+  CefRefPtr<BrowserWindow> self=this;
+  KillTimer(hwnd_,kTabDragTimer);
+  const bool native_drag=window_tab_drag_->detached||window_tab_drag_->sorting_after_merge;
+  const int id=window_tab_drag_->id;
+  window_tab_drag_.reset();
+  if(native_drag&&FindTab(id)&&IsWindowVisible(hwnd_)){
+    SetForegroundWindow(hwnd_);
+    FocusContent(FindTab(id));
+  }
+}
+
+void BrowserWindow::TickWindowTabDrag() {
+  if(!window_tab_drag_||window_tab_drag_->owner.get()!=this){KillTimer(hwnd_,kTabDragTimer);return;}
+  auto& drag=*window_tab_drag_;
+  auto* tab=FindTab(drag.id);
+  POINT cursor{};
+  if(!TabDragButtonDown()||!tab||!GetCursorPos(&cursor)||closing_){FinishWindowTabDrag();return;}
+  const auto client_point=[&](BrowserWindow* window){
+    POINT converted=cursor;
+    ScreenToClient(window->hwnd_,&converted);
+    return converted;
+  };
+  const int id=drag.id;
+  if(drag.detached){
+    if(shell_frame_ready_)for(const auto& slot:tab_drop_slots_)if(slot.id==id){
+      POINT anchor{slot.rect.left+std::clamp(drag.grab.x,0L,std::max(0L,slot.rect.right-slot.rect.left-1)),
+                   slot.rect.top+std::clamp(drag.grab.y,0L,std::max(0L,slot.rect.bottom-slot.rect.top-1))};
+      RECT bounds{};
+      if(ClientToScreen(hwnd_,&anchor)&&GetWindowRect(hwnd_,&bounds))
+        drag.offset={anchor.x-bounds.left,anchor.y-bounds.top};
+      break;
+    }
+    SetWindowPos(hwnd_,nullptr,cursor.x-drag.offset.x,cursor.y-drag.offset.y,
+      0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
+    for(auto* window:windows_){
+      if(window==this||!window->shell_frame_ready_||window->closing_||!IsWindowVisible(window->hwnd_)||
+         IsIconic(window->hwnd_)||window->settings_overlay_||window->NeedsOnboarding()||
+         window->VisibleProfileId()!=tab->profile_id||
+         (tab->incognito&&window->incognito_context_.get()!=incognito_context_.get()))continue;
+      const POINT target_point=client_point(window);
+      if(!PtInRect(&window->tab_drop_band_,target_point))continue;
+      auto slot=std::find_if(window->tab_drop_slots_.begin(),window->tab_drop_slots_.end(),[&](const TabDropSlot& candidate){
+        auto* item=window->FindTab(candidate.id);
+        return item&&item->pinned==tab->pinned&&target_point.x<(candidate.rect.left+candidate.rect.right)/2;
+      });
+      const int before=slot==window->tab_drop_slots_.end()?0:slot->id;
+      if(!MoveTabToWindow(id,window))continue;
+      if(before)window->ReorderTab(id,before);
+      KillTimer(hwnd_,kTabDragTimer);
+      drag.owner=window;
+      drag.detached=false;
+      drag.sorting_after_merge=true;
+      drag.last_sort_x=target_point.x;
+      if(!SetTimer(window->hwnd_,kTabDragTimer,16,nullptr))window->FinishWindowTabDrag();
+      ShowWindow(hwnd_,SW_HIDE);
+      close_empty_after_drag_=true;
+      if(shell_)CloseAll();
+      return;
+    }
+    return;
+  }
+
+  const POINT local=client_point(this);
+  const int tolerance=MulDiv(kTabDetachDistance,GetDpiForWindow(hwnd_),96);
+  if(local.y>=tab_drop_band_.top-tolerance&&local.y<=tab_drop_band_.bottom+tolerance){
+    if(drag.sorting_after_merge&&local.x!=drag.last_sort_x){
+      drag.last_sort_x=local.x;
+      for(const auto& slot:tab_drop_slots_)if(PtInRect(&slot.rect,local)){
+        ReorderTab(id,slot.id);
+        break;
+      }
+    }
+    return;
+  }
+  CefRefPtr<BrowserWindow> detached=new BrowserWindow();
+  detached->profiles_=profiles_;
+  detached->active_profile_id_=active_profile_id_;
+  detached->settings_=settings_->Copy(false);
+  detached->bookmarks_=bookmarks_->Copy();
+  detached->policies_=policies_;
+  detached->vpn_settings_=vpn_settings_;
+  detached->vpn_enabled_=vpn_enabled_;
+  detached->vpn_active_profile_id_=vpn_active_profile_id_;
+  if(tab->incognito){
+    detached->incognito_context_=incognito_context_;
+    detached->private_page_settings_=private_page_settings_;
+  }
+  detached->tab_drag_shell_=true;
+  if(!detached->CreateNativeWindow())return;
+  if(!MoveTabToWindow(id,detached.get())){
+    DestroyWindow(detached->hwnd_);
+    FinishWindowTabDrag();
+    return;
+  }
+  KillTimer(hwnd_,kTabDragTimer);
+  drag.owner=detached;
+  drag.detached=true;
+  drag.sorting_after_merge=false;
+  SetWindowPos(detached->hwnd_,nullptr,cursor.x-drag.offset.x,cursor.y-drag.offset.y,
+    0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
+  detached->CreateShellBrowser();
+  if(!SetTimer(detached->hwnd_,kTabDragTimer,16,nullptr))detached->FinishWindowTabDrag();
+  if(tabs_.empty()){
+    close_empty_after_drag_=true;
+    CloseAll();
+  }
+}
+
+void BrowserWindow::ReorderTab(int id,int target) {
+  auto* dragged=FindTab(id);
+  auto* anchor=FindTab(target);
+  if(!dragged||!anchor||dragged==anchor||dragged->profile_id!=anchor->profile_id||
+     dragged->incognito!=anchor->incognito||dragged->pinned!=anchor->pinned)return;
+  const size_t from=dragged-tabs_.data(),to=anchor-tabs_.data();
+  if(from<to)std::rotate(tabs_.begin()+from,tabs_.begin()+from+1,tabs_.begin()+to+1);
+  else std::rotate(tabs_.begin()+to,tabs_.begin()+from,tabs_.begin()+from+1);
+  EmitState();
+}
+
 void BrowserWindow::OpenLinkWindow(int id,CefRefPtr<CefBrowser> source,const std::string& url,bool incognito){
   auto* tab=FindTab(id);if(!tab||!tab->browser||!tab->browser->IsSame(source)||WebOrigin(url).empty())return;
   CefRefPtr<BrowserWindow> window=new BrowserWindow();
@@ -2788,12 +3015,12 @@ void BrowserWindow::HandleBridge(const std::string& request,
        dragged->incognito!=target->incognito||dragged->pinned!=target->pinned){
       callback->Failure(404,"Tab position is no longer available");return;
     }
-    if(dragged!=target){
-      const size_t from=dragged-tabs_.data(),to=target-tabs_.data();
-      if(from<to)std::rotate(tabs_.begin()+from,tabs_.begin()+from+1,tabs_.begin()+to+1);
-      else std::rotate(tabs_.begin()+to,tabs_.begin()+from,tabs_.begin()+from+1);
-      EmitState();
-    }
+    ReorderTab(dragged->id,target->id);
+  }
+  else if(action=="browser.tabDrag.layout"||action=="browser.tabDrag.begin"){
+    auto data=payload&&payload->GetType()==VTYPE_DICTIONARY?payload->GetDictionary():nullptr;
+    if(action=="browser.tabDrag.layout")SetTabDropLayout(data);
+    else StartWindowTabDrag(data);
   }
   else if (action == "browser.pinTab") {
     auto* tab = payload && payload->GetType()==VTYPE_INT ? FindTab(payload->GetInt()) : nullptr;
@@ -3349,8 +3576,8 @@ void BrowserWindow::CloseAll() {
     for(const auto& [profile,service]:snapshot)service->Close([self,remaining]{if(--*remaining==0){self->extension_services_.clear();self->extension_services_closed_=true;self->CloseAll();}});
     return;
   }
-  SaveSession();
-  SaveWindowPlacement();
+  if(!close_empty_after_drag_){SaveSession();SaveWindowPlacement();}
+  FinishWindowTabDrag();
   closing_ = true;
   // Hide the composed window before child hosts are torn down; no DWM frame flash.
   ShowWindow(hwnd_,SW_HIDE);
@@ -3585,6 +3812,7 @@ LRESULT CALLBACK BrowserWindow::WindowProc(HWND hwnd, UINT message, WPARAM wpara
       if (self->HandleFullscreenKey(static_cast<int>(wparam))) return 0;
       break;
     case WM_TIMER:
+      if(wparam==kTabDragTimer){self->TickWindowTabDrag();return 0;}
       if(wparam==7301){self->ApplyPerformancePolicy();return 0;}
       if(wparam==7302){
         if(GetTickCount64()>=self->bookmarks_motion_start_+self->bookmarks_motion_duration_){
@@ -3608,6 +3836,7 @@ LRESULT CALLBACK BrowserWindow::WindowProc(HWND hwnd, UINT message, WPARAM wpara
     case WM_SETTINGCHANGE: self->ApplyWindowAppearance(); self->ApplyContentTheme(); break;
     case WM_CLOSE: TypographyCancelOwnedDialogs(hwnd);self->CloseAll();return 0;
     case WM_DESTROY:
+      self->FinishWindowTabDrag();
       ReleasePageGlass(hwnd);ReleaseFrostedBackdrop(hwnd);windows_.erase(std::remove(windows_.begin(),windows_.end(),self),windows_.end());
       if(current_==self)current_=windows_.empty()?nullptr:windows_.back();
       if(windows_.empty())CefQuitMessageLoop();return 0;
