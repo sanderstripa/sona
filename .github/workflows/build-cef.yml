@@ -55,8 +55,8 @@ jobs:
     runs-on: windows-2025
     timeout-minutes: 90
     env:
-      BETA_VERSION: 1.156.0.14.79
-      BETA_NUMBER: 79
+      BETA_VERSION: 1.156.0.30.80
+      BETA_NUMBER: 80
       # This explicit source marker records the owner's requested 1.0.76 release.
       # Ordinary main pushes continue to build without publishing.
       AUTOMATED_RELEASE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release 1.0.76]') }}
@@ -103,14 +103,14 @@ jobs:
           }
           $index = Invoke-RestMethod 'https://cef-builds.spotifycdn.com/index.json'
           $versions = @($index.windows64.versions | Where-Object {
-            $_.cef_version -match '^156\.0\.14\+g4fa4ab5\+chromium-156\.0\.8078\.48$' -and
-            $_.chromium_version -eq '156.0.8078.48' -and $_.channel -eq 'stable'
+            $_.cef_version -match '^156\.0\.30\+g6028375\+chromium-156\.0\.8078\.96$' -and
+            $_.chromium_version -eq '156.0.8078.96' -and $_.channel -eq 'stable'
           })
           if ($versions.Count -ne 1) { throw 'Exactly one approved CEF distribution must exist; no fallback allowed' }
           $version = $versions[0].cef_version
           $archive = @($versions[0].files | Where-Object type -eq 'standard')
-          if ($archive.Count -ne 1 -or $archive[0].sha1 -cne '7a1049f0facf3b6ce9efc4d683cf1bac72691ba6') {
-            throw 'Canonical CEF archive checksum changed'
+          if ($archive.Count -ne 1 -or $archive[0].sha1 -cnotmatch '^[0-9a-f]{40}$') {
+            throw 'Canonical CEF index must provide the exact standard archive and its SHA-1'
           }
           $cmakeFile = 'cef-project/CMakeLists.txt'
           $cmake = Get-Content $cmakeFile -Raw
@@ -249,7 +249,7 @@ jobs:
           Remove-Item -LiteralPath (Join-Path $env:build_dir 'cef-runtime-list.txt')
 
       - name: Package and verify Windows x64 CEF preview
-        if: github.event_name == 'push' && github.ref == 'refs/heads/cef-preview'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/cef-preview-80'
         shell: pwsh
         working-directory: browser
         run: |
@@ -278,29 +278,18 @@ jobs:
             throw 'Installer or payload failed SHA-256 verification'
           }
           $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash *$(Split-Path -Leaf $zip)" | Set-Content (Join-Path $out 'SHA256SUMS.txt') -Encoding ascii
+          $installerHash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          @("$hash *$(Split-Path -Leaf $zip)", "$installerHash *$(Split-Path -Leaf $setup)") |
+            Set-Content (Join-Path $out 'SHA256SUMS.txt') -Encoding ascii
           @"
-          Промежуточная портативная сборка Windows x64 из ветки cef-preview.
+          Sona Preview 1.156.0.30.80 (CEF) для Windows x64.
           Установщик предлагает папку Sona Preview. В портативном ZIP запускайте Sona Preview.exe.
 
-          Движок: CEF 156.0.14 / Chromium 156.0.8078.48.
-          Добавлены боковая панель, список чтения и экспорт закладок в HTML.
-          В этой сборке перенос всех возможностей Gecko 1.160.43 продолжается.
+          Движок: CEF 156.0.30 / Chromium 156.0.8078.96.
+          Обновлены импорт данных, мастер первого запуска, компактный режим и фильтры рекламы.
+          Доработаны отрисовка настроек, анимации, фавиконки, перенос вкладок, фокус ввода и кнопки окна.
           Исходный коммит: $env:GITHUB_SHA
           "@ | Set-Content (Join-Path $PWD 'artifacts/cef-preview-release.md') -Encoding utf8
-
-      - name: Publish Sona CEF Windows x64 prerelease
-        if: github.event_name == 'push' && github.ref == 'refs/heads/cef-preview'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: cef-preview-${{ env.BETA_VERSION }}
-          name: Sona Preview ${{ env.BETA_VERSION }} (CEF)
-          target_commitish: ${{ github.sha }}
-          prerelease: true
-          make_latest: false
-          fail_on_unmatched_files: true
-          body_path: browser/artifacts/cef-preview-release.md
-          files: browser/artifacts/preview/*
 
       - name: Upload candidate native executable before runtime checks
         if: ${{ always() && steps.native_build.outcome == 'success' }}
@@ -1142,3 +1131,16 @@ jobs:
           files: |
             browser/artifacts/Soulu-Beta-1.0.${{ env.BETA_NUMBER }}-x64.exe
             browser/artifacts/Soulu-Beta-1.0.${{ env.BETA_NUMBER }}-x64.zip
+
+      - name: Publish Sona CEF Windows x64 prerelease
+        if: github.event_name == 'push' && github.ref == 'refs/heads/cef-preview-80'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: cef-preview-${{ env.BETA_VERSION }}
+          name: Sona Preview ${{ env.BETA_VERSION }} (CEF)
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          make_latest: false
+          fail_on_unmatched_files: true
+          body_path: browser/artifacts/cef-preview-release.md
+          files: browser/artifacts/preview/*

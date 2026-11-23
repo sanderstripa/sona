@@ -187,8 +187,8 @@ def main():
                         'userAgent':s.evaluate(store,'navigator.userAgent'),
                         'userAgentMetadata':{
                             'brands':[{'brand':'Chromium','version':'156'},{'brand':'Google Chrome','version':'156'}],
-                            'fullVersionList':[{'brand':'Chromium','version':'156.0.8078.48'},{'brand':'Google Chrome','version':'156.0.8078.48'}],
-                            'fullVersion':'156.0.8078.48','platform':'Windows','platformVersion':'10.0.0',
+                            'fullVersionList':[{'brand':'Chromium','version':'156.0.8078.96'},{'brand':'Google Chrome','version':'156.0.8078.96'}],
+                            'fullVersion':'156.0.8078.96','platform':'Windows','platformVersion':'10.0.0',
                             'architecture':'x86','model':'','mobile':False,'bitness':'64','wow64':False
                         }})
                 s.command(store, 'Page.navigate', {'url':'https://chromewebstore.google.com/detail/bitwarden-password-manager/nngceckbapebfimnlniiiahkandclblb'})

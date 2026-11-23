@@ -107,7 +107,7 @@ def main():
             s.navigate(page, origin + '/fixture')
             report['userAgent'] = s.evaluate(page, 'navigator.userAgent')
             report['browserVersion'] = s.command(page, 'Browser.getVersion')
-            check(report['browserVersion']['product'].endswith('/156.0.8078.48'), 'DevTools reports the selected Chromium runtime')
+            check(report['browserVersion']['product'].endswith('/156.0.8078.96'), 'DevTools reports the selected Chromium runtime')
             check('Chrome/156.' in report['userAgent'], 'Runtime User-Agent has the selected Chromium major version')
             check(s.evaluate(page, "fetch('/fixture').then(r=>r.ok)"), 'HTTP fetch succeeds')
             check(s.evaluate(page, "new Promise(r=>{let x=new XMLHttpRequest();x.open('GET','/fixture');x.onload=()=>r(x.status===200);x.send()})"), 'XHR succeeds')

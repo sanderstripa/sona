@@ -45,7 +45,7 @@ $adapterText=[Text.Encoding]::UTF8.GetString($adapterBytes).Replace("`r`n","`n")
 $sourceHash=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($adapterText))).ToLowerInvariant()
 if($sourceHash -cne 'e9e76a112beb145b3f09d0a4f19213ed8019db4d0c2620addd2aee311270a0b4'){throw 'Shared Soulu adapter source changed; review engine specialization'}
 $oldDistribution='154.0.33+ga03e714+chromium-154.0.8037.94'
-$distribution='156.0.14+g4fa4ab5+chromium-156.0.8078.48'
+$distribution='156.0.30+g6028375+chromium-156.0.8078.96'
 if(([regex]::Matches($adapterText,[regex]::Escape($oldDistribution))).Count -ne 1){throw 'Expected exactly one shared engine allowlist'}
 $adapterText=$adapterText.Replace($oldDistribution,$distribution)
 $testPath=Join-Path $core 'adapters/soulu/engine_upgrade_windows_test.go'

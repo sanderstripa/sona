@@ -38,7 +38,7 @@ func engineFixture(t *testing.T, distribution, fault string) []byte {
 }
 
 func TestEngineUpgradeRejectsWrongOrDamagedPayload(t *testing.T) {
- const approved = "156.0.14+g4fa4ab5+chromium-156.0.8078.48"
+ const approved = "156.0.30+g6028375+chromium-156.0.8078.96"
  if err := verifyCEF(engineFixture(t, approved, "")); err != nil { t.Fatal(err) }
  for _, fault := range []string{"hash", "missing-file", "missing-manifest"} {
   t.Run(fault, func(t *testing.T) {
