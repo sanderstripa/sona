@@ -57,6 +57,15 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as root:
 
   evidence['initialPagePixel']=initial.getpixel((round(20*scale),round(120*scale)))[:3]
   assert evidence['initialPagePixel'][0]>evidence['initialPagePixel'][1]+50, 'Initial document must remain visible below the panel'
+  # The user-approved product no longer exposes toolbar transparency. Keep a
+  # native regression here for the opaque page boundary and page lifetime. The
+  # separate Settings overlay suite proves the required shadow and live blur.
+  if not state()['settings'].get('mattePanel',False):
+   evidence['toolbarTransparencyRemoved']=True
+   assert not evidence['glassReady'],evidence
+   assert s.evaluate(page,'identity')==identity
+   evidence['passed']=True
+   raise SystemExit(0)
   assert evidence['glassReady'],evidence
   s.evaluate(page,'scrollTo(0,260)');wait(lambda:s.evaluate(page,'scrollY>=250'));green=capture('scroll-260')
   s.evaluate(page,'scrollTo(0,500)');wait(lambda:s.evaluate(page,'scrollY>=490'));blue=capture('scroll-500')

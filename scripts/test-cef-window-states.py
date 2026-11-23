@@ -250,12 +250,12 @@ try:
 
         focus_fixture('#passwordFixture')
         send_keys('Typed17',with_spaces=True,vk_packet=False)
-        wait(lambda:s.evaluate(page,'passwordFixture.value==="Typed17"'))
+        wait(lambda:s.evaluate(page,'document.querySelector("#passwordFixture").value==="Typed17"'))
         focus_fixture('#copyFixture')
         send_keys('^a^c',vk_packet=False)
         focus_fixture('#passwordFixture')
         send_keys('^a^v',vk_packet=False)
-        wait(lambda:s.evaluate(page,'passwordFixture.value==="Paste42"'))
+        wait(lambda:s.evaluate(page,'document.querySelector("#passwordFixture").value==="Paste42"'))
         checks.append(dict(native_password_typing=True,native_password_paste=True))
         for layout in ['compact','classic']:
             for matte in [False,True]:

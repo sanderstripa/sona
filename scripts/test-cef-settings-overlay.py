@@ -218,11 +218,14 @@ def main():
                 wait(lambda:not edit("document.querySelector('#actionDialog').open"))
             for theme in ['light','dark','system']:
                 edit(f'''souluSettings.openSection("interface");document.querySelector('[name="settings-theme"][value="{theme}"]').click()''')
-                for matte in [False,True]:
-                    edit('(()=>{const n=document.querySelector("#mattePanel");if(n.checked!=='+str(matte).lower()+')n.click();})()')
-                    u.MoveWindow(main_window,50,50,1280,900,True);time.sleep(.15)
-                    check(rect(overlay)==client_rect(main_window),'Backdrop covers the current window in '+theme+' matte='+str(matte))
-                    composed_capture().save(visuals/(theme+'-matte-'+str(matte)+'.png'))
+                # Toolbar transparency was deliberately removed. Settings owns
+                # its independent native blurred backdrop and must remain valid
+                # in every theme without depending on the obsolete matte toggle.
+                check(edit('document.querySelector("#mattePanel")===null'),
+                      'Settings does not restore the removed toolbar transparency control')
+                u.MoveWindow(main_window,50,50,1280,900,True);time.sleep(.15)
+                check(rect(overlay)==client_rect(main_window),'Backdrop covers the current window in '+theme)
+                composed_capture().save(visuals/(theme+'-settings-blur.png'))
             u.ShowWindow(main_window,3);time.sleep(.25)
             check(rect(overlay)==client_rect(main_window),'Maximize keeps overlay bound to the owner')
             u.ShowWindow(main_window,9);time.sleep(.2)

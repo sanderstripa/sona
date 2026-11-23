@@ -51,11 +51,22 @@ int APIENTRY wWinMain(HINSTANCE instance, HINSTANCE, wchar_t*, int) {
   }
   if(command_line->HasSwitch("browser-import-test-report")){
     wchar_t enabled[12]={},test_root[32768]={},local[32768]={},roaming[32768]={};
+    const auto same_path=[](const wchar_t* left,const wchar_t* right){
+      std::error_code error;
+      auto a=std::filesystem::weakly_canonical(std::filesystem::path(left),error);
+      if(error)return false;
+      auto b=std::filesystem::weakly_canonical(std::filesystem::path(right),error);
+      return !error&&_wcsicmp(a.c_str(),b.c_str())==0;
+    };
     if(!GetEnvironmentVariableW(L"SOULU_UI_TEST_PORT",enabled,12)||
        !GetEnvironmentVariableW(L"SOULU_DATA_SECURITY_TEST_ROOT",test_root,32768)||
        !GetEnvironmentVariableW(L"LOCALAPPDATA",local,32768)||
        !GetEnvironmentVariableW(L"APPDATA",roaming,32768)||
-       std::wstring(test_root)!=local||std::wstring(test_root)!=roaming)return 2;
+       !same_path(test_root,local)||!same_path(test_root,roaming)){
+      std::ofstream report(std::filesystem::path(command_line->GetSwitchValue("browser-import-test-report").ToWString()),std::ios::binary);
+      report<<"{\"ok\":false,\"checks\":0,\"failedCheck\":\"isolated AppData guard rejected the fixture\"}";
+      return 2;
+    }
     return soulu::RunBrowserImportTests(std::filesystem::path(command_line->GetSwitchValue("browser-import-test-report").ToWString()));
   }
   if(command_line->HasSwitch("data-security-test-report")){

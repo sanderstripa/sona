@@ -12,7 +12,8 @@ namespace soulu {
 // Invoked only with all AppData variables redirected to an explicit fixture root.
 int RunBrowserImportTests(const std::filesystem::path& output){
   int checks=0;
-  auto check=[&](bool ok,const char* name){++checks;if(!ok)throw std::runtime_error(name);};
+  auto checkpoint=[&](const char* name){std::ofstream out(output,std::ios::binary);out<<"{\"ok\":false,\"checks\":"<<checks<<",\"failedCheck\":\"native crash after "<<name<<"\"}";};
+  auto check=[&](bool ok,const char* name){++checks;checkpoint(name);if(!ok)throw std::runtime_error(name);};
   auto write=[](const std::filesystem::path& path,const std::string& text){std::filesystem::create_directories(path.parent_path());std::ofstream f(path,std::ios::binary);f<<text;if(!f)throw std::runtime_error("fixture-write");};
   auto database=[&](const std::filesystem::path& path,const char* sql){sqlite3* db=nullptr;check(sqlite3_open(CefString(path.wstring()).ToString().c_str(),&db)==SQLITE_OK,"fixture-open");int code=sqlite3_exec(db,sql,nullptr,nullptr,nullptr);sqlite3_close(db);check(code==SQLITE_OK,"fixture-schema");};
   try{

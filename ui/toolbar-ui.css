@@ -144,7 +144,7 @@ body[data-native-caption-hover=true] .browser-toolbar :is(#compactWindowMaximize
 .classic-toolbar .classic-tab .tab-media{visibility:visible}
 
 .compact-toolbar-surface > .compact-window-button + .compact-window-button {
-  margin-inline-start: 5px;
+  margin-inline-start: 8px;
 }
 
 .classic-navigation-right > .window-controls {
