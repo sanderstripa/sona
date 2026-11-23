@@ -277,6 +277,12 @@ class BrowserWindow final : public CefBaseRefCounted {
   };
   Geometry CurrentGeometry() const;
   void SyncAdaptiveToolbar();
+  void UpdateShellFrameRate();
+  void KeepShellMotionFor(int duration);
+  ULONGLONG shell_motion_until_ = 0;
+  unsigned shell_motion_generation_ = 0;
+  unsigned right_panel_generation_ = 0;
+  int shell_frame_rate_ = 0;
   void AdvanceAdaptiveToolbar(unsigned generation);
   CefRefPtr<CefDictionaryValue> AdaptiveToolbarState() const;
   bool adaptive_initialized_ = false, adaptive_expanded_ = false, adaptive_running_ = false;

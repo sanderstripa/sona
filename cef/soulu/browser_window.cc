@@ -1599,8 +1599,10 @@ void BrowserWindow::TickWindowTabDrag() {
         drag.offset={anchor.x-bounds.left,anchor.y-bounds.top};
       break;
     }
-    SetWindowPos(hwnd_,nullptr,cursor.x-drag.offset.x,cursor.y-drag.offset.y,
-      0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
+    const LONG x=cursor.x-drag.offset.x,y=cursor.y-drag.offset.y;
+    RECT current_bounds{};
+    if(GetWindowRect(hwnd_,&current_bounds)&&(current_bounds.left!=x||current_bounds.top!=y))
+      SetWindowPos(hwnd_,nullptr,x,y,0,0,SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);
     for(auto* window:windows_){
       if(window==this||!window->shell_frame_ready_||window->closing_||!IsWindowVisible(window->hwnd_)||
          IsIconic(window->hwnd_)||window->settings_overlay_||window->NeedsOnboarding()||
@@ -2108,13 +2110,35 @@ CefRefPtr<CefDictionaryValue> BrowserWindow::AdaptiveToolbarState() const {
   return frame;
 }
 
+void BrowserWindow::UpdateShellFrameRate() {
+  if(!shell_)return;
+  const bool animated=adaptive_running_||sidebar_motion_||GetTickCount64()<shell_motion_until_;
+  const int rate=animated?motion::kShellMotionFrameRate:motion::kShellIdleFrameRate;
+  if(rate==shell_frame_rate_)return;
+  shell_frame_rate_=rate;
+  shell_->GetHost()->SetWindowlessFrameRate(rate);
+}
+
+void BrowserWindow::KeepShellMotionFor(int duration) {
+  const ULONGLONG until=GetTickCount64()+std::clamp(duration,0,600);
+  if(until<=shell_motion_until_)return;
+  shell_motion_until_=until;
+  UpdateShellFrameRate();
+  const auto generation=++shell_motion_generation_;
+  CefRefPtr<BrowserWindow> self=this;
+  CefPostDelayedTask(TID_UI,new FunctionTask([self,generation](){
+    if(generation!=self->shell_motion_generation_)return;
+    self->shell_motion_until_=0;
+    self->UpdateShellFrameRate();
+  }),std::clamp(duration,0,600));
+}
+
 void BrowserWindow::SyncAdaptiveToolbar() {
   if (EffectiveSettings()->GetString("layout") != "adaptive") {
     if (adaptive_initialized_) {
       ++adaptive_generation_;
       adaptive_initialized_ = adaptive_running_ = false;
-      if (shell_ && !sidebar_motion_)
-        shell_->GetHost()->SetWindowlessFrameRate(motion::kShellIdleFrameRate);
+      UpdateShellFrameRate();
     }
     return;
   }
@@ -2133,6 +2157,7 @@ void BrowserWindow::SyncAdaptiveToolbar() {
     adaptive_running_ = false;
     adaptive_height_ = target;
     adaptive_progress_ = expanded ? 1 : 0;
+    UpdateShellFrameRate();
     return;
   }
   if (expanded == adaptive_expanded_) return;
@@ -2145,7 +2170,7 @@ void BrowserWindow::SyncAdaptiveToolbar() {
   adaptive_duration_ = animate ? motion::kAdaptiveToolbarMs : motion::kReducedOverlayMs;
   adaptive_running_ = true;
   const unsigned generation = ++adaptive_generation_;
-  if (shell_) shell_->GetHost()->SetWindowlessFrameRate(motion::kShellMotionFrameRate);
+  UpdateShellFrameRate();
   CefRefPtr<BrowserWindow> self = this;
   CefPostDelayedTask(TID_UI, new FunctionTask([self,generation] {
     self->AdvanceAdaptiveToolbar(generation);
@@ -2166,8 +2191,7 @@ void BrowserWindow::AdvanceAdaptiveToolbar(unsigned generation) {
   Layout();
   Emit("adaptiveGeometry", Wrap(AdaptiveToolbarState()));
   if (!adaptive_running_) {
-    if (shell_ && !sidebar_motion_)
-      shell_->GetHost()->SetWindowlessFrameRate(motion::kShellIdleFrameRate);
+    UpdateShellFrameRate();
     return;
   }
   CefRefPtr<BrowserWindow> self = this;
@@ -3063,21 +3087,37 @@ void BrowserWindow::HandleBridge(const std::string& request,
     }
     { // Both bookmark and tab sidebars retain their host for the exit fade.
       sidebar_motion_ = true; const auto generation = ++sidebar_motion_generation_;
-      if (shell_) shell_->GetHost()->SetWindowlessFrameRate(motion::kShellMotionFrameRate);
+      UpdateShellFrameRate();
       CefRefPtr<BrowserWindow> self = this;
       // Keep the OSR host mapped throughout exit, including Escape/overview.
       // A bounded deadline handles frontend interruption or failure.
       CefPostDelayedTask(TID_UI, new FunctionTask([self,generation] {
         if (self->sidebar_motion_generation_ != generation) return;
         self->sidebar_motion_ = false;
-        if (self->shell_) self->shell_->GetHost()->SetWindowlessFrameRate(motion::kShellIdleFrameRate);
+        self->UpdateShellFrameRate();
         self->Layout();
       }), motion::kStructuralMs);
     }
     Layout(); EmitState();
   }
   else if (action == "browser.popover") { popover_visible_ = payload->GetBool(); Layout(); }
-  else if (action == "browser.setRightPanel") { right_panel_width_ = payload->GetInt(); Layout(); }
+  else if (action == "browser.shell.motion") {
+    if(payload&&payload->GetType()==VTYPE_INT)KeepShellMotionFor(payload->GetInt());
+  }
+  else if (action == "browser.setRightPanel") {
+    const int width=std::clamp(payload->GetInt(),0,600);
+    const auto generation=++right_panel_generation_;
+    KeepShellMotionFor(motion::kSurfaceMs+32);
+    if(width>0){right_panel_width_=width;Layout();}
+    else if(right_panel_width_>0){
+      CefRefPtr<BrowserWindow> self=this;
+      CefPostDelayedTask(TID_UI,new FunctionTask([self,generation](){
+        if(generation!=self->right_panel_generation_||self->closing_)return;
+        self->right_panel_width_=0;
+        self->Layout();
+      }),motion::kSurfaceMs+16);
+    }
+  }
   else if (action == "browser.setSuggestionsHeight") { suggestions_height_ = std::clamp(static_cast<int>(std::ceil(payload->GetType()==VTYPE_DOUBLE?payload->GetDouble():payload->GetInt())),0,4096); Layout(); }
   else if (action == "browser.find") {
     if (auto* t = ActiveTab(); t && t->browser) {
@@ -3108,9 +3148,7 @@ void BrowserWindow::HandleBridge(const std::string& request,
     const bool show = payload->GetBool();
     if (show && !overview_visible_) CaptureThumbnail();
     overview_visible_ = show;
-    if(shell_)shell_->GetHost()->SetWindowlessFrameRate(motion::kShellMotionFrameRate);
-    CefRefPtr<BrowserWindow> self=this;
-    CefPostDelayedTask(TID_UI,new FunctionTask([self]{if(self->shell_&&!self->sidebar_motion_&&!self->adaptive_running_)self->shell_->GetHost()->SetWindowlessFrameRate(motion::kShellIdleFrameRate);}),360);
+    KeepShellMotionFor(360);
     Layout(); EmitState();
   }
   else if (action == "browser.bookmarks.auto") {

@@ -246,8 +246,8 @@ try:
                     u.SendMessageW(hwnd,0x33f,0,C.addressof(titlebar))
                     caption=titlebar.buttons[3]
                     assert caption.left<=point.x<caption.right and caption.top<=point.y<caption.bottom
-                    assert abs((caption.right-caption.left)-round(42*u.GetDpiForWindow(hwnd)/96))<=1
-                    assert abs((caption.bottom-caption.top)-round((58 if layout=='compact' else 48)*u.GetDpiForWindow(hwnd)/96))<=1
+                    assert abs((caption.right-caption.left)-round(32*u.GetDpiForWindow(hwnd)/96))<=1
+                    assert abs((caption.bottom-caption.top)-round(32*u.GetDpiForWindow(hwnd)/96))<=1
 
                     if not matte and theme=='light':
                         native_caption_click(shell,hwnd,selector,cancel=True)

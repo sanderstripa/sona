@@ -66,6 +66,7 @@
     updateTabDropLayout: layout => invoke("browser.tabDrag.layout",layout),
     startWindowTabDrag: (id,layout) => invoke("browser.tabDrag.begin",{id,layout}),
     onTabDragMoved: callback => subscribe("tabDragMoved",callback),
+    keepShellMotion: duration => invoke("browser.shell.motion",duration),
     reorderTab: (id,target) => invoke("browser.reorderTab",{id,target}),
     pinTab: id => invoke("browser.pinTab", id),
     setBookmarksSidebar: async value => {
@@ -120,7 +121,13 @@
     find: (value, forward = true) => invoke("browser.find", {text:value, forward}),
     suggestions: value => invoke("browser.suggestions", value),
     getDownloads: () => invoke("browser.downloads.get"),
-    setOverview: async value => {if(!value)await window.souluNavigation?.animateOverviewClose?.();return invoke("browser.overview",value);},
+    setOverview: async value => {
+      if(!value){
+        await invoke("browser.shell.motion",300);
+        await window.souluNavigation?.animateOverviewClose?.();
+      }
+      return invoke("browser.overview",value);
+    },
     onEditBookmark: callback => subscribe("editBookmark",callback),
     setPopover: (value, owner = 'default') => {
       if (value) popovers.add(owner); else popovers.delete(owner);

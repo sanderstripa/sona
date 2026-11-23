@@ -221,7 +221,7 @@ function tabDropLayout(){
     return {left:Math.round(left),top:Math.round(top),right:Math.round(right),bottom:Math.round(bottom)};
   };
   const tabs=[...area.querySelectorAll(tabDropSelector)].filter(node=>node.getClientRects().length);
-  return {band:bounds(toolbar),tabs:tabs.map(node=>({id:tabDropId(node),...bounds(node)}))};
+  return {scale:window.devicePixelRatio,band:bounds(toolbar),tabs:tabs.map(node=>({id:tabDropId(node),...bounds(node)}))};
 }
 let dropLayoutFrame=0,lastDropLayout='';
 function queueTabDropLayout(){
@@ -283,6 +283,7 @@ function enableTabReordering(strip){
     let target=index;
     while(target>0&&center<slots[target-1].rect.left+slots[target-1].rect.width/2)--target;
     while(target+1<slots.length&&center>slots[target+1].rect.left+slots[target+1].rect.width/2)++target;
+    if(target!==drag.target)window.browserShell.keepShellMotion?.(180).catch(console.error);
     drag.target=target;
     for(let i=0;i<slots.length;++i){
       let shift=0;
