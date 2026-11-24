@@ -41,7 +41,7 @@ class ShellSurface final : public CefRenderHandler {
   void ReleaseBitmap();
   CefRect AdjustedPopupRect() const;
   void CompositePopup();
-  void Present();
+  void Present(const RECT* dirty = nullptr);
   CefMouseEvent Mouse(LPARAM pos, bool screen = false) const;
   static uint32_t Modifiers();
   HWND parent_ = nullptr;
@@ -57,7 +57,7 @@ class ShellSurface final : public CefRenderHandler {
   float scale_ = 1;
   bool tracking_ = false;
   bool resize_pending_ = false, screen_pending_ = false;
-  bool first_frame_ = false;
+  bool first_frame_ = false, full_paint_pending_ = true;
   int paint_error_ = 0;
   int paint_count_ = 0, toolbar_alpha_ = 255;
   bool popup_visible_ = false;

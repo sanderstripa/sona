@@ -55,6 +55,11 @@ SettingsOverlay::SettingsOverlay(HWND owner, std::function<void()> closed,
     : owner_(owner), closed_(std::move(closed)), request_close_(std::move(request_close)) {}
 SettingsOverlay::~SettingsOverlay() {
   if (IsWindow(hwnd_)) DestroyWindow(hwnd_);
+  if (backdrop_cache_) {
+    SelectObject(backdrop_cache_, backdrop_original_);
+    DeleteDC(backdrop_cache_);
+    DeleteObject(backdrop_frame_);
+  }
   if (backdrop_) DeleteObject(backdrop_);
   if (shadow_) DeleteObject(shadow_);
 }
@@ -97,6 +102,47 @@ void SettingsOverlay::CaptureBackground() {
   }
   ReleaseDC(nullptr, screen);
 }
+void SettingsOverlay::PaintBackdrop(HDC dc, const RECT& dirty) {
+  if (backdrop_ && (width_ != cached_width_ || height_ != cached_height_)) {
+    HDC source = CreateCompatibleDC(dc);
+    HDC cache = CreateCompatibleDC(dc);
+    HBITMAP frame = cache ? CreateCompatibleBitmap(dc, width_, height_) : nullptr;
+    if (source && frame) {
+      const auto previous = SelectObject(source, backdrop_);
+      const auto original = SelectObject(cache, frame);
+      SetStretchBltMode(cache, HALFTONE);
+      SetBrushOrgEx(cache, 0, 0, nullptr);
+      if (StretchBlt(cache, 0, 0, width_, height_, source, 0, 0,
+                     backdrop_width_, backdrop_height_, SRCCOPY)) {
+        if (backdrop_cache_) {
+          SelectObject(backdrop_cache_, backdrop_original_);
+          DeleteDC(backdrop_cache_);
+          DeleteObject(backdrop_frame_);
+        }
+        backdrop_cache_ = cache;
+        backdrop_frame_ = frame;
+        backdrop_original_ = original;
+        cached_width_ = width_;
+        cached_height_ = height_;
+        cache = nullptr;
+        frame = nullptr;
+      } else {
+        SelectObject(cache, original);
+      }
+      SelectObject(source, previous);
+    }
+    if (source) DeleteDC(source);
+    if (cache) DeleteDC(cache);
+    if (frame) DeleteObject(frame);
+  }
+  if (cached_width_ == width_ && cached_height_ == height_) {
+    BitBlt(dc, dirty.left, dirty.top, dirty.right - dirty.left,
+           dirty.bottom - dirty.top, backdrop_cache_, dirty.left, dirty.top, SRCCOPY);
+  } else {
+    FillRect(dc, &dirty, GetSysColorBrush(COLOR_WINDOW));
+  }
+}
+
 void SettingsOverlay::PaintPanelShadow(HDC dc) {
   if (!browser_ || state_ == State::Loading || panel_y_ + panel_height_ <= 0) return;
   const int radius = std::max(1, MulDiv(22, GetDpiForWindow(owner_), 96));
@@ -149,16 +195,22 @@ bool SettingsOverlay::Create() {
   // No independent Windows corners: the owner supplies the external silhouette.
   const DWORD corners = 1; // DWMWCP_DONOTROUND
   DwmSetWindowAttribute(hwnd_, 33, &corners, sizeof(corners));
+  const BOOL disable_dwm_transitions = TRUE;
+  DwmSetWindowAttribute(hwnd_, DWMWA_TRANSITIONS_FORCEDISABLED,
+                        &disable_dwm_transitions, sizeof(disable_dwm_transitions));
   BOOL animate = TRUE;
   if (SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animate, 0)) reduced_ = !animate;
   duration_ = reduced_ ? motion::kReducedOverlayMs : 320;
   Layout();
   // The invisible panel starts above the clipping bounds. Showing the host now
   // blocks input immediately and allows Chromium to prepare its first frame.
-  ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
   return true;
 }
-void SettingsOverlay::Attach(HWND browser) { browser_ = browser; Layout(); }
+void SettingsOverlay::Attach(HWND browser) {
+  browser_ = browser;
+  if (closing()) return;
+  Layout();
+}
 void SettingsOverlay::Open() {
   if (state_ != State::Loading) { Focus(); return; }
   state_ = State::Opening; start_ = MotionNow();
@@ -193,7 +245,7 @@ void SettingsOverlay::ResizeTick() {
   if(fraction>=1)KillTimer(hwnd_,2);
 }
 void SettingsOverlay::Layout() {
-  if (!hwnd_) return;
+  if (!hwnd_ || state_ == State::Closed) return;
   RECT r = {}; GetClientRect(owner_, &r);
   POINT p = {0, 0}; ClientToScreen(owner_, &p);
   width_ = std::max(1L, r.right); height_ = std::max(1L, r.bottom);
@@ -208,11 +260,20 @@ void SettingsOverlay::Layout() {
   // Crop to the owner's client region, including its rounded normal-window
   // silhouette. No independent desktop-relative geometry is persisted.
   const int radius = IsZoomed(owner_) ? 0 : static_cast<int>(std::round(16 * scale));
-  HRGN region = radius ? CreateRoundRectRgn(0, 0, width_+1, height_+1, radius, radius)
-                      : CreateRectRgn(0, 0, width_, height_);
-  SetWindowRgn(hwnd_, region, FALSE);
-  if (IsIconic(owner_)) ShowWindow(hwnd_, SW_HIDE);
-  else if (state_ != State::Closed) ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
+  if (width_ != region_width_ || height_ != region_height_ || radius != region_radius_) {
+    HRGN region = radius ? CreateRoundRectRgn(0, 0, width_+1, height_+1, radius, radius)
+                        : CreateRectRgn(0, 0, width_, height_);
+    if (region && SetWindowRgn(hwnd_, region, FALSE)) {
+      region_width_ = width_;
+      region_height_ = height_;
+      region_radius_ = radius;
+    } else if (region) {
+      DeleteObject(region);
+    }
+  }
+  const bool should_show = !IsIconic(owner_);
+  if (should_show != (IsWindowVisible(hwnd_) != FALSE))
+    ShowWindow(hwnd_, should_show ? SW_SHOWNOACTIVATE : SW_HIDE);
   ClipPanel();
   PlacePanel();
 }
@@ -220,10 +281,18 @@ void SettingsOverlay::ClipPanel() {
   if (browser_) {
     const float scale=GetDpiForWindow(owner_)/96.f;
     const int corner = static_cast<int>(std::round(24 * scale));
+    if (panel_width_ == clip_width_ && panel_height_ == clip_height_ && corner == clip_corner_) return;
     HRGN panel = CreateRoundRectRgn(0, 0, panel_width_+1, panel_height_+1, corner, corner);
     HRGN top = CreateRectRgn(0, 0, panel_width_, std::min(corner, panel_height_));
-    CombineRgn(panel, panel, top, RGN_OR); DeleteObject(top);
-    SetWindowRgn(browser_, panel, FALSE);
+    if (panel && top) CombineRgn(panel, panel, top, RGN_OR);
+    if (top) DeleteObject(top);
+    if (panel && SetWindowRgn(browser_, panel, FALSE)) {
+      clip_width_ = panel_width_;
+      clip_height_ = panel_height_;
+      clip_corner_ = corner;
+    } else if (panel) {
+      DeleteObject(panel);
+    }
   }
 }
 void SettingsOverlay::PlacePanel() {
@@ -238,12 +307,12 @@ void SettingsOverlay::PlacePanel() {
   if (visible && old.left == x && old.top == panel_y_ &&
       old.right-old.left == panel_width_ && old.bottom-old.top == panel_height_) return;
   SetWindowPos(browser_, HWND_TOP, x, panel_y_, panel_width_, panel_height_,
-       SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOCOPYBITS);
+       SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOZORDER);
   const int margin = MulDiv(30, GetDpiForWindow(owner_), 96);
   RECT changed{std::min(old.left, static_cast<LONG>(x))-margin, std::min(old.top, static_cast<LONG>(panel_y_))-margin,
                std::max(old.right, static_cast<LONG>(x+panel_width_))+margin,
                std::max(old.bottom, static_cast<LONG>(panel_y_+panel_height_))+margin};
-  RedrawWindow(hwnd_, &changed, nullptr, RDW_INVALIDATE | RDW_NOCHILDREN | RDW_UPDATENOW);
+  InvalidateRect(hwnd_, &changed, FALSE);
 }
 void SettingsOverlay::Tick() {
   const float fraction = std::min(1.f, static_cast<float>(MotionNow()-start_) / duration_);
@@ -251,14 +320,14 @@ void SettingsOverlay::Tick() {
       ? close_start_ * motion::EaseOut(1-fraction)
       : motion::EaseOut(fraction);
   ++ticks_;
-  PlacePanel();
+  if (fraction < 1 || state_ != State::Closing) PlacePanel();
   if (fraction < 1) return;
   KillTimer(hwnd_, 1);
   if (state_ == State::Closing) {
     state_ = State::Closed;
-    if (browser_) ShowWindow(browser_, SW_HIDE);
+    // Hide the whole tree before CEF starts destroying its child HWNDs.
     ShowWindow(hwnd_, SW_HIDE);
-    RedrawWindow(owner_, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
+    if (browser_) ShowWindow(browser_, SW_HIDE);
     // The callback initiates asynchronous CEF close. The host is retained until
     // OnBeforeClose, so its browser cannot outlive the native parent.
     const auto closed = closed_; closed();
@@ -275,34 +344,11 @@ LRESULT CALLBACK SettingsOverlay::Proc(HWND hwnd, UINT message, WPARAM wp, LPARA
     case WM_ERASEBKGND: return 1;
     case WM_PAINT: {
       PAINTSTRUCT paint{};
-      HDC target = BeginPaint(hwnd, &paint);
-      // Compose the backdrop and shadow before exposing the new frame.
-      const int w = paint.rcPaint.right-paint.rcPaint.left;
-      const int h = paint.rcPaint.bottom-paint.rcPaint.top;
-      HDC buffer = w>0 && h>0 ? CreateCompatibleDC(target) : nullptr;
-      HBITMAP frame = buffer ? CreateCompatibleBitmap(target, w, h) : nullptr;
-      HGDIOBJ previous_frame = frame ? SelectObject(buffer, frame) : nullptr;
-      HDC dc = frame ? buffer : target;
-      if (frame) SetViewportOrgEx(dc, -paint.rcPaint.left, -paint.rcPaint.top, nullptr);
-      HDC memory = self->backdrop_ ? CreateCompatibleDC(dc) : nullptr;
-      if (memory) {
-        HGDIOBJ previous = SelectObject(memory, self->backdrop_);
-        SetStretchBltMode(dc, HALFTONE);
-        StretchBlt(dc, 0, 0, self->width_, self->height_, memory, 0, 0,
-            self->backdrop_width_, self->backdrop_height_, SRCCOPY);
-        SelectObject(memory, previous);
-        DeleteDC(memory);
-      } else {
-        FillRect(dc, &paint.rcPaint, GetSysColorBrush(COLOR_WINDOW));
+      HDC dc = BeginPaint(hwnd, &paint);
+      if (!IsRectEmpty(&paint.rcPaint)) {
+        self->PaintBackdrop(dc, paint.rcPaint);
+        self->PaintPanelShadow(dc);
       }
-      self->PaintPanelShadow(dc);
-      if (frame) {
-        SetViewportOrgEx(dc, 0, 0, nullptr);
-        BitBlt(target, paint.rcPaint.left, paint.rcPaint.top, w, h, dc, 0, 0, SRCCOPY);
-        SelectObject(buffer, previous_frame);
-        DeleteObject(frame);
-      }
-      if (buffer) DeleteDC(buffer);
       EndPaint(hwnd, &paint);
       return 0;
     }

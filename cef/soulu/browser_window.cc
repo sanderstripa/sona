@@ -1483,6 +1483,7 @@ struct BrowserWindow::WindowTabDrag {
 };
 std::unique_ptr<BrowserWindow::WindowTabDrag> BrowserWindow::window_tab_drag_;
 namespace {
+constexpr UINT_PTR kBookmarksExitTimer = 7302;
 constexpr UINT_PTR kTabDragTimer=7303;
 constexpr int kTabDetachDistance=25;
 
@@ -2164,7 +2165,7 @@ CefRefPtr<CefDictionaryValue> BrowserWindow::AdaptiveToolbarState() const {
 
 void BrowserWindow::UpdateShellFrameRate() {
   if(!shell_)return;
-  const bool animated=adaptive_running_||sidebar_motion_||bookmarks_motion_duration_||GetTickCount64()<shell_motion_until_;
+  const bool animated=adaptive_running_||sidebar_motion_||GetTickCount64()<shell_motion_until_;
   const int rate=animated?motion::kShellMotionFrameRate:motion::kShellIdleFrameRate;
   if(rate==shell_frame_rate_)return;
   shell_frame_rate_=rate;
@@ -2265,18 +2266,11 @@ BrowserWindow::Geometry BrowserWindow::CurrentGeometry() const {
       layout == "classic" ? geometry::classicToolbar : geometry::mainToolbar;
   g.toolbar = static_cast<int>(std::round((height + (BookmarksBarVisible() ? geometry::bookmarks : 0)) * scale));
   if (Fullscreen()) g.toolbar = 0;
-  g.sidebar = sidebar_visible_ && bookmarks_sidebar_ ? std::min({px(276),std::max(px(156),g.width-px(510)),g.width*35/100}) : 0;
+  g.sidebar = ((sidebar_visible_ && bookmarks_sidebar_) || bookmarks_exit_at_) ? std::min({px(276),std::max(px(156),g.width-px(510)),g.width*35/100}) : 0;
   g.panel = px(std::max(0, right_panel_width_));
-  if(bookmarks_motion_duration_){
-    const auto now=GetTickCount64();
-    const auto elapsed=now>bookmarks_motion_start_?now-bookmarks_motion_start_:0;
-    const float fraction=std::min(1.f,float(elapsed)/bookmarks_motion_duration_);
-    const double from=bookmarks_motion_from_*scale;
-    g.sidebar=static_cast<int>(std::round(from+(g.sidebar-from)*motion::EaseOut(fraction)));
-  }
   if (Fullscreen()) g.sidebar = g.panel = 0;
   const auto* active=const_cast<BrowserWindow*>(this)->ActiveTab();
-  g.shell_height = (active&&active->reader_active) || !permission_requests_.empty() || popover_visible_ || overview_visible_ || sidebar_visible_ || sidebar_motion_ || bookmarks_motion_duration_ || g.panel > 0 ? g.height :
+  g.shell_height = (active&&active->reader_active) || !permission_requests_.empty() || popover_visible_ || overview_visible_ || sidebar_visible_ || sidebar_motion_ || g.panel > 0 ? g.height :
       std::min(g.height, std::max(g.toolbar, px(suggestions_height_)));
   const auto* page=const_cast<BrowserWindow*>(this)->ActiveTab();
   const int inset=EffectiveSettings()->GetBool("mattePanel") && page && !Fullscreen() ?
@@ -3136,7 +3130,6 @@ void BrowserWindow::HandleBridge(const std::string& request,
     const bool tab_toggle = action == "browser.toggleSidebar";
     const bool show_bookmarks = !tab_toggle && payload && payload->GetType()==VTYPE_BOOL && payload->GetBool();
     const bool old_bookmarks=sidebar_visible_&&bookmarks_sidebar_;
-    const auto old_geometry=CurrentGeometry();
     const bool closing_tabs = !tab_toggle && !show_bookmarks && sidebar_visible_ && !bookmarks_sidebar_;
     if (tab_toggle) {
       sidebar_visible_ = bookmarks_sidebar_ || !sidebar_visible_; bookmarks_sidebar_ = false;
@@ -3148,19 +3141,21 @@ void BrowserWindow::HandleBridge(const std::string& request,
     if(old_bookmarks!=open_bookmarks){
       BOOL animate=TRUE;
       SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION,0,&animate,0);
-      bookmarks_motion_duration_=animate&&!Fullscreen()?220:0;
-      KeepShellMotionFor(bookmarks_motion_duration_+120);
-      const auto lead=bookmarks_motion_duration_?50:0;
-      bookmarks_motion_start_=GetTickCount64()+lead;
-      bookmarks_motion_epoch_=static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(
-          std::chrono::system_clock::now().time_since_epoch()).count())+lead;
-      bookmarks_motion_from_=old_geometry.sidebar/old_geometry.scale;
-      if(bookmarks_motion_duration_)SetTimer(hwnd_,7302,16,nullptr);else KillTimer(hwnd_,7302);
-      auto transition=CefDictionaryValue::Create();
-      transition->SetBool("open",open_bookmarks);
-      transition->SetInt("duration",bookmarks_motion_duration_);
-      transition->SetDouble("startAt",bookmarks_motion_epoch_);
-      transition->SetString("from",std::to_string(bookmarks_motion_from_)+"px");
+      const int duration = animate && !Fullscreen() ? 180 : 0;
+      constexpr int lead = 32;
+      KillTimer(hwnd_, kBookmarksExitTimer);
+      bookmarks_exit_at_ = 0;
+      // Keep the page at a constant size until the sidebar contents fade out.
+      if (!open_bookmarks && duration > 0 &&
+          SetTimer(hwnd_, kBookmarksExitTimer, duration + lead, nullptr))
+        bookmarks_exit_at_ = GetTickCount64() + duration;
+      const double now = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::system_clock::now().time_since_epoch()).count());
+      bookmarks_motion_epoch_ = std::max(bookmarks_motion_epoch_ + 1, now + lead);
+      auto transition = CefDictionaryValue::Create();
+      transition->SetBool("open", open_bookmarks);
+      transition->SetInt("duration", open_bookmarks || bookmarks_exit_at_ ? duration : 0);
+      transition->SetDouble("startAt", bookmarks_motion_epoch_);
       Emit("bookmarksMotion",Wrap(transition));
     }
     { // Both bookmark and tab sidebars retain their host for the exit fade.
@@ -3930,13 +3925,13 @@ LRESULT CALLBACK BrowserWindow::WindowProc(HWND hwnd, UINT message, WPARAM wpara
     case WM_TIMER:
       if(wparam==kTabDragTimer){self->TickWindowTabDrag();return 0;}
       if(wparam==7301){self->ApplyPerformancePolicy();return 0;}
-      if(wparam==7302){
-        if(GetTickCount64()>=self->bookmarks_motion_start_+self->bookmarks_motion_duration_){
-          self->bookmarks_motion_duration_=0;
-          KillTimer(hwnd,7302);
-          self->UpdateShellFrameRate();
+      if (wparam == kBookmarksExitTimer) {
+        // KillTimer does not remove an already queued WM_TIMER.
+        if (self->bookmarks_exit_at_ && GetTickCount64() >= self->bookmarks_exit_at_) {
+          KillTimer(hwnd, kBookmarksExitTimer);
+          self->bookmarks_exit_at_ = 0;
+          self->Layout();
         }
-        self->Layout();
         return 0;
       }
       break;

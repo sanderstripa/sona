@@ -171,6 +171,18 @@ def main():
             check(s.evaluate(shell,'document.querySelector("#sidebar").inert'),'Closing sidebar immediately releases keyboard targets')
             time.sleep(.35)
             check(s.evaluate(shell,'getComputedStyle(document.querySelector("#sidebar")).visibility==="hidden"'),'Sidebar exits before OSR host shrinks')
+            s.evaluate(shell,'browserShell.toggleSidebar()')
+            o.wait(lambda:s.evaluate(shell,'!document.querySelector("#sidebar").classList.contains("visible")'))
+            baseline=s.evaluate(page,'innerWidth')
+            s.evaluate(page,'window.bookmarkWidths=[];addEventListener("resize",()=>bookmarkWidths.push(innerWidth))')
+            s.evaluate(shell,'browserShell.setBookmarksSidebar(true)')
+            narrow=o.wait(lambda:s.evaluate(page,f'innerWidth<{baseline}&&innerWidth'))
+            o.wait(lambda:s.evaluate(shell,'!document.body.hasAttribute("data-bookmarks-moving")'))
+            s.evaluate(shell,'browserShell.setBookmarksSidebar(false)')
+            o.wait(lambda:s.evaluate(page,'innerWidth')==baseline)
+            o.wait(lambda:s.evaluate(shell,'!document.body.hasAttribute("data-bookmarks-sidebar")'))
+            check(set(s.evaluate(page,'bookmarkWidths'))=={baseline,narrow},
+                  'Bookmarks transition resizes the page only at the endpoints')
             report['passed']=True
         finally:
             for ws in sockets:

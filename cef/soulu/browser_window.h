@@ -375,10 +375,8 @@ class BrowserWindow final : public CefBaseRefCounted {
   bool sidebar_visible_ = false;
   bool bookmarks_sidebar_ = false;
   bool sidebar_motion_ = false;
-  ULONGLONG bookmarks_motion_start_ = 0;
   double bookmarks_motion_epoch_ = 0;
-  double bookmarks_motion_from_ = 0;
-  int bookmarks_motion_duration_ = 0;
+  ULONGLONG bookmarks_exit_at_ = 0;
 
   unsigned sidebar_motion_generation_ = 0;
   bool overview_visible_ = false;

@@ -318,34 +318,54 @@ function enableTabReordering(strip){
 
 for(const strip of [tabStrip,classicPinnedTabs,$('#compactTabFlow')])enableTabReordering(strip);
 
-let tabMotionKey='',tabMotionLayout='',tabMotionAnimations=new Set();
-function cancelTabMotion(){for(const a of tabMotionAnimations)a.cancel();tabMotionAnimations.clear();}
+let tabMotionKey='',tabMotionLayout='';
+const tabMotionAnimations=new Set();
+const tabReducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+function cancelTabMotion(){
+  for(const animation of tabMotionAnimations)animation.cancel();
+  tabMotionAnimations.clear();
+}
 function renderTabs(){
   const cef=document.documentElement.classList.contains('cef-runtime');
   const layout=document.body.dataset.layout;
-  const key=state.tabs.map(t=>t.id).join(',');
+  const key=state.tabs.map(tab=>tab.id).join(',');
+  const changed=key!==tabMotionKey||layout!==tabMotionLayout;
   const structural=cef&&tabMotionKey&&key!==tabMotionKey&&layout===tabMotionLayout&&
-    !matchMedia('(prefers-reduced-motion: reduce)').matches&&!document.querySelector('.tab-reordering');
-  const nodes=()=>[...document.querySelectorAll('[data-compact-rendered],[data-tab-id]')].filter(n=>n.getClientRects().length&&!n.closest('#sidebar'));
-  const before=structural?new Map(nodes().map(n=>[n,n.getBoundingClientRect()])):null;
-  if(key!==tabMotionKey||layout!==tabMotionLayout)cancelTabMotion();
-  tabMotionKey=key;tabMotionLayout=layout;
-  renderClassicTabs();renderCompactTabs();
+    !tabReducedMotion.matches&&!document.querySelector('.tab-reordering');
+  const geometry=()=>{
+    const selector=layout==='compact'?'[data-compact-rendered]':'[data-tab-id]';
+    const strips=layout==='compact'?[compactToolbar]:[classicPinnedTabs,tabStrip];
+    return strips.flatMap(strip=>[...strip.querySelectorAll(selector)].map(node=>({
+      node, id:node.dataset.tabId||node.dataset.activeTab, rect:node.getBoundingClientRect()
+    }))).filter(({rect})=>rect.width>0&&rect.height>0);
+  };
+  const before=structural?new Map(geometry().map(({id,rect})=>[id,rect.left])):null;
+  if(changed)cancelTabMotion();
+  tabMotionKey=key;
+  tabMotionLayout=layout;
+  renderClassicTabs();
+  renderCompactTabs();
   if(before){
-    for(const n of nodes()){
-      const old=before.get(n),r=n.getBoundingClientRect();
-      const dx=old?old.left-r.left:0;
-      if(old&&Math.abs(dx)<1)continue;
-      const a=n.animate(old?[{transform:`translateX(${dx}px)`},{transform:'none'}]:[{opacity:0},{opacity:1}],
+    // Measure the entire strip before mutating transforms or opacity.
+    const after=geometry();
+    for(const {node,id,rect} of after){
+      const oldLeft=before.get(id);
+      const dx=oldLeft===undefined?0:oldLeft-rect.left;
+      if(oldLeft!==undefined&&Math.abs(dx)<1)continue;
+      const animation=node.animate(oldLeft===undefined?[{opacity:0},{opacity:1}]:
+        [{transform:`translateX(${dx}px)`},{transform:'none'}],
         {duration:180,easing:'cubic-bezier(.22,1,.36,1)'});
-      tabMotionAnimations.add(a);
-      a.finished.catch(()=>{}).then(()=>{tabMotionAnimations.delete(a);queueTabDropLayout();});
+      tabMotionAnimations.add(animation);
+      const finish=()=>{
+        if(tabMotionAnimations.delete(animation)&&!tabMotionAnimations.size)queueTabDropLayout();
+      };
+      animation.finished.then(finish,finish);
     }
   }
   queueTabDropLayout();
 }
 for(const event of ['resize','pagehide'])addEventListener(event,cancelTabMotion);
-matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',cancelTabMotion);
+tabReducedMotion.addEventListener('change',cancelTabMotion);
 document.addEventListener('pointerdown',e=>{if(e.target.closest(tabDropSelector))cancelTabMotion();},true);
 window.addEventListener('resize',queueTabDropLayout);
 function renderSidebar(){const signature=JSON.stringify([state.settings?.language,state.tabs.map(x=>[x.id,x.title,x.label,x.favicon,x.active])]);if(signature===sidebarSignature)return;sidebarSignature=signature;const box=$("#sidebarTabs");$("#sidebarCount").textContent=`${state.tabs.length} ${tr("opened")}`;box.innerHTML=state.tabs.map((x)=>`<div class="sidebar-tab${x.active?" active":""}">${fav(x,"sidebar-favicon")}<button data-select="${x.id}"><strong>${esc(x.title||tr("newTab"))}</strong><small>${esc(x.label)}</small></button><button data-close="${x.id}">×</button></div>`).join("");fallbacks(box);box.querySelectorAll("[data-select]").forEach((b)=>b.onclick=()=>window.browserShell.switchTab(+b.dataset.select));box.querySelectorAll("[data-close]").forEach((b)=>b.onclick=()=>window.browserShell.closeTab(+b.dataset.close));}

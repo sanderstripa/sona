@@ -32,14 +32,17 @@ void ShellSurface::Detach() { browser_ = nullptr; }
 void ShellSurface::PrepareResize(int width, int height, float scale) {
   screen_pending_ |= scale != scale_;
   resize_pending_ |= width != width_ || height != height_ || screen_pending_;
-  if (resize_pending_) { popup_pixels_.clear(); popup_background_.clear(); }
+  if (resize_pending_) {
+    full_paint_pending_ = true;
+    popup_pixels_.clear();
+    popup_background_.clear();
+  }
   width_ = std::max(1, width); height_ = std::max(1, height); scale_ = scale;
 }
 void ShellSurface::CommitResize() {
   if (browser_ && resize_pending_) {
     if (screen_pending_) browser_->GetHost()->NotifyScreenInfoChanged();
     browser_->GetHost()->WasResized();
-    browser_->GetHost()->Invalidate(PET_VIEW);
     if (popup_visible_) browser_->GetHost()->Invalidate(PET_POPUP);
     resize_pending_ = screen_pending_ = false;
   }
@@ -129,7 +132,7 @@ void ShellSurface::CompositePopup() {
     }
   }
 }
-void ShellSurface::OnPaint(CefRefPtr<CefBrowser>, PaintElementType type, const RectList&,
+void ShellSurface::OnPaint(CefRefPtr<CefBrowser>, PaintElementType type, const RectList& dirty_rects,
                             const void* buffer, int width, int height) {
   if (!IsWindow(hwnd_) || width <= 0 || height <= 0) return;
   if (type == PET_POPUP) {
@@ -156,11 +159,33 @@ void ShellSurface::OnPaint(CefRefPtr<CefBrowser>, PaintElementType type, const R
     if (!bitmap_) { ReleaseBitmap(); return; }
     original_ = SelectObject(memory_, bitmap_); bitmap_width_ = width; bitmap_height_ = height;
   }
-  // CEF delivers premultiplied BGRA: preserve its alpha through Win32 composition.
-  for (int row = 0; row < height; ++row)
-    memcpy(static_cast<unsigned char*>(pixels_) + static_cast<size_t>(row) * width * 4,
-           static_cast<const unsigned char*>(buffer) + static_cast<size_t>(row) * stride * 4,
-           static_cast<size_t>(width) * 4);
+  // CEF supplies the whole premultiplied BGRA buffer and the changed regions.
+  // A new surface and popup composition require a complete base frame.
+  const bool full = full_paint_pending_ || popup_visible_ || dirty_rects.empty();
+  const auto* source = static_cast<const unsigned char*>(buffer);
+  auto* dest = static_cast<unsigned char*>(pixels_);
+  RECT damage{};
+  const auto copy = [&](int left, int top, int right, int bottom) {
+    for (int row = top; row < bottom; ++row) {
+      memcpy(dest + (static_cast<size_t>(row) * width + left) * 4,
+             source + (static_cast<size_t>(row) * stride + left) * 4,
+             static_cast<size_t>(right - left) * 4);
+    }
+    const RECT rect{left, top, right, bottom};
+    UnionRect(&damage, &damage, &rect);
+  };
+  if (full) {
+    copy(0, 0, width, height);
+  } else {
+    for (const auto& rect : dirty_rects) {
+      const int left = std::clamp(rect.x, 0, width);
+      const int top = std::clamp(rect.y, 0, height);
+      const int right = std::clamp(rect.x + rect.width, left, width);
+      const int bottom = std::clamp(rect.y + rect.height, top, height);
+      if (left < right && top < bottom) copy(left, top, right, bottom);
+    }
+  }
+  full_paint_pending_ = false;
   ++paint_count_;
   if (width > 120 && height > 5) toolbar_alpha_ = static_cast<const unsigned char*>(buffer)[(4 * stride + 110) * 4 + 3];
   if (popup_visible_) {
@@ -168,17 +193,23 @@ void ShellSurface::OnPaint(CefRefPtr<CefBrowser>, PaintElementType type, const R
     popup_background_.assign(data, data + static_cast<size_t>(width) * height * 4);
     CompositePopup();
   }
-  Present();
+  if (full || paint_error_) Present();
+  else if (!IsRectEmpty(&damage)) Present(&damage);
 }
-void ShellSurface::Present() {
+void ShellSurface::Present(const RECT* dirty) {
   if (!pixels_ || bitmap_width_ != width_ || bitmap_height_ != height_) return;
   const int width = bitmap_width_, height = bitmap_height_;
   SIZE size = {width, height}; POINT source = {0, 0};
   BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
   UPDATELAYEREDWINDOWINFO update = {sizeof(update)};
   update.psize = &size; update.hdcSrc = memory_; update.pptSrc = &source;
-  update.pblend = &blend; update.dwFlags = ULW_ALPHA | ULW_EX_NORESIZE;
-  paint_error_ = UpdateLayeredWindowIndirect(hwnd_, &update) ? 0 : static_cast<int>(GetLastError());
+  update.pblend = &blend; update.prcDirty = dirty; update.dwFlags = ULW_ALPHA | ULW_EX_NORESIZE;
+  BOOL painted = UpdateLayeredWindowIndirect(hwnd_, &update);
+  if (!painted && dirty) {
+    update.prcDirty = nullptr;
+    painted = UpdateLayeredWindowIndirect(hwnd_, &update);
+  }
+  paint_error_ = painted ? 0 : static_cast<int>(GetLastError());
   bool visible_pixels=false;
   if(!first_frame_){const auto* data=static_cast<const unsigned char*>(pixels_);for(size_t i=3;i<static_cast<size_t>(width)*height*4;i+=4)if(data[i]){visible_pixels=true;break;}}
   if (!paint_error_ && !first_frame_ && visible_pixels) {

@@ -3,7 +3,8 @@
   const api=window.browserShell;
   if(!api) return;
   const gecko=Boolean(api.changeBookmark);
-  let barSignature='',overviewSignature='',state={}, rows=[], parent=0, query='', drag=0, busy=false, manage=false, pane='list';
+  const cef=document.documentElement.classList.contains('cef-runtime');
+  let barSignature='',overviewSignature=[],state={}, rows=[], parent=0, query='', drag=0, busy=false, manage=false, pane='list';
   const el=(tag,cls,text)=>{const n=document.createElement(tag);n.className=cls||'';if(text)n.textContent=text;return n;};
   const button=(text,fn)=>{const b=el('button','nav-action',text);b.type='button';b.onclick=()=>Promise.resolve(fn()).catch(error=>alert(error.message));return b;};
   const bar=el('nav','bookmarks-bar');bar.setAttribute('aria-label','Панель закладок');document.body.append(bar);
@@ -258,33 +259,49 @@
     if(status&&!menu.inert)status.textContent=error.message;
     else alert(error.message);
   }
-  let sidebarAnimation=null, lastMotion=-1;
+  let sidebarAnimations=[], lastMotion=-1;
   function clearSidebarMotion(){
-    const previous=sidebarAnimation;sidebarAnimation=null;
-    previous?.cancel();document.body.removeAttribute('data-bookmarks-moving');
+    const previous=sidebarAnimations;
+    sidebarAnimations=[];
+    for(const animation of previous)animation.cancel();
+    document.body.removeAttribute('data-bookmarks-moving');
   }
   function setSidebar(open,motion){
     if(motion&&motion.startAt<lastMotion)return;
-    document.body.toggleAttribute('data-bookmarks-sidebar',open);
+    const body=document.body;
+    const moving=motion&&motion.startAt!==lastMotion;
+    if(moving){
+      lastMotion=motion.startAt;
+      clearSidebarMotion();
+    }
+    // CEF reserves a fixed column through the exit. Only its contents animate.
+    body.toggleAttribute('data-bookmarks-sidebar',open||
+      (cef&&(moving?motion.duration>0:sidebarAnimations.length>0)));
     menu.inert=!open;
     menu.setAttribute('aria-hidden',String(!open));
     menu.hidden=false;
     if(!open)closeActions(false);
-    if(!motion||motion.startAt===lastMotion)return;
-    lastMotion=motion.startAt;
-    clearSidebarMotion();
-    const body=document.body;
-    if(!motion.duration||motion.open!==open)return;
-    const to=getComputedStyle(body).getPropertyValue('--sona-bookmarks-width').trim();
-    const animation=body.animate([{'--sona-bookmarks-width':motion.from},{'--sona-bookmarks-width':to}],
-      {duration:motion.duration,easing:'cubic-bezier(.22,1,.36,1)',fill:'backwards'});
-    animation.startTime=motion.startAt-performance.timeOrigin;
-    sidebarAnimation=animation;
+    if(!moving||!motion.duration||motion.open!==open)return;
+    const options={duration:motion.duration,easing:'cubic-bezier(.22,1,.36,1)',fill:'both'};
+    let animations;
+    if(cef){
+      const rest={opacity:1,transform:'none'};
+      const edge={opacity:0,transform:'translateX(-10px)'};
+      animations=[...menu.children].map(node=>node.animate(open?[edge,rest]:[rest,edge],options));
+    }else{
+      const to=getComputedStyle(body).getPropertyValue('--sona-bookmarks-width').trim();
+      animations=[body.animate([{'--sona-bookmarks-width':motion.from},{'--sona-bookmarks-width':to}],
+        {...options,fill:'backwards'})];
+    }
+    for(const animation of animations)animation.startTime=motion.startAt-performance.timeOrigin;
+    sidebarAnimations=animations;
     body.setAttribute('data-bookmarks-moving','');
-    animation.finished.then(()=>{
-      if(sidebarAnimation!==animation)return;
+    function finish(){
+      if(sidebarAnimations!==animations)return;
       clearSidebarMotion();
-    },()=>{if(sidebarAnimation===animation)clearSidebarMotion();});
+      if(cef)body.toggleAttribute('data-bookmarks-sidebar',!menu.inert);
+    }
+    Promise.all(animations.map(animation=>animation.finished)).then(finish,finish);
   }
   async function refreshReading(kind='get',payload){
     const epoch=++readingEpoch;
@@ -548,12 +565,14 @@
   function renderBar(){if(gecko&&gesture)return;const signature=JSON.stringify([state.settings?.layout,state.settings?.bookmarksIconsOnly,state.settings?.bookmarksBarPosition,state.bookmarksBarVisible,innerWidth,rows]);if(signature===barSignature)return;barSignature=signature;const host=document.querySelector(['classic','adaptive'].includes(state.settings?.layout)?'.classic-toolbar':'.compact-toolbar');if(host&&bar.parentElement!==host)host.append(bar);bar.replaceChildren();bar.hidden=!state.bookmarksBarVisible;document.body.dataset.bookmarksBar=String(!bar.hidden);document.body.dataset.bookmarksPosition=state.settings?.bookmarksBarPosition||'above';if(bar.hidden)return;const list=children(0);for(const row of list)bar.append(item(row,true));const more=button('»',()=>openMenu());more.classList.add('bookmarks-overflow');bar.append(more);requestAnimationFrame(()=>{if(bar.hidden)return;let limit=bar.clientWidth-42,used=12,hidden=false;for(const node of [...bar.children].slice(0,-1)){node.hidden=false;used+=node.getBoundingClientRect().width+4;if(used>limit){node.hidden=true;hidden=true;}}more.hidden=!hidden;});bar.ondragover=e=>{if(drag)e.preventDefault();};bar.ondrop=e=>{e.preventDefault();if(drag)persist(rows.map(r=>r.id===drag?{...r,parentId:0,order:rows.length}:r)).catch(err=>alert(err.message));};}
 function renderOverview(){
  if(overview.hidden)return;const q=search.value.toLocaleLowerCase(),tabs=(state.tabs||[]).filter(t=>(t.title+' '+t.url).toLocaleLowerCase().includes(q));
- const signature=JSON.stringify([q,tabs.map(t=>[t.id,t.title,t.url,t.favicon,t.active,t.thumbnail])]);if(signature===overviewSignature)return;overviewSignature=signature;
+ const signature=tabs.flatMap(t=>[t.id,t.title,t.url,t.favicon,t.active,t.thumbnail]);
+ if(signature.length===overviewSignature.length&&signature.every((value,i)=>value===overviewSignature[i])&&grid.lastElementChild)return;
+ overviewSignature=signature;
  const existing=new Map([...grid.querySelectorAll('[data-overview-id]')].map(n=>[Number(n.dataset.overviewId),n]));let index=0;
  for(const tab of tabs){let card=existing.get(tab.id);if(!card){card=el('article','overview-card');card.dataset.overviewId=tab.id;const preview=button('',async()=>{await api.switchTab(tab.id);await api.setOverview(false);});preview.classList.add('overview-preview');const caption=el('div','overview-caption'),title=el('span','overview-title'),close=button('×',()=>api.closeTab(tab.id));caption.append(icon(tab),title,close);card.append(preview,caption);}
   existing.delete(tab.id);card.classList.toggle('active',!!tab.active);const preview=card.firstElementChild,caption=card.lastElementChild,title=tab.title||'Новая вкладка';preview.setAttribute('aria-label',title);caption.querySelector('.overview-title').textContent=title;caption.lastElementChild.setAttribute('aria-label','Закрыть '+title);
   const imageKey=String(tab.favicon||'')+'|'+title;if(card.iconKey!==imageKey){caption.firstElementChild.replaceWith(icon(tab));card.iconKey=imageKey;}
-  if(card.thumbnail!==tab.thumbnail){card.thumbnail=tab.thumbnail;preview.replaceChildren();if(tab.thumbnail){const image=el('img');image.src=tab.thumbnail;image.alt='';preview.append(image);}else preview.append(el('span','preview-placeholder','Превью появится после просмотра вкладки'));}
+  if(card.thumbnail!==tab.thumbnail){card.thumbnail=tab.thumbnail;preview.replaceChildren();if(tab.thumbnail){const image=el('img');image.decoding='async';image.src=tab.thumbnail;image.alt='';preview.append(image);}else preview.append(el('span','preview-placeholder','Превью появится после просмотра вкладки'));}
   if(grid.children[index]!==card)grid.insertBefore(card,grid.children[index]||null);index++;
  }
  for(const node of existing.values())node.remove();let add=grid.querySelector('.overview-new');if(!add){add=button('+ Новая вкладка',async()=>{await api.newTab();await api.setOverview(false);});add.classList.add('overview-new');grid.append(add);}if(grid.lastElementChild!==add)grid.append(add);

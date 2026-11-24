@@ -31,7 +31,14 @@ class SettingsOverlay final {
   void ClipPanel();
   void CaptureBackground();
   void PaintPanelShadow(HDC dc);
+  void PaintBackdrop(HDC dc, const RECT& dirty);
   HBITMAP backdrop_ = nullptr, shadow_ = nullptr;
+  HDC backdrop_cache_ = nullptr;
+  HBITMAP backdrop_frame_ = nullptr;
+  HGDIOBJ backdrop_original_ = nullptr;
+  int cached_width_ = 0, cached_height_ = 0;
+  int region_width_ = 0, region_height_ = 0, region_radius_ = 0;
+  int clip_width_ = 0, clip_height_ = 0, clip_corner_ = 0;
   int panel_y_ = 0, shadow_panel_width_ = 0, shadow_panel_height_ = 0, shadow_radius_ = 0;
   int backdrop_width_ = 0, backdrop_height_ = 0;
   HWND owner_ = nullptr, hwnd_ = nullptr, browser_ = nullptr;
