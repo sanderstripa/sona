@@ -68,30 +68,35 @@
     const error=message=>{if(!closed){notice.textContent=message?.message||message;notice.hidden=!notice.textContent;}};
     const wrap=fn=>async()=>{try{await fn();}catch(e){error(e);} };
     function dropdown(id,title,onChoose) {
-      const row=el('div',undefined,'import-select-row'),name=el('span',title),anchor=el('div',undefined,'import-select-anchor');
-      name.id=id+'-label';
-      const toggle=el('button',undefined,'import-select'),value=el('span',label('Выберите источник','Choose a source'));
-      toggle.type='button';toggle.id=id;toggle.setAttribute('role','combobox');toggle.setAttribute('aria-labelledby',name.id);
-      toggle.setAttribute('aria-haspopup','listbox');toggle.setAttribute('aria-expanded','false');toggle.setAttribute('aria-controls',id+'-list');
-      const chevron=window.souluSettingsIcons.create('chevron');chevron.setAttribute('aria-hidden','true');toggle.append(value,chevron);
-      const list=el('div',undefined,'import-options');list.id=id+'-list';list.setAttribute('role','listbox');list.setAttribute('aria-labelledby',name.id);list.hidden=true;
-      anchor.append(toggle,list);row.append(name,anchor);
-      let entries=[],selected='',buttons=[];
-      const hide=()=>{list.hidden=true;toggle.setAttribute('aria-expanded','false');};
-      const available=()=>buttons.filter(b=>!b.disabled);
-      function show(last=false){if(toggle.disabled)return;hideMenus();list.hidden=false;toggle.setAttribute('aria-expanded','true');const valid=available();const chosen=buttons.find(b=>b.dataset.value===selected&&!b.disabled);(chosen||valid[last?valid.length-1:0])?.focus();}
-      toggle.onclick=()=>list.hidden?show():hide();
-      toggle.onkeydown=e=>{if(['ArrowDown','ArrowUp'].includes(e.key)){e.preventDefault();show(e.key==='ArrowUp');}};
-      list.onkeydown=e=>{const valid=available(),index=valid.indexOf(document.activeElement);if(['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();valid[e.key==='Home'?0:e.key==='End'?valid.length-1:(index+(e.key==='ArrowDown'?1:-1)+valid.length)%valid.length]?.focus();}
-        if(e.key==='Escape'){e.preventDefault();e.stopPropagation();hide();toggle.focus();}if(e.key==='Tab')hide();};
-      return {row,toggle,list,hide,get value(){return selected;},
-        setValue(id,text){selected=id;value.textContent=text||entries.find(e=>e.id===id)?.text||label('Выберите источник','Choose a source');for(const b of buttons)b.setAttribute('aria-selected',String(b.dataset.value===id));},
-        setOptions(items){entries=items;list.replaceChildren();buttons=items.map((entry,index)=>{const b=el('button',entry.text,'import-option'+(entry.separator?' import-option-divider':''));b.type='button';b.id=id+'-option-'+index;b.setAttribute('role','option');b.dataset.value=entry.id;b.setAttribute('aria-selected',String(entry.id===selected));b.disabled=!!entry.disabled;
-          b.onclick=wrap(async()=>{hide();toggle.focus();await onChoose(entry);});list.append(b);return b;});},
-        disable(disabled){toggle.disabled=disabled;if(disabled)hide();}
+      const row=el('label',undefined,'chromium-import-selector');
+      const caption=el('span',title);
+      const toggle=el('select',undefined,'md-select');
+      toggle.id=id;
+      toggle.setAttribute('aria-label',title);
+      row.append(caption,toggle);
+      let selected='',entries=[];
+      toggle.onchange=wrap(async()=>{
+        const entry=entries.find(item=>item.id===toggle.value);
+        toggle.value=selected;
+        if(entry)await onChoose(entry);
+      });
+      return {row,toggle,get value(){return selected;},
+        setValue(value,text){
+          selected=value;
+          if(!toggle.options.length)toggle.add(new Option());
+          if(!value)toggle.options[0].textContent=text;
+          toggle.value=value;
+        },
+        setOptions(items){
+          entries=items;
+          const placeholder=new Option(label('Выберите источник','Choose a source'),'');
+          placeholder.disabled=true;
+          toggle.replaceChildren(placeholder,...items.map(item=>new Option(item.text,item.id)));
+          toggle.value=selected;
+        },
+        disable(disabled){toggle.disabled=disabled;}
       };
     }
-    function hideMenus(){from?.hide();to?.hide();}
     function targetChoices(){
       const choices=targets.map(p=>({id:p.id,text:p.name+(p.id===activeTarget?label(' · текущий',' · current'):'')}));
       if(!currentProfileOnly)choices.push({id:'__new__',text:label('+ Новый профиль Sona Preview','+ New Sona Preview profile'),separator:true});
@@ -173,7 +178,7 @@
     }
     async function requestCancel(){if(phase==='running'){cancelRequested=true;lock();execution.textContent=label('Отменяем… Уже перенесённые записи сохранятся.','Cancelling… Entries already imported will remain.');try{await call('cancel');}catch(e){cancelRequested=false;lock();error(e);}}else if(phase!=='creating')modal.close();}
     async function execute() {
-      if(run.disabled)return;hideMenus();notice.hidden=true;
+      if(run.disabled)return;notice.hidden=true;
       const selected=source,chosen=Object.fromEntries([...checks].map(([key,c])=>[key,c.checked&&!c.disabled]));
       const approved=consent.checked;let destination=to.value;
       if(destination==='__new__'){
@@ -196,7 +201,7 @@
     }
     function finish(result) {
       phase='result';box.dataset.importState=phase;cancelRequested=false;lock();
-      form.querySelector('.import-categories-section').hidden=true;consentBox.hidden=true;createField.hidden=true;execution.hidden=true;
+      form.hidden=true;consentBox.hidden=true;createField.hidden=true;execution.hidden=true;
       const title=result.status==='ok'?label('Импорт завершён','Import complete'):result.status==='cancelled'?label('Импорт отменён','Import cancelled'):result.status==='partial'?label('Импорт завершён частично','Import partially completed'):label('Импорт завершён с ошибками','Import completed with errors');
       summary.replaceChildren(el('p',title,'import-result-title'));summary.hidden=false;
       const totals={imported:0,skipped:0,failed:0},reports=Object.entries(result.categories||{});
@@ -215,7 +220,7 @@
       if(result.status==='cancelled')summary.append(el('p',label('Уже перенесённые данные сохранены.','Entries already imported remain saved.'),'note'));
       cancel.hidden=true;run.hidden=true;done.hidden=false;done.focus();
     }
-    dialog(label('Импорт из другого браузера','Import from another browser'),host=>{
+    dialog(label('Импорт закладок и настроек','Import bookmarks and settings'),host=>{
       box=host;box.classList.add('browser-import');modal.classList.add('browser-import-dialog');box.dataset.importState='form';
       form=el('div',undefined,'import-form');from=dropdown('importFrom',label('Из','From'),chooseSource);to=dropdown('importTo',label('В','To'),async entry=>{to.setValue(entry.id);createField.hidden=entry.id!=='__new__';lock();if(entry.id==='__new__')newName.focus();});
       form.append(from.row);
@@ -229,13 +234,13 @@
       targetChoices();to.setValue(targets.some(p=>p.id===activeTarget)?activeTarget:targets[0]?.id||'');
       drawCategories();
     });
-    const outside=e=>{if(!e.target.closest('.import-select-anchor'))hideMenus();};
+    
     const escape=e=>{if(phase==='running'||phase==='creating'){e.preventDefault();if(phase==='running')requestCancel().catch(error);}};
-    closeButton.onclick=wrap(requestCancel);modal.addEventListener('pointerdown',outside);modal.addEventListener('cancel',escape);
-    const cleanup=()=>{closed=true;++serial;clearInterval(timer);if(phase==='running')call('cancel').catch(()=>{});box.classList.remove('browser-import');modal.classList.remove('browser-import-dialog');closeButton.onclick=previousClose;modal.removeEventListener('pointerdown',outside);modal.removeEventListener('cancel',escape);modal.removeEventListener('close',cleanup);};modal.addEventListener('close',cleanup);
+    closeButton.onclick=wrap(requestCancel);modal.addEventListener('cancel',escape);
+    const cleanup=()=>{closed=true;++serial;clearInterval(timer);if(phase==='running')call('cancel').catch(()=>{});box.classList.remove('browser-import');modal.classList.remove('browser-import-dialog');closeButton.onclick=previousClose;modal.removeEventListener('cancel',escape);modal.removeEventListener('close',cleanup);};modal.addEventListener('close',cleanup);
     await discover();
-    if(!closed&&sourceHint) {
-      const choice=sourceOptions.find(p=>p.id===sourceHint);
+    if(!closed) {
+      const choice=sourceOptions.find(p=>p.id===sourceHint)||sourceOptions.find(p=>!p.needsFolder);
       if(choice)await inspect(choice);
     }
     if(!closed)from.toggle.focus();

@@ -3,6 +3,8 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import sqlite3
+from contextlib import closing
 import subprocess
 import sys
 import tempfile
@@ -70,10 +72,21 @@ def main():
                 tests.wait(lambda: s.evaluate(settings, "document.body?.classList.contains('ready')"))
                 for name, (root, url, before) in sources.items():
                     if first:
-                        payload = dict(source=name+":Default", target="personal", bookmarks=True, history=True)
-                        result = s.evaluate(settings, "browserShell.browserImport('run',"+json.dumps(payload)+")")
-                        for kind in ["bookmarks", "history"]:
-                            assert result["categories"][kind]["imported"] > 0, (name, kind, result)
+                        s.evaluate(settings, "souluBrowserImport.open()")
+                        choice=json.dumps(name+":Default")
+                        s.evaluate(settings, f"(()=>{{const e=document.querySelector('#importFrom');e.value={choice};e.dispatchEvent(new Event('change'));}})()")
+                        tests.wait(lambda: s.evaluate(settings, "Array.from(document.querySelectorAll('.import-category input:enabled')).some(e=>e.dataset.category==='history') && !document.querySelector('.import-execution:not([hidden])')"))
+                        s.evaluate(settings, """(()=>{
+                          for(const e of document.querySelectorAll('.import-category input:enabled')){
+                            if(e.checked!==['bookmarks','history'].includes(e.dataset.category))e.click();
+                          }
+                          document.querySelector('.browser-import .dialog-actions .primary').click();
+                        })()""")
+                        tests.wait(lambda: s.evaluate(settings, "document.querySelector('.browser-import')?.dataset.importState==='result'"))
+                        s.evaluate(settings, "document.querySelector('.browser-import .dialog-actions button:last-child').click()")
+                    history=local/'Sona Preview/User Data/Profiles/personal/soulu-history.sqlite'
+                    with closing(sqlite3.connect(history.as_uri()+'?mode=ro',uri=True)) as db:
+                        assert db.execute('SELECT 1 FROM visits WHERE url=?',(url,)).fetchone(),name
                     marks = s.evaluate(settings, "browserShell.getBookmarks()")
                     link = next(r for r in marks if r.get("url") == url)
                     assert any(r["id"] == link["parentId"] and r["title"] == "Sona import check" for r in marks)

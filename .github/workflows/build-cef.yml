@@ -55,8 +55,8 @@ jobs:
     runs-on: windows-2025
     timeout-minutes: 90
     env:
-      BETA_VERSION: 1.156.0.30.81
-      BETA_NUMBER: 81
+      BETA_VERSION: 1.156.0.30.82
+      BETA_NUMBER: 82
       # This explicit source marker records the owner's requested 1.0.76 release.
       # Ordinary main pushes continue to build without publishing.
       AUTOMATED_RELEASE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release 1.0.76]') }}
@@ -297,7 +297,7 @@ jobs:
             Set-Content (Join-Path $out 'SHA256SUMS.txt') -Encoding ascii
           @"
           Sona Preview $version (CEF), Windows x64. CEF 156.0.30 / Chromium 156.0.8078.96.
-          Импорт CSV использует CSVFieldParser и ConsumeCSVLine Chromium. Проверены выбор CSV и запись в хранилище паролей Sona, импорт истории и вложенной закладки из профилей установленных Chrome и Edge, сохранение закладки после перезапуска и неизменность исходных файлов.
+          Изменён диалог выбора профиля и данных. Импорт CSV использует CSVFieldParser и ConsumeCSVLine Chromium. Проверены выбор CSV и запись в хранилище паролей Sona, импорт истории и вложенной закладки из профилей установленных Chrome и Edge, сохранение закладки после перезапуска и неизменность исходных файлов.
           Вкладки, автозаполнение и прямой перенос защищённых паролей для всех перечисленных браузеров этим прогоном не подтверждены.
           Исходный коммит: $env:GITHUB_SHA
           "@ | Set-Content (Join-Path $PWD 'artifacts/cef-preview-release.md') -Encoding utf8

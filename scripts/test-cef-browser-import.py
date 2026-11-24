@@ -148,7 +148,7 @@ def main():
             fill('input[name=email]','fixture@example.test');check(True,'native-imported-autofill-fills-page-field')
             fill('input[type=password]','synthetic-import-only','fixture');check(True,'native-imported-password-fills-same-origin-page-field')
             s.evaluate(settings,'souluBrowserImport.open()');wait(lambda:s.evaluate(settings,"!!document.querySelector('dialog[open] #importFrom')"));check(s.evaluate(settings,"document.querySelectorAll('dialog[open]').length")==1,'real-CEF-compact-import-dialog')
-            s.evaluate(settings,"document.getElementById('importFrom').click();[...document.querySelectorAll('.import-option')].find(e=>e.textContent.includes('Chrome'))?.click()")
+            s.evaluate(settings,"(()=>{const select=document.getElementById('importFrom');select.value='Chrome:Default';select.dispatchEvent(new Event('change'))})()")
             wait(lambda:s.evaluate(settings,"!!document.querySelector('.import-category input[data-category=history]:enabled')"))
             wait(lambda:s.evaluate(settings,"(()=>{const d=document.getElementById('actionDialog');return d.scrollHeight<=d.clientHeight+1&&innerHeight>=620})()"))
             check(True,'native-compact-dialog-fits-categories-and-actions-without-scroll')

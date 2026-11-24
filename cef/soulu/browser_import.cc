@@ -9,6 +9,7 @@
 #include <windows.h>
 #include <algorithm>
 #include <cmath>
+#include <climits>
 #include <cctype>
 #include <cwctype>
 #include <fstream>
@@ -25,6 +26,7 @@ struct BrowserSpec { const char *id,*exe,*family; const wchar_t *directory,*appl
 const BrowserSpec specs[]={
   {"Chrome","chrome.exe","chromium",L"Google/Chrome/User Data",L"Google/Chrome/Application/chrome.exe",false,false},
   {"Edge","msedge.exe","chromium",L"Microsoft/Edge/User Data",L"Microsoft/Edge/Application/msedge.exe",false,false},
+  {"Comet","comet.exe","chromium",L"Perplexity/Comet/User Data",L"Perplexity/Comet/Application/comet.exe",false,false},
   {"Brave","brave.exe","chromium",L"BraveSoftware/Brave-Browser/User Data",L"BraveSoftware/Brave-Browser/Application/brave.exe",false,false},
   {"Opera","opera.exe","chromium",L"Opera Software/Opera Stable",L"Programs/Opera/opera.exe",true,true},
   {"Opera Air","opera.exe","chromium",L"Opera Software/Opera Air Stable",L"Programs/Opera Air/opera.exe",true,true},
@@ -357,8 +359,21 @@ CefRefPtr<CefListValue> ReadImportTabs(const ImportSource& source,const std::sha
       else if(id==6){if(p.size()<16||U32(p,0)!=p.size()-4)throw std::runtime_error("Invalid navigation pickle");int key=static_cast<int>(U32(p,4)),index=static_cast<int>(U32(p,8));size_t length=U32(p,12);
         if(length>p.size()-16||length>65536)throw std::runtime_error("Invalid navigation URL");tabs[key].urls[index]=p.substr(16,length);}
       else if(id==5){int key=static_cast<int>(U32(p,0)),start=static_cast<int>(U32(p,4));auto& urls=tabs[key].urls;urls.erase(urls.lower_bound(start),urls.end());}
-      else if(id==11||id==24){ // Do not guess selected URLs after index-changing prune operations.
-        tabs.erase(static_cast<int>(U32(p,0)));
+      else if(id==11||id==24){
+        // Chromium session_service_commands.cc: ProcessTabNavigationPathPrunedCommand.
+        int key=static_cast<int>(U32(p,0));
+        int index=id==11?0:static_cast<int>(U32(p,4));
+        int count=static_cast<int>(U32(p,id==11?4:8));
+        if(index<0||count<=0||index>INT_MAX-count)throw std::runtime_error("Invalid session navigation range");
+        auto& tab=tabs[key];
+        if(tab.selected>=index && tab.selected<index+count)tab.selected=index-1;
+        else if(tab.selected>=index+count)tab.selected-=count;
+        tab.urls.erase(tab.urls.lower_bound(index),tab.urls.lower_bound(index+count));
+        for(auto it=tab.urls.lower_bound(index+count);it!=tab.urls.end();){
+          auto entry=tab.urls.extract(it++);
+          entry.key()-=count;
+          tab.urls.insert(std::move(entry));
+        }
       }
     }
     if(!marker)throw std::runtime_error("Incomplete session snapshot");std::vector<std::pair<int,Tab>> sorted(tabs.begin(),tabs.end());

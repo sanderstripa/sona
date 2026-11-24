@@ -133,7 +133,7 @@ def main():
             check(capability['passwords']['status']=='available','First-run sees directly readable protected Chrome passwords: '+json.dumps(capability['passwords']))
             click(page,'Далее');click(page,'Открыть импорт')
             wait(lambda:s.evaluate(page,"document.querySelector('[data-category=passwords]:not(:disabled)')!==null"))
-            check(s.evaluate(page,"document.querySelector('#importFrom-option-0')!==null"),'First-run shows the Settings import dialog')
+            check(s.evaluate(page,"document.querySelector('#importFrom option')!==null"),'First-run shows the Settings import dialog')
             s.evaluate(page,"document.querySelector('[data-category=passwords]').click();document.querySelector('.import-consent input').click()")
             click(page,'Импорт')
             wait(lambda:s.evaluate(page,"document.querySelector('[data-import-state=result]')!==null"))
