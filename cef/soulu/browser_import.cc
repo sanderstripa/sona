@@ -133,9 +133,13 @@ class DatabaseSnapshot {
         handles_.push_back(h);names_.push_back(path.filename());
       }
       for(size_t i=0;i<handles_.size();++i){LARGE_INTEGER size={};
-        if(!GetFileSizeEx(handles_[i],&size)||size.QuadPart>256LL*1024*1024)throw std::runtime_error("Database exceeds 256 MB");
+        if(!GetFileSizeEx(handles_[i],&size)||size.QuadPart<0)
+          throw std::runtime_error("Cannot read source database size");
+        const auto space=std::filesystem::space(root_);
+        if(static_cast<std::uintmax_t>(size.QuadPart)>space.available)
+          throw std::runtime_error("Insufficient disk space for a consistent import snapshot");
         std::ofstream out(root_/names_[i],std::ios::binary);char b[65536];DWORD n;
-        while(true){if(!ReadFile(handles_[i],b,sizeof(b),&n,nullptr))throw std::runtime_error("Source read failed");if(!n)break;out.write(b,n);}
+        while(true){if(!ReadFile(handles_[i],b,sizeof(b),&n,nullptr))throw std::runtime_error("Source read failed");if(!n)break;out.write(b,n);if(!out)throw std::runtime_error("Snapshot write failed");}
         out.flush();if(!out||out.tellp()!=size.QuadPart)throw std::runtime_error("Snapshot write failed");
       }
       // A previously absent WAL/journal may appear while acquiring the set.
@@ -622,8 +626,7 @@ CefRefPtr<CefDictionaryValue> ImportBrowserHistory(const ImportSource& source,co
         : "SELECT h.url,h.title,v.visit_date FROM moz_places h JOIN moz_historyvisits v ON h.id=v.place_id ORDER BY v.visit_date";
     }
     Query q(db.db(),visits);
-    int total=0;while(!control->cancelled&&q.Next()){
-      if(++total>500000)throw std::runtime_error("History exceeds 500000 visits");
+    while(!control->cancelled&&q.Next()){
       auto url=q.Text(0),title=q.Text(1);auto raw=q.Int64(2);
       // Subtract the Chromium epoch in integer microseconds before converting
       // to double; converting the 1601-based value first loses visit precision.

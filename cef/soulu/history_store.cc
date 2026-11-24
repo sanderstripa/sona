@@ -30,7 +30,7 @@ HistoryStore::HistoryStore(const std::string& profile) {
   std::error_code error;std::filesystem::create_directories(path.parent_path(),error);
   if(error||sqlite3_open_v2(CefString(path.wstring()).ToString().c_str(),&db_,SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE|SQLITE_OPEN_FULLMUTEX,nullptr)!=SQLITE_OK){sqlite3_close(db_);db_=nullptr;return;}
   sqlite3_busy_timeout(db_,2000);
-  if(sqlite3_exec(db_,"PRAGMA secure_delete=ON; CREATE TABLE IF NOT EXISTS visits(id TEXT PRIMARY KEY,url TEXT NOT NULL,title TEXT NOT NULL,favicon TEXT NOT NULL,visited REAL NOT NULL,search TEXT NOT NULL); CREATE INDEX IF NOT EXISTS visits_time ON visits(visited DESC,id DESC);",nullptr,nullptr,nullptr)!=SQLITE_OK){sqlite3_close(db_);db_=nullptr;}
+  if(sqlite3_exec(db_,"PRAGMA secure_delete=ON; CREATE TABLE IF NOT EXISTS visits(id TEXT PRIMARY KEY,url TEXT NOT NULL,title TEXT NOT NULL,favicon TEXT NOT NULL,visited REAL NOT NULL,search TEXT NOT NULL); CREATE INDEX IF NOT EXISTS visits_time ON visits(visited DESC,id DESC); CREATE INDEX IF NOT EXISTS visits_url_time ON visits(url,visited);",nullptr,nullptr,nullptr)!=SQLITE_OK){sqlite3_close(db_);db_=nullptr;}
 }
 HistoryStore::~HistoryStore(){sqlite3_close(db_);}
 int HistoryStore::ImportVisit(const std::string& url,const std::string& title,double time){
