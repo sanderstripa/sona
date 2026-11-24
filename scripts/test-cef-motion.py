@@ -171,8 +171,6 @@ def main():
             check(s.evaluate(shell,'document.querySelector("#sidebar").inert'),'Closing sidebar immediately releases keyboard targets')
             time.sleep(.35)
             check(s.evaluate(shell,'getComputedStyle(document.querySelector("#sidebar")).visibility==="hidden"'),'Sidebar exits before OSR host shrinks')
-            s.evaluate(shell,'browserShell.toggleSidebar()')
-            o.wait(lambda:s.evaluate(shell,'!document.querySelector("#sidebar").classList.contains("visible")'))
             baseline=s.evaluate(page,'innerWidth')
             s.evaluate(page,'window.bookmarkWidths=[];addEventListener("resize",()=>bookmarkWidths.push(innerWidth))')
             s.evaluate(shell,'browserShell.setBookmarksSidebar(true)')
