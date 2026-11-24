@@ -363,15 +363,15 @@ CefRefPtr<CefListValue> ReadImportTabs(const ImportSource& source,const std::sha
         // Chromium session_service_commands.cc: ProcessTabNavigationPathPrunedCommand.
         int key=static_cast<int>(U32(p,0));
         int index=id==11?0:static_cast<int>(U32(p,4));
-        int count=static_cast<int>(U32(p,id==11?4:8));
-        if(index<0||count<=0||index>INT_MAX-count)throw std::runtime_error("Invalid session navigation range");
+        int pruned_count=static_cast<int>(U32(p,id==11?4:8));
+        if(index<0||pruned_count<=0||index>INT_MAX-pruned_count)throw std::runtime_error("Invalid session navigation range");
         auto& tab=tabs[key];
-        if(tab.selected>=index && tab.selected<index+count)tab.selected=index-1;
-        else if(tab.selected>=index+count)tab.selected-=count;
-        tab.urls.erase(tab.urls.lower_bound(index),tab.urls.lower_bound(index+count));
-        for(auto it=tab.urls.lower_bound(index+count);it!=tab.urls.end();){
+        if(tab.selected>=index && tab.selected<index+pruned_count)tab.selected=index-1;
+        else if(tab.selected>=index+pruned_count)tab.selected-=pruned_count;
+        tab.urls.erase(tab.urls.lower_bound(index),tab.urls.lower_bound(index+pruned_count));
+        for(auto it=tab.urls.lower_bound(index+pruned_count);it!=tab.urls.end();){
           auto entry=tab.urls.extract(it++);
-          entry.key()-=count;
+          entry.key()-=pruned_count;
           tab.urls.insert(std::move(entry));
         }
       }
