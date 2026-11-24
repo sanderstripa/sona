@@ -1200,11 +1200,11 @@ void BrowserWindow::AbortPopup(int tab_id) {
   EmitState();
 }
 
-void BrowserWindow::NewTab(const std::string& url, bool incognito,
+bool BrowserWindow::NewTab(const std::string& url, bool incognito,
                           bool foreground, CefRefPtr<CefRequestContext> context,
                           const std::string& profile_id) {
   InitializeProfiles();
-  if (IsSettingsUrl(url)) { OpenSettingsOverlay(); return; }
+  if (IsSettingsUrl(url)) { OpenSettingsOverlay(); return false; }
   const int id = next_tab_id_++;
   Tab tab;
   tab.id = id;
@@ -1251,10 +1251,11 @@ void BrowserWindow::NewTab(const std::string& url, bool incognito,
     active_tab_id_ = previous_active;
     Layout();
     EmitState();
-    return;
+    return false;
   }
   EmitState();
   if (foreground && tab.url == "about:blank") FocusAddress();
+  return true;
 }
 
 void BrowserWindow::AttachChromePopup(CefRefPtr<CefBrowser> browser,CefRefPtr<ChromeTabHost> host){
@@ -3014,12 +3015,40 @@ void BrowserWindow::HandleBridge(const std::string& request,
       }catch(const std::exception& e){result->SetString("status","error");result->SetString("message",e.what());}
       CefPostTask(TID_UI,new FunctionTask([self,callback,result,reports,run,bookmarks,merged_bookmarks,imported_tabs,target,control](){
         if(run){
-          if(imported_tabs&&!control->cancelled){auto r=reports->GetDictionary("tabs");auto profile=std::find_if(self->profiles_.begin(),self->profiles_.end(),[&](const Profile& p){return p.id==target;});
-            if(profile==self->profiles_.end()){r->SetInt("failed",1);r->SetString("status","error");}
-            else for(size_t i=0;i<imported_tabs->GetSize();++i){std::string url=imported_tabs->GetString(i);bool duplicate=false;
-              for(auto* window:windows_)for(const auto& tab:window->tabs_)if(!tab.incognito&&tab.profile_id==target&&tab.url==url)duplicate=true;
-              if(duplicate)r->SetInt("skipped",r->GetInt("skipped")+1);
-              else{self->NewTab(url,false,false,profile->context,target);r->SetInt("imported",r->GetInt("imported")+1);}}
+          if (imported_tabs && imported_tabs->GetSize() && !control->cancelled) {
+            auto report = reports->GetDictionary("tabs");
+            const auto profile = std::find_if(self->profiles_.begin(), self->profiles_.end(),
+                [&](const Profile& candidate) { return candidate.id == target; });
+            if (profile == self->profiles_.end() || !profile->context) {
+              report->SetInt("failed", 1);
+              report->SetString("status", "error");
+              report->SetString("message", "Target profile is unavailable");
+            } else {
+              const auto context = profile->context;
+              std::set<std::string> open_urls;
+              for (auto* window : windows_)
+                for (const auto& tab : window->tabs_)
+                  if (!tab.incognito && tab.profile_id == target) open_urls.insert(tab.url);
+              if (open_urls.empty() && target != self->active_profile_id_) {
+                // Materialize the dormant session before adding imported tabs.
+                self->RestoreProfileTabs(target, true, context, false);
+                for (const auto& tab : self->tabs_)
+                  if (!tab.incognito && tab.profile_id == target) open_urls.insert(tab.url);
+              }
+              for (size_t i = 0; i < imported_tabs->GetSize(); ++i) {
+                const std::string url = imported_tabs->GetString(i);
+                if (open_urls.contains(url)) {
+                  report->SetInt("skipped", report->GetInt("skipped") + 1);
+                } else if (self->NewTab(url, false, false, context, target)) {
+                  open_urls.insert(url);
+                  report->SetInt("imported", report->GetInt("imported") + 1);
+                } else {
+                  report->SetInt("failed", report->GetInt("failed") + 1);
+                  report->SetString("status", "partial");
+                  report->SetString("message", "Some imported tabs could not be opened");
+                }
+              }
+            }
           }
           if(merged_bookmarks)for(auto* window:windows_){window->bookmarks_=merged_bookmarks->Copy();window->EmitState();}
           if(control->cancelled&&bookmarks&&!reports->HasKey("bookmarks")){auto r=CefDictionaryValue::Create();r->SetInt("imported",0);r->SetString("status","cancelled");reports->SetDictionary("bookmarks",r);}

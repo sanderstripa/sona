@@ -240,7 +240,7 @@ class BrowserWindow final : public CefBaseRefCounted {
   void ApplyWindowAppearance();
   CefRefPtr<CefDictionaryValue> SendVpnHelper(
       CefRefPtr<CefDictionaryValue> request) const;
-  void NewTab(const std::string& url = "", bool incognito = false,
+  bool NewTab(const std::string& url = "", bool incognito = false,
               bool foreground = true, CefRefPtr<CefRequestContext> context = nullptr,
               const std::string& profile_id = "");
   std::string PageUrl(const std::string& kind, CefRefPtr<CefDictionaryValue> settings) const;
@@ -250,6 +250,8 @@ class BrowserWindow final : public CefBaseRefCounted {
   CefRefPtr<CefDictionaryValue> HomeState(const Tab& tab) const;
   void SaveSession();
   bool RestoreSession();
+  bool RestoreProfileTabs(const std::string& profile_id, bool restore_all,
+                          CefRefPtr<CefRequestContext> context, bool activate);
   void ReplaceLastTab(bool incognito, const std::string& profile);
   void CloseTab(int id);
   void SwitchTab(int id);

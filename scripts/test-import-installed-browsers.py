@@ -76,14 +76,17 @@ def main():
                         choice=json.dumps(name+":Default")
                         s.evaluate(settings, f"(()=>{{const e=document.querySelector('#importFrom');e.value={choice};e.dispatchEvent(new Event('change'));}})()")
                         tests.wait(lambda: s.evaluate(settings, "Array.from(document.querySelectorAll('.import-category input:enabled')).some(e=>e.dataset.category==='history') && !document.querySelector('.import-execution:not([hidden])')"))
+                        tests.wait(lambda: s.evaluate(settings, "!!document.querySelector('.import-category input[data-category=tabs]:enabled')"))
                         s.evaluate(settings, """(()=>{
                           for(const e of document.querySelectorAll('.import-category input:enabled')){
-                            if(e.checked!==['bookmarks','history'].includes(e.dataset.category))e.click();
+                            if(e.checked!==['bookmarks','history','tabs'].includes(e.dataset.category))e.click();
                           }
                           document.querySelector('.browser-import .dialog-actions .primary').click();
                         })()""")
                         tests.wait(lambda: s.evaluate(settings, "document.querySelector('.browser-import')?.dataset.importState==='result'"))
                         s.evaluate(settings, "document.querySelector('.browser-import .dialog-actions button:last-child').click()")
+                        tests.wait(lambda: any(
+                            tab.get("url") == url for tab in s.evaluate(shell, "browserShell.getState()")["tabs"]))
                     history=local/'Sona Preview/User Data/Profiles/personal/soulu-history.sqlite'
                     with closing(sqlite3.connect(history.as_uri()+'?mode=ro',uri=True)) as db:
                         assert db.execute('SELECT 1 FROM visits WHERE url=?',(url,)).fetchone(),name

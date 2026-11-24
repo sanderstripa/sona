@@ -93,6 +93,26 @@ def main():
             check(b'fixture@example.test' not in (personal/'soulu-autofill.json').read_bytes() and b'synthetic-import-only' not in (personal/'soulu-passwords.json').read_bytes(),'native-target-stores-encrypted')
             marks=s.evaluate(settings,'browserShell.getBookmarks()');check(any(r.get('parentId',0)>0 for r in marks) and len(marks)==3,'nested-bookmarks-visible-in-existing-bookmark-backend')
             check(digest(source)==before,'native-import-does-not-change-source-or-create-sidecars')
+            existing_tab = url + '?already-in-target'
+            session_file = destination / 'soulu-session.json'
+            session_file.write_text(json.dumps({'tabs': [existing_tab], 'pinned': [True], 'active': 0}),
+                                    encoding='utf-8')
+            target_result = call('run', dict(payload, target=other))
+            check(target_result['status'] == 'ok' and all(
+                target_result['categories'][key]['imported'] > 0
+                for key in ('bookmarks', 'history', 'passwords', 'autofill', 'tabs')),
+                'all-five-categories-import-into-inactive-profile')
+            check(s.evaluate(shell, 'browserShell.getState()')['activeProfileId'] == 'personal',
+                  'import-into-inactive-profile-preserves-current-profile')
+            check(len(s.evaluate(settings, 'browserShell.getBookmarks()')) == 3,
+                  'import-into-inactive-profile-keeps-source-view-isolated')
+            with closing(sqlite3.connect((destination / 'soulu-history.sqlite').as_uri() + '?mode=ro', uri=True)) as target_history:
+                check(target_history.execute('SELECT 1 FROM visits WHERE url=?', (url,)).fetchone(),
+                      'history-is-written-to-selected-profile')
+            check((destination / 'soulu-autofill.json').is_file() and (destination / 'soulu-passwords.json').is_file(),
+                  'autofill-and-passwords-are-written-to-selected-profile')
+            check(call('run', dict(payload, target=other))['categories']['tabs']['imported'] == 0,
+                  'tabs-deduplicate-in-selected-inactive-profile')
             bookmark_file=data/'bookmarks.json';bookmark_bytes=bookmark_file.read_bytes()
             # Allow reads, but deny replacement of the destination file. This
             # fails the atomic save after nonzero account links were merged.
@@ -153,7 +173,11 @@ def main():
             wait(lambda:s.evaluate(settings,"(()=>{const d=document.getElementById('actionDialog');return d.scrollHeight<=d.clientHeight+1&&innerHeight>=620})()"))
             check(True,'native-compact-dialog-fits-categories-and-actions-without-scroll')
             screenshot=s.command(settings,'Page.captureScreenshot',{'format':'png','captureBeyondViewport':False});(output.parent/'browser-import-native-window.png').write_bytes(base64.b64decode(screenshot['data']))
-            s.evaluate(settings,"document.getElementById('actionDialog').close()");stop();start()
+            s.evaluate(settings,"document.getElementById('actionDialog').close()");stop()
+            saved_target_session = json.loads(session_file.read_text(encoding='utf-8'))
+            check(saved_target_session['tabs'] == [existing_tab, url] and saved_target_session['pinned'][0],
+                  'imported-and-existing-tabs-are-saved-in-selected-profile')
+            start()
             check(len(s.evaluate(settings,'browserShell.getBookmarks()'))==3,'imported-bookmarks-persist-after-browser-restart')
             check(call('run',payload)['categories']['passwords']['imported']==0,'imported-passwords-persist-after-restart')
             with closing(sqlite3.connect(beta/'History',isolation_level=None)) as live:
