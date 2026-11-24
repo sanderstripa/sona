@@ -293,7 +293,9 @@
       animations=[body.animate([{'--sona-bookmarks-width':motion.from},{'--sona-bookmarks-width':to}],
         {...options,fill:'backwards'})];
     }
-    for(const animation of animations)animation.startTime=motion.startAt-performance.timeOrigin;
+    // CEF captures the current transform when reversing. Start that segment
+    // on the next compositor frame, without waiting at the sampled position.
+    if(!cef)for(const animation of animations)animation.startTime=motion.startAt-performance.timeOrigin;
     sidebarAnimations=animations;
     body.setAttribute('data-bookmarks-moving','');
     function finish(){

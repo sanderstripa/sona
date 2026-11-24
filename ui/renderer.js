@@ -343,7 +343,8 @@ function renderTabs(){
   const compactTabCount=state.tabs.filter(tab=>tab.active||tab.url||tab.favicon).length;
   const singleTabResize=structural&&layout==='compact'&&
     (previousCompactTabCount===2&&compactTabCount===1||previousCompactTabCount===1&&compactTabCount===2);
-  const oldWidth=singleTabResize?getComputedStyle(flow).width:null;
+  const address=()=>flow.querySelector('[data-active-tab]');
+  const oldAddressX=singleTabResize?address()?.getBoundingClientRect().left:undefined;
   const before=structural&&!singleTabResize?new Map(geometry().map(({id,rect})=>[id,rect.left])):null;
   previousCompactTabCount=compactTabCount;
   if(changed)cancelTabMotion();
@@ -359,10 +360,14 @@ function renderTabs(){
     animation.finished.then(finish,finish);
   };
   const timing={duration:180,easing:'cubic-bezier(.22,1,.36,1)'};
-  if(oldWidth){
-    // Keep the address field and adjacent controls in the same flex layout.
-    const width=getComputedStyle(flow).width;
-    if(oldWidth!==width)track(flow.animate([{width:oldWidth},{width}],timing));
+  if(oldAddressX!==undefined&&address()){
+    const dx=oldAddressX-address().getBoundingClientRect().left;
+    const offset={transform:`translateX(${dx}px)`};
+    if(Math.abs(dx)>=1){
+      window.browserShell.keepShellMotion?.(timing.duration+32).catch(console.error);
+      // The address field and adjacent buttons share this surface.
+      track(flow.animate([offset,{transform:'none'}],timing));
+    }
   }
   if(before){
     // Measure the entire strip before mutating transforms or opacity.

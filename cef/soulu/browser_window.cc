@@ -3140,17 +3140,18 @@ void BrowserWindow::HandleBridge(const std::string& request,
     if(old_bookmarks!=open_bookmarks){
       BOOL animate=TRUE;
       SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION,0,&animate,0);
-      const int duration = animate && !Fullscreen() ? 240 : 0;
-      constexpr int lead = 32;
+      const int duration = animate && !Fullscreen() ? motion::kBookmarksSlideMs : 0;
+      const int hold = duration + motion::kBookmarksFrameSlackMs;
       KillTimer(hwnd_, kBookmarksExitTimer);
       bookmarks_exit_at_ = 0;
-      // Keep the page at a constant size until the sidebar contents fade out.
+      // Keep the dock and the 60 fps budget through the last compositor frame.
       if (!open_bookmarks && duration > 0 &&
-          SetTimer(hwnd_, kBookmarksExitTimer, duration + lead, nullptr))
-        bookmarks_exit_at_ = GetTickCount64() + duration;
+          SetTimer(hwnd_, kBookmarksExitTimer, hold, nullptr))
+        bookmarks_exit_at_ = GetTickCount64() + hold;
+      if (duration > 0) KeepShellMotionFor(hold);
       const double now = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(
           std::chrono::system_clock::now().time_since_epoch()).count());
-      bookmarks_motion_epoch_ = std::max(bookmarks_motion_epoch_ + 1, now + lead);
+      bookmarks_motion_epoch_ = std::max(bookmarks_motion_epoch_ + 1, now);
       auto transition = CefDictionaryValue::Create();
       transition->SetBool("open", open_bookmarks);
       transition->SetInt("duration", open_bookmarks || bookmarks_exit_at_ ? duration : 0);

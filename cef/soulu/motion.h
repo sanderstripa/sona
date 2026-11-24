@@ -7,6 +7,8 @@ inline constexpr int kSurfaceMs = 180;
 inline constexpr int kStructuralMs = 300;
 inline constexpr int kReducedOverlayMs = 90;
 inline constexpr int kSidebarCloseMs = 180;
+inline constexpr int kBookmarksSlideMs = 240;
+inline constexpr int kBookmarksFrameSlackMs = 48;
 inline constexpr int kShellIdleFrameRate = 30;
 inline constexpr int kShellMotionFrameRate = 60;
 // CSS cubic-bezier(.22,1,.36,1), sampled by monotonic native timers.

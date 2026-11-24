@@ -159,20 +159,24 @@ for(const kind of ['startup','newTab','home']){const n=$('control-settings-'+kin
   const sectionAnimations=new Set();
   function prepareSectionMotion(id,target){
     for(const animation of sectionAnimations)animation.cancel();sectionAnimations.clear();
-    return id!==section||!!target;
+    return {changed:id!==section||!!target, enteringSection:!!id&&!section};
   }
-  function finishSectionMotion(changed,id){
+  function finishSectionMotion({changed,enteringSection}){
     if(!changed)return;
     const reduced=window.souluMotion.reduced;
-    for(const node of [$('settingsContent'),...(id?[document.querySelector('aside')]:[])]){
-      const animation=node.animate([{opacity:0,transform:reduced?'none':'translateY(5px)'},{opacity:1,transform:'none'}],
-        {duration:reduced?90:320,delay:reduced?0:45,easing:'cubic-bezier(.25,.1,.25,1)',fill:'backwards'});
+    const tokens=getComputedStyle(document.documentElement);
+    const duration=parseFloat(tokens.getPropertyValue(reduced?'--motion-reduced':'--motion-surface'));
+    const easing=tokens.getPropertyValue('--motion-enter').trim();
+    const content=$('settingsContent');
+    for(const node of [content,...(enteringSection?[document.querySelector('aside')]:[])]){
+      const animation=node.animate([{opacity:.72,transform:reduced?'none':'translateY(5px)'},{opacity:1,transform:'none'}],
+        {duration,easing});
       sectionAnimations.add(animation);
       animation.finished.then(scheduleExtensions,()=>{}).finally(()=>sectionAnimations.delete(animation));
     }
   }
 
-  function openSection(id,target,fromCard=false){if(section==='extensions')invoke('extensions',{visible:false}).catch(report);const previous=section;const transition=prepareSectionMotion(id,target,fromCard);section=id;$('settingsSearch').value='';document.querySelector('main').dataset.view=id?'section':'home';document.querySelector('aside').hidden=!id;$('homeCards').hidden=!!id;$('sectionContent').hidden=!id;$('searchResults').hidden=true;render();$('settingsContent').scrollTop=0;if(target){const n=$('control-'+target);if(n){if(n.hidden){n.hidden=false;n.querySelector('span').append(el('small',t('Выберите «Указанный адрес», чтобы изменить эту страницу.','Choose Custom address to edit this page.'),'search-mode-note'));}n.scrollIntoView({block:'center',behavior:'smooth'});n.classList.add('setting-highlight');n.focus({preventScroll:true});setTimeout(()=>n.classList.remove('setting-highlight'),2200);}}else if(!id&&previous)document.querySelector('#homeCards [data-section="'+previous+'"]')?.focus({preventScroll:true});else $('settingsContent').focus({preventScroll:true});cancelAnimationFrame(resizeFrame);applyPanelHeight();finishSectionMotion(transition,id);}
+  function openSection(id,target,fromCard=false){if(section==='extensions')invoke('extensions',{visible:false}).catch(report);const previous=section;const transition=prepareSectionMotion(id,target,fromCard);section=id;$('settingsSearch').value='';document.querySelector('main').dataset.view=id?'section':'home';document.querySelector('aside').hidden=!id;$('homeCards').hidden=!!id;$('sectionContent').hidden=!id;$('searchResults').hidden=true;render();$('settingsContent').scrollTop=0;if(target){const n=$('control-'+target);if(n){if(n.hidden){n.hidden=false;n.querySelector('span').append(el('small',t('Выберите «Указанный адрес», чтобы изменить эту страницу.','Choose Custom address to edit this page.'),'search-mode-note'));}n.scrollIntoView({block:'center',behavior:'smooth'});n.classList.add('setting-highlight');n.focus({preventScroll:true});setTimeout(()=>n.classList.remove('setting-highlight'),2200);}}else if(!id&&previous)document.querySelector('#homeCards [data-section="'+previous+'"]')?.focus({preventScroll:true});else $('settingsContent').focus({preventScroll:true});cancelAnimationFrame(resizeFrame);applyPanelHeight();finishSectionMotion(transition);}
   function showSearch(){scheduleExtensions();resizePanel();window.souluMotion.cancel();const query=$('settingsSearch').value.trim().toLowerCase().replaceAll('ё','е');$('clearSearch').hidden=!query;$('searchResults').hidden=!query;$('homeCards').hidden=!!query||!!section;$('sectionContent').hidden=!!query||!section;if(!query)return;const box=$('searchResults');box.replaceChildren();const results=index.filter(x=>query.split(/\s+/).every(word=>x.hay.includes(word)));for(const r of results){const b=button('',()=>openSection(r.section,r.key),'result');const text=el('span');text.append(el('strong',r.title),el('small',r.path));b.append(icon(r.section),text);box.append(b);}if(!results.length)box.append(el('p',t('Ничего не найдено','No settings found'),'note'));}
   async function requestClose(){window.souluMotion.cancel();await queue;await invoke('close').catch(report);}
   function dialog(title,build){$('actionTitle').textContent=title;$('actionMessage').textContent='';$('actionContent').replaceChildren();build($('actionContent'));if(!$('actionDialog').open)$('actionDialog').showModal();}

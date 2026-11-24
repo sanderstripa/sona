@@ -52,6 +52,9 @@ body .sona-bookmarks-sidebar {
   line-height: 1.35;
   font-size: 13px;
 }
+html.cef-runtime body[data-bookmarks-moving] .sona-bookmarks-sidebar {
+  will-change: transform;
+}
 .sona-bookmarks-sidebar[inert] { pointer-events: none; }
 .sona-bookmarks-sidebar > .bookmark-actions,
 .sona-bookmarks-sidebar .bookmark-action-menu[hidden],

@@ -207,7 +207,7 @@ bool SettingsOverlay::Create() {
                         &disable_dwm_transitions, sizeof(disable_dwm_transitions));
   BOOL animate = TRUE;
   if (SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animate, 0)) reduced_ = !animate;
-  duration_ = reduced_ ? motion::kReducedOverlayMs : 320;
+  duration_ = reduced_ ? motion::kReducedOverlayMs : motion::kStructuralMs;
   Layout();
   // The invisible panel starts above the clipping bounds. Showing the host now
   // blocks input immediately and allows Chromium to prepare its first frame.
@@ -221,13 +221,13 @@ void SettingsOverlay::Attach(HWND browser) {
 void SettingsOverlay::Open() {
   if (state_ != State::Loading) { Focus(); return; }
   state_ = State::Opening; start_ = MotionNow();
-  if (!SetTimer(hwnd_, 1, USER_TIMER_MINIMUM, nullptr)) start_ -= duration_;
+  if (!SetTimer(hwnd_, 1, 16, nullptr)) start_ -= duration_;
   Tick();
 }
 void SettingsOverlay::Close() {
   if (state_ == State::Closing || state_ == State::Closed) return;
   state_ = State::Closing; close_start_ = progress_; start_ = MotionNow();
-  if (!SetTimer(hwnd_, 1, USER_TIMER_MINIMUM, nullptr)) start_ -= duration_;
+  if (!SetTimer(hwnd_, 1, 16, nullptr)) start_ -= duration_;
   Tick();
 }
 void SettingsOverlay::Focus() {
@@ -303,10 +303,13 @@ void SettingsOverlay::PlacePanel() {
       static_cast<int>(std::round(-(1-progress_) * distance));
   const int x = (width_-panel_width_)/2;
   const bool visible = (GetWindowLongPtrW(browser_, GWL_STYLE) & WS_VISIBLE) != 0;
-  if (visible && old.left == x && old.top == panel_y_ &&
-      old.right-old.left == panel_width_ && old.bottom-old.top == panel_height_) return;
-  SetWindowPos(browser_, HWND_TOP, x, panel_y_, panel_width_, panel_height_,
-       SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOZORDER);
+  const bool same_size = old.right-old.left == panel_width_ &&
+                         old.bottom-old.top == panel_height_;
+  if (visible && same_size && old.left == x && old.top == panel_y_) return;
+  UINT flags = SWP_NOACTIVATE | SWP_NOZORDER;
+  if (same_size) flags |= SWP_NOSIZE;
+  if (!visible) flags |= SWP_SHOWWINDOW;
+  SetWindowPos(browser_, nullptr, x, panel_y_, panel_width_, panel_height_, flags);
   const int margin = MulDiv(30, GetDpiForWindow(owner_), 96);
   // Windows damages the exposed child area. Repaint the shadow around it.
   const LONG left = std::min(old.left, static_cast<LONG>(x));
@@ -325,8 +328,8 @@ void SettingsOverlay::Tick() {
   if (state_ != State::Opening && state_ != State::Closing) return;
   const float fraction = std::min(1.f, static_cast<float>(MotionNow()-start_) / duration_);
   progress_ = state_ == State::Closing
-      ? close_start_ * (1.f - fraction * fraction)
-      : 1.f - (1.f - fraction) * (1.f - fraction);
+      ? close_start_ * motion::EaseOut(1.f - fraction)
+      : motion::EaseOut(fraction);
   ++ticks_;
   if (fraction < 1 || state_ != State::Closing) PlacePanel();
   if (fraction < 1) return;
