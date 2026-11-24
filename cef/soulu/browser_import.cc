@@ -250,22 +250,62 @@ std::vector<ImportSource> BrowserImportSources(){
   std::sort(out.begin(),out.end(),[](const auto& a,const auto& b){return std::tie(a.browser,a.name,a.id)<std::tie(b.browser,b.name,b.id);});
   return out;
 }
+namespace {
+// BookmarkCodec::DecodeNode / DecodeChildren from Chromium is adapted here
+// to CEF dictionaries. Source IDs, sync metadata and GUIDs belong to the
+// original profile; Sona assigns its own destination identities.
+void DecodeChromiumBookmarks(const std::string& text, CefRefPtr<CefListValue> output,
+    const ImportControl& control, size_t& visited, bool omit_empty_roots) {
+  auto json = CefParseJSON(text, JSON_PARSER_RFC);
+  auto roots = json && json->GetType() == VTYPE_DICTIONARY
+      ? json->GetDictionary()->GetDictionary("roots") : nullptr;
+  if (!roots) throw std::runtime_error("Invalid Chromium bookmark file");
+
+  const auto decode = [&](const auto& self, CefRefPtr<CefDictionaryValue> entry,
+                          size_t depth) -> CefRefPtr<CefDictionaryValue> {
+    if (control.cancelled || !entry) return nullptr;
+    if (depth > 64 || ++visited > 20000)
+      throw std::runtime_error("Invalid or oversized bookmark hierarchy");
+    const std::string type = entry->GetString("type");
+    const std::string title = entry->GetString("name");
+    if (title.size() > 8192) throw std::runtime_error("Bookmark title too long");
+    if (type == "url") {
+      const std::string url = entry->GetString("url");
+      if (url.size() > 65536 || WebOrigin(url).empty()) return nullptr;
+      return Node(type, title, url);
+    }
+    if (type != "folder") return nullptr;
+    auto children = entry->GetList("children");
+    if (!children) return nullptr;
+    auto folder = Node(type, title);
+    auto result = folder->GetList("children");
+    for (size_t index = 0; index < children->GetSize(); ++index) {
+      if (auto node = self(self, children->GetDictionary(index), depth + 1))
+        result->SetDictionary(result->GetSize(), node);
+    }
+    return folder;
+  };
+
+  CefDictionaryValue::KeyList keys;
+  roots->GetKeys(keys);
+  for (const auto& key : keys) {
+    auto root = decode(decode, roots->GetDictionary(key), 0);
+    if (!root) continue;
+    if (omit_empty_roots && root->GetString("type") == "folder" &&
+        !root->GetList("children")->GetSize()) continue;
+    output->SetDictionary(output->GetSize(), root);
+  }
+}
+}  // namespace
+
 CefRefPtr<CefListValue> ReadImportBookmarkFile(const std::filesystem::path& path,
     const std::shared_ptr<ImportControl>& control) {
   const auto text = ReadText(path, 20*1024*1024);
   auto nodes = CefListValue::Create();
   const auto first = text.find_first_not_of(" \t\r\n");
   if (first != std::string::npos && text[first] == '{') {
-    auto json = CefParseJSON(text, JSON_PARSER_RFC);
-    auto roots = json && json->GetType() == VTYPE_DICTIONARY
-        ? json->GetDictionary()->GetDictionary("roots") : nullptr;
-    if (!roots) throw std::runtime_error("Invalid Chromium bookmark file");
-    CefDictionaryValue::KeyList keys;
-    roots->GetKeys(keys);
-    for (const auto& key : keys) {
-      if (auto node = roots->GetDictionary(key))
-        nodes->SetDictionary(nodes->GetSize(), node->Copy(false));
-    }
+    size_t visited = 0;
+    DecodeChromiumBookmarks(text, nodes, *control, visited, false);
     return nodes;
   }
   const auto parsed = chromium_import::ParseBookmarkHtml(text);
@@ -512,28 +552,14 @@ void AddImportedFavicons(const ImportSource& source, CefRefPtr<CefListValue> nod
 CefRefPtr<CefListValue> ReadImportBookmarks(const ImportSource& source,const std::shared_ptr<ImportControl>& control){
   auto nodes=CefListValue::Create();size_t total=0;
   if(source.family=="chromium"){
-    std::function<CefRefPtr<CefDictionaryValue>(CefRefPtr<CefDictionaryValue>,int)> parse=[&](CefRefPtr<CefDictionaryValue> n,int depth)->CefRefPtr<CefDictionaryValue>{
-      if(control->cancelled)return nullptr;if(!n||depth>64||++total>20000)throw std::runtime_error("Invalid or oversized bookmark hierarchy");
-      std::string type=n->GetString("type"),name=n->GetString("name");if(name.size()>8192)throw std::runtime_error("Bookmark title too long");
-      if(type=="url"){std::string url=n->GetString("url");if(url.size()>65536||WebOrigin(url).empty())return nullptr;return Node(type,name,url);}
-      if(type!="folder"||n->GetType("children")!=VTYPE_LIST)throw std::runtime_error("Invalid bookmark node");
-      auto result=Node(type,name);auto list=n->GetList("children"),children=result->GetList("children");
-      for(size_t i=0;i<list->GetSize();++i){auto child=parse(list->GetDictionary(i),depth+1);if(child)children->SetDictionary(children->GetSize(),child);}return result;
-    };
-    bool found=false;
-    // Signed-in Chromium profiles use AccountBookmarks in addition to, or
-    // instead of, Bookmarks. Read both; the destination merge deduplicates.
-    for(auto filename:{L"Bookmarks",L"AccountBookmarks"}){auto path=source.root/filename;if(!File(path))continue;found=true;
-      auto json=CefParseJSON(ReadText(path,20*1024*1024),JSON_PARSER_RFC);
-      auto roots=json&&json->GetType()==VTYPE_DICTIONARY?json->GetDictionary()->GetDictionary("roots"):nullptr;
-      if(!roots)throw std::runtime_error("Invalid Chromium bookmarks file");
-      CefDictionaryValue::KeyList keys;roots->GetKeys(keys);
-      for(const auto& key:keys){auto value=roots->GetDictionary(key);if(!value||!value->HasKey("type"))continue;auto root=parse(value,0);
-        // Empty permanent roots are containers, not imported bookmark links.
-        if(root&&root->GetString("type")=="folder"&&root->GetList("children")->GetSize()==0)continue;
-        if(root)nodes->SetDictionary(nodes->GetSize(),root);}
+    bool found = false;
+    for (const auto* filename : {L"Bookmarks", L"AccountBookmarks"}) {
+      const auto path = source.root / filename;
+      if (!File(path)) continue;
+      found = true;
+      DecodeChromiumBookmarks(ReadText(path, 20*1024*1024), nodes, *control, total, true);
     }
-    if(!found)throw std::runtime_error("Bookmark stores not found in the selected profile");
+    if (!found) throw std::runtime_error("Bookmark stores not found in the selected profile");
   }else if(source.family=="firefox"){
     DatabaseSnapshot db(source.root/L"places.sqlite");
     Query q(db.db(),"SELECT b.id,b.parent,b.type,COALESCE(b.title,p.title),p.url,b.guid FROM moz_bookmarks b LEFT JOIN moz_places p ON b.fk=p.id WHERE b.type IN (1,2) ORDER BY b.parent,b.position");
