@@ -1123,7 +1123,6 @@ void BrowserWindow::SettingsClosed(CefRefPtr<CefBrowser> browser) {
   settings_loaded_ = nullptr;
   const bool all = settings_close_all_; settings_close_all_ = false;
   const auto pending = settings_pending_url_; settings_pending_url_.clear();
-  RefreshSettingsAppearance();
   settings_overlay_.reset();
   BlockSettingsBackground(false);
   const HWND previous = settings_previous_focus_; settings_previous_focus_ = nullptr;
@@ -3141,7 +3140,7 @@ void BrowserWindow::HandleBridge(const std::string& request,
     if(old_bookmarks!=open_bookmarks){
       BOOL animate=TRUE;
       SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION,0,&animate,0);
-      const int duration = animate && !Fullscreen() ? 180 : 0;
+      const int duration = animate && !Fullscreen() ? 240 : 0;
       constexpr int lead = 32;
       KillTimer(hwnd_, kBookmarksExitTimer);
       bookmarks_exit_at_ = 0;

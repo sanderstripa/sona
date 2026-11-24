@@ -257,10 +257,10 @@ bool BrowserWindow::HandleSettingsBridge(int id,const std::string& request,
   }
   if(action=="settings.ready"){
     if(payload && payload->GetType("height")==VTYPE_INT)settings_overlay_->SetPanelHeight(payload->GetInt("height"));
-    settings_overlay_->Open(); FocusSettings(); ReplyEmpty(callback); return true;
+    settings_overlay_->Open(); ReplyEmpty(callback); return true;
   }
   if(action=="settings.close"){
-    RefreshSettingsAppearance();ReplyEmpty(callback);CloseSettingsOverlay();return true;
+    ReplyEmpty(callback);CloseSettingsOverlay();return true;
   }
 
   callback->Failure(400,"Неизвестное действие настроек.");return true;

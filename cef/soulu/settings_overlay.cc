@@ -171,11 +171,18 @@ void SettingsOverlay::PaintPanelShadow(HDC dc) {
       }
     }
   }
+  const int x = (width_ - width) / 2;
+  const int y = panel_y_ - radius + radius / 4;
+  const RECT shadow_bounds{x, y, x + width, y + height};
+  RECT clip{}, dirty{};
+  if (GetClipBox(dc, &clip) == ERROR || !IntersectRect(&dirty, &clip, &shadow_bounds)) return;
   if (HDC memory = CreateCompatibleDC(dc)) {
     HGDIOBJ previous = SelectObject(memory, shadow_);
     const BLENDFUNCTION alpha{AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    AlphaBlend(dc, (width_ - width) / 2, panel_y_ - radius + radius / 4,
-        width, height, memory, 0, 0, width, height, alpha);
+    const int dirty_width = dirty.right - dirty.left;
+    const int dirty_height = dirty.bottom - dirty.top;
+    AlphaBlend(dc, dirty.left, dirty.top, dirty_width, dirty_height, memory,
+               dirty.left - x, dirty.top - y, dirty_width, dirty_height, alpha);
     SelectObject(memory, previous);
     DeleteDC(memory);
   }
@@ -214,35 +221,27 @@ void SettingsOverlay::Attach(HWND browser) {
 void SettingsOverlay::Open() {
   if (state_ != State::Loading) { Focus(); return; }
   state_ = State::Opening; start_ = MotionNow();
-  SetTimer(hwnd_, 1, 16, nullptr); Tick(); Focus();
+  if (!SetTimer(hwnd_, 1, USER_TIMER_MINIMUM, nullptr)) start_ -= duration_;
+  Tick();
 }
 void SettingsOverlay::Close() {
   if (state_ == State::Closing || state_ == State::Closed) return;
-  KillTimer(hwnd_,2);
   state_ = State::Closing; close_start_ = progress_; start_ = MotionNow();
-  SetTimer(hwnd_, 1, 16, nullptr); Tick();
+  if (!SetTimer(hwnd_, 1, USER_TIMER_MINIMUM, nullptr)) start_ -= duration_;
+  Tick();
 }
 void SettingsOverlay::Focus() {
-  if (browser_ && IsWindowVisible(hwnd_) && state_ != State::Closing) SetFocus(browser_);
+  if (!browser_ || !IsWindowVisible(hwnd_) || closing()) return;
+  const HWND focused = GetFocus();
+  if (focused != browser_ && !IsChild(browser_, focused)) SetFocus(browser_);
 }
 void SettingsOverlay::SetPanelHeight(int height) {
   if(state_==State::Closing||state_==State::Closed)return;
   const int next = std::clamp(height, 160, 800);
   if (next == requested_height_) return;
+  // Resize CEF once before the renderer animates the new section.
   requested_height_ = next;
-  if (state_ != State::Open || reduced_) {
-    KillTimer(hwnd_, 2);display_height_ = static_cast<float>(next);Layout();return;
-  }
-  resize_from_ = display_height_;resize_start_ = MotionNow();
-  SetTimer(hwnd_, 2, 16, nullptr);ResizeTick();
-}
-void SettingsOverlay::ResizeTick() {
-  const float fraction = std::min(1.f,static_cast<float>(MotionNow()-resize_start_)/380.f);
-  const float eased = .5f-.5f*std::cos(fraction*3.14159265f);
-  display_height_ = resize_from_+(requested_height_-resize_from_)*eased;
-  panel_height_=std::min(height_,static_cast<int>(std::round(display_height_*GetDpiForWindow(owner_)/96.f)));
-  ClipPanel();PlacePanel();
-  if(fraction>=1)KillTimer(hwnd_,2);
+  Layout();
 }
 void SettingsOverlay::Layout() {
   if (!hwnd_ || state_ == State::Closed) return;
@@ -251,7 +250,7 @@ void SettingsOverlay::Layout() {
   width_ = std::max(1L, r.right); height_ = std::max(1L, r.bottom);
   const float scale = GetDpiForWindow(owner_) / 96.f;
   panel_width_ = std::min(width_, static_cast<int>(std::round(1020 * scale)));
-  panel_height_ = std::min(height_, static_cast<int>(std::round(display_height_ * scale)));
+  panel_height_ = std::min(height_, static_cast<int>(std::round(requested_height_ * scale)));
   RECT actual{}; GetWindowRect(hwnd_, &actual);
   if (actual.left != p.x || actual.top != p.y || actual.right-actual.left != width_ || actual.bottom-actual.top != height_) {
     SetWindowPos(hwnd_, HWND_TOP, p.x, p.y, width_, height_, SWP_NOACTIVATE | SWP_NOCOPYBITS);
@@ -309,16 +308,25 @@ void SettingsOverlay::PlacePanel() {
   SetWindowPos(browser_, HWND_TOP, x, panel_y_, panel_width_, panel_height_,
        SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOZORDER);
   const int margin = MulDiv(30, GetDpiForWindow(owner_), 96);
-  RECT changed{std::min(old.left, static_cast<LONG>(x))-margin, std::min(old.top, static_cast<LONG>(panel_y_))-margin,
-               std::max(old.right, static_cast<LONG>(x+panel_width_))+margin,
-               std::max(old.bottom, static_cast<LONG>(panel_y_+panel_height_))+margin};
-  InvalidateRect(hwnd_, &changed, FALSE);
+  // Windows damages the exposed child area. Repaint the shadow around it.
+  const LONG left = std::min(old.left, static_cast<LONG>(x));
+  const LONG right = std::max(old.right, static_cast<LONG>(x + panel_width_));
+  const LONG top = std::min(old.top, static_cast<LONG>(panel_y_)) - margin;
+  const LONG end = std::max(old.bottom, static_cast<LONG>(panel_y_ + panel_height_)) + margin;
+  const LONG bottom = std::min(old.bottom, static_cast<LONG>(panel_y_ + panel_height_)) - margin;
+  const RECT shadow_regions[] = {
+      {left - margin, top, left + margin, end},
+      {right - margin, top, right + margin, end},
+      {left + margin, bottom, right - margin, end},
+  };
+  for (const RECT& region : shadow_regions) InvalidateRect(hwnd_, &region, FALSE);
 }
 void SettingsOverlay::Tick() {
+  if (state_ != State::Opening && state_ != State::Closing) return;
   const float fraction = std::min(1.f, static_cast<float>(MotionNow()-start_) / duration_);
   progress_ = state_ == State::Closing
-      ? close_start_ * motion::EaseOut(1-fraction)
-      : motion::EaseOut(fraction);
+      ? close_start_ * (1.f - fraction * fraction)
+      : 1.f - (1.f - fraction) * (1.f - fraction);
   ++ticks_;
   if (fraction < 1 || state_ != State::Closing) PlacePanel();
   if (fraction < 1) return;
@@ -352,7 +360,7 @@ LRESULT CALLBACK SettingsOverlay::Proc(HWND hwnd, UINT message, WPARAM wp, LPARA
       EndPaint(hwnd, &paint);
       return 0;
     }
-    case WM_TIMER: if (wp == 1) self->Tick(); else if(wp==2)self->ResizeTick(); return 0;
+    case WM_TIMER: if (wp == 1) self->Tick(); return 0;
     case WM_CLOSE: self->request_close_(); return 0;
     case WM_SETFOCUS: self->Focus(); return 0;
     case WM_MOUSEACTIVATE: self->Focus(); return MA_NOACTIVATE;
@@ -368,7 +376,7 @@ LRESULT CALLBACK SettingsOverlay::Proc(HWND hwnd, UINT message, WPARAM wp, LPARA
       }
       return HTCLIENT;
     }
-    case WM_DESTROY: KillTimer(hwnd, 1); KillTimer(hwnd, 2); return 0;
+    case WM_DESTROY: KillTimer(hwnd, 1); return 0;
   }
   return DefWindowProcW(hwnd, message, wp, lp);
 }

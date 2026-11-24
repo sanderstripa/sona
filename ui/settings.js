@@ -155,7 +155,7 @@ for(const kind of ['startup','newTab','home']){const n=$('control-settings-'+kin
   new MutationObserver(scheduleExtensions).observe($('actionDialog'),{attributes:true,attributeFilter:['open']});
 
   // Own the Settings transition separately from viewport-resize cancellation.
-  // Native height animation resizes the renderer; that must not interrupt fades.
+  // Resizing the native panel must not cancel the renderer fade.
   const sectionAnimations=new Set();
   function prepareSectionMotion(id,target){
     for(const animation of sectionAnimations)animation.cancel();sectionAnimations.clear();
@@ -172,9 +172,9 @@ for(const kind of ['startup','newTab','home']){const n=$('control-settings-'+kin
     }
   }
 
-  function openSection(id,target,fromCard=false){if(section==='extensions')invoke('extensions',{visible:false}).catch(report);const previous=section;const transition=prepareSectionMotion(id,target,fromCard);section=id;$('settingsSearch').value='';document.querySelector('main').dataset.view=id?'section':'home';document.querySelector('aside').hidden=!id;$('homeCards').hidden=!!id;$('sectionContent').hidden=!id;$('searchResults').hidden=true;render();$('settingsContent').scrollTop=0;if(target){const n=$('control-'+target);if(n){if(n.hidden){n.hidden=false;n.querySelector('span').append(el('small',t('Выберите «Указанный адрес», чтобы изменить эту страницу.','Choose Custom address to edit this page.'),'search-mode-note'));}n.scrollIntoView({block:'center',behavior:'smooth'});n.classList.add('setting-highlight');n.focus({preventScroll:true});setTimeout(()=>n.classList.remove('setting-highlight'),2200);}}else if(!id&&previous)document.querySelector('#homeCards [data-section="'+previous+'"]')?.focus({preventScroll:true});else $('settingsContent').focus({preventScroll:true});finishSectionMotion(transition,id);}
+  function openSection(id,target,fromCard=false){if(section==='extensions')invoke('extensions',{visible:false}).catch(report);const previous=section;const transition=prepareSectionMotion(id,target,fromCard);section=id;$('settingsSearch').value='';document.querySelector('main').dataset.view=id?'section':'home';document.querySelector('aside').hidden=!id;$('homeCards').hidden=!!id;$('sectionContent').hidden=!id;$('searchResults').hidden=true;render();$('settingsContent').scrollTop=0;if(target){const n=$('control-'+target);if(n){if(n.hidden){n.hidden=false;n.querySelector('span').append(el('small',t('Выберите «Указанный адрес», чтобы изменить эту страницу.','Choose Custom address to edit this page.'),'search-mode-note'));}n.scrollIntoView({block:'center',behavior:'smooth'});n.classList.add('setting-highlight');n.focus({preventScroll:true});setTimeout(()=>n.classList.remove('setting-highlight'),2200);}}else if(!id&&previous)document.querySelector('#homeCards [data-section="'+previous+'"]')?.focus({preventScroll:true});else $('settingsContent').focus({preventScroll:true});cancelAnimationFrame(resizeFrame);applyPanelHeight();finishSectionMotion(transition,id);}
   function showSearch(){scheduleExtensions();resizePanel();window.souluMotion.cancel();const query=$('settingsSearch').value.trim().toLowerCase().replaceAll('ё','е');$('clearSearch').hidden=!query;$('searchResults').hidden=!query;$('homeCards').hidden=!!query||!!section;$('sectionContent').hidden=!!query||!section;if(!query)return;const box=$('searchResults');box.replaceChildren();const results=index.filter(x=>query.split(/\s+/).every(word=>x.hay.includes(word)));for(const r of results){const b=button('',()=>openSection(r.section,r.key),'result');const text=el('span');text.append(el('strong',r.title),el('small',r.path));b.append(icon(r.section),text);box.append(b);}if(!results.length)box.append(el('p',t('Ничего не найдено','No settings found'),'note'));}
-  async function requestClose(){window.souluMotion.cancel();document.activeElement?.blur();await queue;await invoke('close').catch(report);}
+  async function requestClose(){window.souluMotion.cancel();await queue;await invoke('close').catch(report);}
   function dialog(title,build){$('actionTitle').textContent=title;$('actionMessage').textContent='';$('actionContent').replaceChildren();build($('actionContent'));if(!$('actionDialog').open)$('actionDialog').showModal();}
   async function runAction(key){if(key==='optimizeNow'){await window.browserShell.optimizeBackgroundTabs();$('dataMessage').textContent=t('Оптимизация фоновых вкладок запущена.','Background tab optimization has started.');return;}if(key==='history'||key==='clearData')return window.browserShell.openHistory(key==='clearData');if(key==='defaultBrowser')return invoke('defaultBrowser');if(key==='chooseFolder'){const path=await invoke('chooseFolder');if(path){current.settings.downloadPath=path;changed();renderSection();}return;}if(key==='openFolder')return invoke('openFolder');if(key==='incognito')return window.browserShell.newIncognito();if(key==='parseVpn'){const parsed=window.souluParseVpnKey(current.vpn.link);Object.assign(current.vpn,parsed);changed();dialog(t('Ключ распознан','Key parsed'),box=>{for(const [ru,en,value] of [['Протокол','Protocol',parsed.protocol],['Сервер','Server',parsed.address],['Название из ключа','Label from key',parsed.region]])box.append(el('p',t(ru,en)+': '+value));box.append(el('p',t('Конфигурация сохраняется автоматически.','Configuration is saved automatically.'),'note'));});return;}
     if(key==='vpnStatus'){const result=await window.vpn.send('status');dialog(t('Состояние VPN','VPN status'),box=>{box.append(el('p',result?.error||t(result?.connected?'Подключён':'Отключён',result?.connected?'Connected':'Disconnected')));});return;}
@@ -258,7 +258,17 @@ for(const kind of ['startup','newTab','home']){const n=$('control-settings-'+kin
       const action=$('actionDialog');
       return action.open&&action.classList.contains('browser-import-dialog')?Math.max(height,640,Math.min(800,action.scrollHeight+40)):height;
   }
-  function resizePanel(){cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>{if(!current)return;const height=measurePanelHeight();if(height===lastPanelHeight)return;lastPanelHeight=height;invoke('resize',{height}).catch(report);});}
+  function applyPanelHeight(){
+    if(!current)return;
+    const height=measurePanelHeight();
+    if(height===lastPanelHeight)return;
+    lastPanelHeight=height;
+    invoke('resize',{height}).catch(report);
+  }
+  function resizePanel(){
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame=requestAnimationFrame(applyPanelHeight);
+  }
   const contentSize=new ResizeObserver(resizePanel);
   for(const node of [$('homeCards'),$('searchResults'),document.querySelector('.settings-header'),$('actionDialog')])contentSize.observe(node);
   window.addEventListener('resize',resizePanel);

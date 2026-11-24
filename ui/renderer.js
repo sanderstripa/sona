@@ -318,7 +318,7 @@ function enableTabReordering(strip){
 
 for(const strip of [tabStrip,classicPinnedTabs,$('#compactTabFlow')])enableTabReordering(strip);
 
-let tabMotionKey='',tabMotionLayout='';
+let tabMotionKey='',tabMotionLayout='',previousCompactTabCount=0;
 const tabMotionAnimations=new Set();
 const tabReducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
 function cancelTabMotion(){
@@ -339,12 +339,31 @@ function renderTabs(){
       node, id:node.dataset.tabId||node.dataset.activeTab, rect:node.getBoundingClientRect()
     }))).filter(({rect})=>rect.width>0&&rect.height>0);
   };
-  const before=structural?new Map(geometry().map(({id,rect})=>[id,rect.left])):null;
+  const flow=$('#compactTabFlow');
+  const compactTabCount=state.tabs.filter(tab=>tab.active||tab.url||tab.favicon).length;
+  const singleTabResize=structural&&layout==='compact'&&
+    (previousCompactTabCount===2&&compactTabCount===1||previousCompactTabCount===1&&compactTabCount===2);
+  const oldWidth=singleTabResize?getComputedStyle(flow).width:null;
+  const before=structural&&!singleTabResize?new Map(geometry().map(({id,rect})=>[id,rect.left])):null;
+  previousCompactTabCount=compactTabCount;
   if(changed)cancelTabMotion();
   tabMotionKey=key;
   tabMotionLayout=layout;
   renderClassicTabs();
   renderCompactTabs();
+  const track=animation=>{
+    tabMotionAnimations.add(animation);
+    const finish=()=>{
+      if(tabMotionAnimations.delete(animation)&&!tabMotionAnimations.size)queueTabDropLayout();
+    };
+    animation.finished.then(finish,finish);
+  };
+  const timing={duration:180,easing:'cubic-bezier(.22,1,.36,1)'};
+  if(oldWidth){
+    // Keep the address field and adjacent controls in the same flex layout.
+    const width=getComputedStyle(flow).width;
+    if(oldWidth!==width)track(flow.animate([{width:oldWidth},{width}],timing));
+  }
   if(before){
     // Measure the entire strip before mutating transforms or opacity.
     const after=geometry();
@@ -352,14 +371,8 @@ function renderTabs(){
       const oldLeft=before.get(id);
       const dx=oldLeft===undefined?0:oldLeft-rect.left;
       if(oldLeft!==undefined&&Math.abs(dx)<1)continue;
-      const animation=node.animate(oldLeft===undefined?[{opacity:0},{opacity:1}]:
-        [{transform:`translateX(${dx}px)`},{transform:'none'}],
-        {duration:180,easing:'cubic-bezier(.22,1,.36,1)'});
-      tabMotionAnimations.add(animation);
-      const finish=()=>{
-        if(tabMotionAnimations.delete(animation)&&!tabMotionAnimations.size)queueTabDropLayout();
-      };
-      animation.finished.then(finish,finish);
+      track(node.animate(oldLeft===undefined?[{opacity:0},{opacity:1}]:
+        [{transform:`translateX(${dx}px)`},{transform:'none'}],timing));
     }
   }
   queueTabDropLayout();

@@ -27,7 +27,6 @@ class SettingsOverlay final {
   static LRESULT CALLBACK Proc(HWND, UINT, WPARAM, LPARAM);
   void Tick();
   void PlacePanel();
-  void ResizeTick();
   void ClipPanel();
   void CaptureBackground();
   void PaintPanelShadow(HDC dc);
@@ -50,7 +49,5 @@ class SettingsOverlay final {
   int duration_ = 260, ticks_ = 0;
   bool reduced_ = false;
   int requested_height_ = 800;
-  float display_height_ = 800, resize_from_ = 800;
-  ULONGLONG resize_start_ = 0;
 };
 }

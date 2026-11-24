@@ -270,11 +270,12 @@
     if(motion&&motion.startAt<lastMotion)return;
     const body=document.body;
     const moving=motion&&motion.startAt!==lastMotion;
+    const interrupted=cef&&moving&&sidebarAnimations.length?getComputedStyle(menu).transform:null;
     if(moving){
       lastMotion=motion.startAt;
       clearSidebarMotion();
     }
-    // CEF reserves a fixed column through the exit. Only its contents animate.
+    // CEF reserves a fixed column while the panel slides over it.
     body.toggleAttribute('data-bookmarks-sidebar',open||
       (cef&&(moving?motion.duration>0:sidebarAnimations.length>0)));
     menu.inert=!open;
@@ -285,9 +286,8 @@
     const options={duration:motion.duration,easing:'cubic-bezier(.22,1,.36,1)',fill:'both'};
     let animations;
     if(cef){
-      const rest={opacity:1,transform:'none'};
-      const edge={opacity:0,transform:'translateX(-10px)'};
-      animations=[...menu.children].map(node=>node.animate(open?[edge,rest]:[rest,edge],options));
+      const start=interrupted||(open?'translateX(-100%)':'none');
+      animations=[menu.animate([{transform:start},{transform:open?'none':'translateX(-100%)'}],options)];
     }else{
       const to=getComputedStyle(body).getPropertyValue('--sona-bookmarks-width').trim();
       animations=[body.animate([{'--sona-bookmarks-width':motion.from},{'--sona-bookmarks-width':to}],
