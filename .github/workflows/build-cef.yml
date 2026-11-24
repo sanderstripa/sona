@@ -263,15 +263,13 @@ jobs:
           Исходный коммит: 767e11908299a09838f3209c0f36ffca4bc1756e
           "@ | Set-Content (Join-Path $PWD 'artifacts/cef-preview-release.md') -Encoding utf8
 
-      - name: Publish Sona CEF Windows x64 prerelease
-        uses: softprops/action-gh-release@v2
+      - name: Upload verified Windows installer
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: cef-preview-${{ env.BETA_VERSION }}-767e119
-          name: Sona Preview ${{ env.BETA_VERSION }} (CEF)
-          target_commitish: 767e11908299a09838f3209c0f36ffca4bc1756e
-          prerelease: true
-          make_latest: false
-          fail_on_unmatched_files: true
-          body_path: browser/artifacts/cef-preview-release.md
-          files: browser/artifacts/preview/*
-
+          name: Sona-Preview-1.156.0.30.84-CEF-x64-Setup
+          path: |
+            browser/artifacts/preview/*-Setup.exe
+            browser/artifacts/preview/*-Setup.exe.build.json
+            browser/artifacts/preview/SHA256SUMS.txt
+          compression-level: 0
+          if-no-files-found: error
