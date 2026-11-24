@@ -669,11 +669,44 @@ CefRefPtr<CefDictionaryValue> ImportPasswordCsv(const std::filesystem::path& pat
     for(size_t i=0;i<rows[0].size();++i){auto name=rows[0][i];std::transform(name.begin(),name.end(),name.begin(),[](unsigned char c){return static_cast<char>(tolower(c));});if(!header.emplace(name,i).second)throw std::runtime_error("Duplicate CSV headers");}
     std::string urlKey=header.count("url")?"url":"origin";
     if(!header.count(urlKey)||!header.count("username")||!header.count("password"))throw std::runtime_error("CSV requires url, username and password columns");
-    // Validate the entire export before writing a single credential.
-    for(size_t i=1;i<rows.size();++i){auto& r=rows[i];if(r.size()!=rows[0].size()||WebOrigin(r[header[urlKey]]).empty()||r[header["password"]].empty())throw std::runtime_error("Invalid credential row; no passwords imported");}
-    PasswordVault vault(target);for(size_t i=1;i<rows.size()&&!control->cancelled;++i){auto& r=rows[i];auto origin=WebOrigin(r[header[urlKey]]);auto& user=r[header["username"]];auto& secret=r[header["password"]];
-      if(vault.Contains(origin,user))Increment(report,"skipped");else if(vault.Put(origin,user,secret,false))Increment(report,"imported");else{Increment(report,"failed");throw std::runtime_error("Password write failed; earlier entries remain imported");}++control->processed;
-    }if(control->cancelled)report->SetString("status","cancelled");
+    const size_t url_column = header.at(urlKey);
+    const size_t username_column = header.at("username");
+    const size_t password_column = header.at("password");
+    const size_t field_count = std::max({url_column, username_column, password_column}) + 1;
+    PasswordVault vault(target);
+    int unsupported = 0;
+    for (size_t i = 1; i < rows.size() && !control->cancelled; ++i) {
+      const auto& row = rows[i];
+      ++control->processed;
+      if (row.size() < field_count || row.size() > rows.front().size() ||
+          row[username_column].size() > 4096 || row[password_column].empty() ||
+          row[password_column].size() > 16384) {
+        ++unsupported;
+        Increment(report, "skipped");
+        continue;
+      }
+      const auto origin = WebOrigin(row[url_column]);
+      if (origin.empty()) {
+        ++unsupported;
+        Increment(report, "skipped");
+        continue;
+      }
+      const auto& user = row[username_column];
+      if (vault.Contains(origin, user)) {
+        Increment(report, "skipped");
+      } else if (vault.Put(origin, user, row[password_column], false)) {
+        Increment(report, "imported");
+      } else {
+        Increment(report, "failed");
+        throw std::runtime_error("Password write failed; earlier entries remain imported");
+      }
+    }
+    if (control->cancelled) {
+      report->SetString("status", "cancelled");
+    } else if (unsupported) {
+      report->SetString("status", static_cast<size_t>(unsupported) == rows.size() - 1 ? "error" : "partial");
+      report->SetString("message", "Skipped CSV rows with unsupported URLs, invalid columns or invalid credential lengths");
+    }
   }catch(const std::exception& e){report->SetString("status",report->GetInt("imported")?"partial":"error");report->SetString("message",e.what());}return report;
 }
 }

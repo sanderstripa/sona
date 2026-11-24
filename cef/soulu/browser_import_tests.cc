@@ -49,8 +49,19 @@ int RunBrowserImportTests(const std::filesystem::path& output){
     auto passwords=ImportPasswordCsv(csv,"import-one",control);check(passwords->GetString("status")=="ok"&&passwords->GetInt("imported")==1,"password-csv-quoted-field");
     check(ImportPasswordCsv(csv,"import-one",control)->GetInt("skipped")==1,"password-repeat-preserves-existing");
     check(PasswordVault("import-two").List()->GetSize()==0,"password-profile-isolation");
-    write(csv,"url,username,password\nhttps://other.test/,fixture,valid\ninvalid,fixture,invalid\n");
-    check(ImportPasswordCsv(csv,"import-one",control)->GetString("status")=="error"&&PasswordVault("import-one").List()->GetSize()==1,"csv-validation-before-any-write");
+    write(csv,"name,url,username,password,note\r\n"
+              "App,android://hash@com.example/,fixture,app-secret,\r\n"
+              "Web,https://other.test/,fixture,web-secret,\r\n"
+              "Empty,https://empty.test/,fixture,,\r\n"
+              "Edge,https://edge.test/,,edge-secret\r\n"
+              "Short,https://short.test/,fixture\r\n");
+    auto mixed=ImportPasswordCsv(csv,"import-one",control);
+    check(mixed->GetString("status")=="partial"&&mixed->GetInt("imported")==2&&mixed->GetInt("skipped")==3&&
+          PasswordVault("import-one").Contains("https://other.test","fixture")&&
+          PasswordVault("import-one").Contains("https://edge.test",""),"csv-mixed-records-preserve-supported-credentials");
+    write(csv,"url,username,password\nhttps://new.test/,fixture,valid\nhttps://bad.test/,fixture,\"unterminated");
+    check(ImportPasswordCsv(csv,"import-one",control)->GetString("status")=="error"&&
+          !PasswordVault("import-one").Contains("https://new.test","fixture"),"malformed-csv-is-rejected-before-writes");
 
     database(chrome/L"Web Data","CREATE TABLE autofill(name TEXT,value TEXT); INSERT INTO autofill VALUES('email','fixture@example.test'),('email','fixture@example.test'),('card-number','4111111111111111'),('unclassified','4111 1111 1111 1111'); CREATE TABLE address_type_tokens(guid TEXT,type INTEGER,value TEXT); INSERT INTO address_type_tokens VALUES('fixture',3,'Synthetic name'),('fixture',35,'00000'),('fixture',52,'4111111111111111');");
     auto forms=ImportBrowserAutofill(source,"import-one",control);check(forms->GetString("status")=="ok"&&forms->GetInt("imported")==3,"autofill-form-values-address-types-payment-exclusion");

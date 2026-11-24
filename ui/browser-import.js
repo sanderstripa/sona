@@ -145,6 +145,7 @@
     function importMessage(message){
       if(/close .*retry|source .*busy|store is locked/i.test(message))return label('Закройте исходный браузер полностью, включая фоновые процессы, затем обновите список и повторите импорт. Закладки можно перенести отдельно.','Fully close the source browser, including background processes, then refresh and retry. Bookmarks can be imported separately.');
       if(/Protected or unsupported records/i.test(message))return label('Защищённые пароли не перенесены. Используйте штатный CSV-экспорт паролей исходного браузера.','Protected passwords were not imported. Use the source browser’s built-in password CSV export.');
+      if(message.startsWith('Skipped CSV rows'))return label('Пропущены строки CSV с неподдерживаемыми адресами, неверными столбцами, пустыми или слишком длинными паролями либо слишком длинными именами пользователя.',message);
       return message;
     }
     function finish(result) {
