@@ -179,7 +179,13 @@ def main():
                 wait(lambda:len(windows())==2)
                 wait(lambda:E(f"(async()=> !(await browserShell.getState()).tabs.some(t=>t.id==={dragged}))()"))
                 check(True,'Tab detaches into another native window before button release')
-                u.SetCursorPos(x,y)
+                # The source strip can move after the active tab detaches
+                # (for example when the remaining tab exposes the bookmarks bar).
+                E('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
+                destination=bounds('.tabs-zone')
+                origin=W.POINT(0,0);u.ClientToScreen(hwnd,C.byref(origin))
+                u.SetCursorPos(origin.x+round((destination['x']+destination['w']/2)*scale),
+                               origin.y+round((destination['y']+destination['h']/2)*scale))
                 wait(lambda:E(f"(async()=> (await browserShell.getState()).tabs.some(t=>t.id==={dragged}&&t.active))()"))
                 wait(lambda:len(windows())==1)
                 check(True,'The same live tab reattaches while the button remains held')
