@@ -79,9 +79,9 @@ def main():
                 s.command(ws,'DOM.enable');s.command(ws,'CSS.enable')
                 doc=s.command(ws,'DOM.getDocument')['root']['nodeId']
                 prefix='#window' if layout=='classic' else '#compactWindow'
-                buttons=[bounds(prefix+action) for action in ('Maximize','Minimize','Close')]
+                buttons=[bounds(prefix+action) for action in ('Minimize','Maximize','Close')]
                 centers=[r['x']+r['w']/2 for r in buttons]
-                check(all(abs(b-a-40)<1 for a,b in zip(centers,centers[1:])),layout+': Torrent caption order and spacing')
+                check(all(abs(b-a-40)<1 for a,b in zip(centers,centers[1:])),layout+': Windows caption order and spacing')
                 check(abs(E('innerWidth')-centers[-1]-30)<1,layout+': Torrent right inset')
                 for action in ('Minimize','Maximize','Close'):
                     selector=prefix+action

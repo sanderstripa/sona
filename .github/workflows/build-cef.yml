@@ -55,8 +55,8 @@ jobs:
     runs-on: windows-2025
     timeout-minutes: 90
     env:
-      BETA_VERSION: 1.156.0.30.82
-      BETA_NUMBER: 82
+      BETA_VERSION: 1.156.0.30.83
+      BETA_NUMBER: 83
       # This explicit source marker records the owner's requested 1.0.76 release.
       # Ordinary main pushes continue to build without publishing.
       AUTOMATED_RELEASE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && contains(github.event.head_commit.message, '[release 1.0.76]') }}
