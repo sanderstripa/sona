@@ -394,7 +394,7 @@ CefRefPtr<CefListValue> AutofillSource(const ImportSource& source,const std::sha
     if(ValidAutofillField(name)&&!value.empty()&&value.size()<=4096&&!PaymentLikeValue(value)&&seen.emplace(name,value).second){if(rows->GetSize()>=20000)throw std::runtime_error("Autofill exceeds 20000 values");auto r=CefDictionaryValue::Create();r->SetString("name",name);r->SetString("value",value);rows->SetDictionary(rows->GetSize(),r);}};
   auto path=source.root/(source.family=="firefox"?L"formhistory.sqlite":L"Web Data");
   if(File(path)){DatabaseSnapshot db(path);const char* table=source.family=="firefox"?"moz_formhistory":"autofill";
-    if(HasTable(db.db(),table)){Query q(db.db(),source.family=="firefox"?"SELECT fieldname,value FROM moz_formhistory":"SELECT name,value FROM autofill");while(q.Next()){if(control->cancelled)return rows;++control->processed;append(q.Text(0),q.Text(1));}}
+    if(HasTable(db.db(),table)){Query q(db.db(),source.family=="firefox"?"SELECT fieldname,value FROM moz_formhistory WHERE fieldname <> 'searchbar-history'":"SELECT name,value FROM autofill");while(q.Next()){if(control->cancelled)return rows;++control->processed;append(q.Text(0),q.Text(1));}}
     if(source.family=="chromium"){
       const std::map<int,std::string> types={{3,"given-name"},{4,"additional-name"},{5,"family-name"},{7,"name"},{9,"email"},{14,"tel"},{30,"address-line1"},{31,"address-line2"},{33,"address-level2"},{34,"address-level1"},{35,"postal-code"},{36,"country"},{60,"organization"},{77,"street-address"}};
       for(auto token_table:{"address_type_tokens","local_addresses_type_tokens","contact_info_type_tokens"})if(HasTable(db.db(),token_table)){
@@ -531,7 +531,7 @@ CefRefPtr<CefListValue> ReadImportBookmarks(const ImportSource& source,const std
     if(!found)throw std::runtime_error("Bookmark stores not found in the selected profile");
   }else if(source.family=="firefox"){
     DatabaseSnapshot db(source.root/L"places.sqlite");
-    Query q(db.db(),"SELECT b.id,b.parent,b.type,b.title,p.url,b.guid FROM moz_bookmarks b LEFT JOIN moz_places p ON b.fk=p.id ORDER BY b.parent,b.position");
+    Query q(db.db(),"SELECT b.id,b.parent,b.type,COALESCE(b.title,p.title),p.url,b.guid FROM moz_bookmarks b LEFT JOIN moz_places p ON b.fk=p.id WHERE b.type IN (1,2) ORDER BY b.parent,b.position");
     struct Entry{int id,parent,type;std::string title,url,guid;};std::vector<Entry> entries;std::map<int,std::vector<size_t>> children;int root=0;
     while(q.Next()){if(control->cancelled)return nodes;if(entries.size()>=20000)throw std::runtime_error("Too many bookmarks");Entry e={q.Int(0),q.Int(1),q.Int(2),q.Text(3),q.Text(4),q.Text(5)};if(e.guid=="root________")root=e.id;children[e.parent].push_back(entries.size());entries.push_back(e);}
     if(!root)throw std::runtime_error("Firefox bookmarks root missing");std::set<int> ancestors;
@@ -582,7 +582,15 @@ CefRefPtr<CefListValue> MergeImportBookmarks(CefRefPtr<CefListValue> existing,Ce
 CefRefPtr<CefDictionaryValue> ImportBrowserHistory(const ImportSource& source,const std::string& target,const std::shared_ptr<ImportControl>& control){
   auto report=Report();try{if(!ValidProfileId(target))throw std::runtime_error("Invalid target profile");if(!LocalImportPath(DataRoot()))throw std::runtime_error("Target must use local storage without symbolic links");
     DatabaseSnapshot db(source.root/(source.family=="firefox"?L"places.sqlite":L"History"));HistoryStore store(target);if(!store.Healthy())throw std::runtime_error("Target history store unavailable");
-    Query q(db.db(),source.family=="firefox"?"SELECT p.url,p.title,v.visit_date FROM moz_historyvisits v JOIN moz_places p ON p.id=v.place_id ORDER BY v.visit_date":"SELECT u.url,u.title,v.visit_time FROM visits v JOIN urls u ON u.id=v.url ORDER BY v.visit_time");
+    const char* visits = "SELECT u.url,u.title,v.visit_time FROM visits v JOIN urls u ON u.id=v.url ORDER BY v.visit_time";
+    if(source.family=="firefox"){
+      // Adapted from Chromium FirefoxImporter::ImportHistory. Older exported
+      // Places schemas may omit the transition column.
+      visits=sqlite3_table_column_metadata(db.db(),nullptr,"moz_historyvisits","visit_type",nullptr,nullptr,nullptr,nullptr,nullptr)==SQLITE_OK
+        ? "SELECT h.url,h.title,v.visit_date FROM moz_places h JOIN moz_historyvisits v ON h.id=v.place_id WHERE v.visit_type<=3 ORDER BY v.visit_date"
+        : "SELECT h.url,h.title,v.visit_date FROM moz_places h JOIN moz_historyvisits v ON h.id=v.place_id ORDER BY v.visit_date";
+    }
+    Query q(db.db(),visits);
     int total=0;while(!control->cancelled&&q.Next()){
       if(++total>500000)throw std::runtime_error("History exceeds 500000 visits");
       auto url=q.Text(0),title=q.Text(1);auto raw=q.Int64(2);
