@@ -445,14 +445,14 @@ CefRefPtr<CefListValue> AutofillSource(const ImportSource& source,const std::sha
   if(File(path)){DatabaseSnapshot db(path);const char* table=source.family=="firefox"?"moz_formhistory":"autofill";
     if(HasTable(db.db(),table)){Query q(db.db(),source.family=="firefox"?"SELECT fieldname,value FROM moz_formhistory WHERE fieldname <> 'searchbar-history'":"SELECT name,value FROM autofill");while(q.Next()){if(control->cancelled)return rows;++control->processed;append(q.Text(0),q.Text(1));}}
     if(source.family=="chromium"){
-      const std::map<int,std::string> types={{3,"given-name"},{4,"additional-name"},{5,"family-name"},{7,"name"},{9,"email"},{14,"tel"},{30,"address-line1"},{31,"address-line2"},{33,"address-level2"},{34,"address-level1"},{35,"postal-code"},{36,"country"},{60,"organization"},{77,"street-address"}};
+      const std::map<int,std::string> types={{3,"given-name"},{4,"additional-name"},{5,"family-name"},{7,"name"},{8,"honorific-suffix"},{110,"honorific-prefix"},{9,"email"},{14,"tel"},{30,"address-line1"},{31,"address-line2"},{83,"address-line3"},{33,"address-level2"},{34,"address-level1"},{35,"postal-code"},{36,"country"},{60,"organization"},{77,"street-address"}};
       for(auto token_table:{"address_type_tokens","local_addresses_type_tokens","contact_info_type_tokens"})if(HasTable(db.db(),token_table)){
         std::string sql="SELECT type,value FROM "+std::string(token_table);Query q(db.db(),sql.c_str());while(q.Next()){if(control->cancelled)return rows;++control->processed;auto found=types.find(q.Int(0));if(found!=types.end())append("autocomplete:"+found->second,q.Text(1));}}
       const std::vector<std::tuple<const char*,const char*,const char*>> legacy={
         {"autofill_profile_names","first_name","given-name"},{"autofill_profile_names","middle_name","additional-name"},{"autofill_profile_names","last_name","family-name"},{"autofill_profile_names","full_name","name"},
         {"autofill_profile_emails","email","email"},{"autofill_profile_phones","number","tel"},
         {"autofill_profiles","company_name","organization"},{"autofill_profiles","street_address","street-address"},{"autofill_profiles","city","address-level2"},{"autofill_profiles","state","address-level1"},{"autofill_profiles","zipcode","postal-code"},{"autofill_profiles","country_code","country"}};
-      for(const auto& spec:legacy)if(HasTable(db.db(),std::get<0>(spec))){std::string sql="SELECT "+std::string(std::get<1>(spec))+" FROM "+std::get<0>(spec);Query q(db.db(),sql.c_str());while(q.Next()){if(control->cancelled)return rows;++control->processed;append("autocomplete:"+std::string(std::get<2>(spec)),q.Text(0));}}
+      for(const auto& spec:legacy)if(sqlite3_table_column_metadata(db.db(),nullptr,std::get<0>(spec),std::get<1>(spec),nullptr,nullptr,nullptr,nullptr,nullptr)==SQLITE_OK){std::string sql="SELECT "+std::string(std::get<1>(spec))+" FROM "+std::get<0>(spec);Query q(db.db(),sql.c_str());while(q.Next()){if(control->cancelled)return rows;++control->processed;append("autocomplete:"+std::string(std::get<2>(spec)),q.Text(0));}}
     }
   }
   if(source.family=="firefox"&&File(source.root/L"autofill-profiles.json")){
