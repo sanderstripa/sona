@@ -2,8 +2,13 @@
 (() => {
   const toolbar = document.querySelector('.classic-toolbar');
   const row = toolbar.querySelector('.tabs-zone');
+  let revision = -1;
   function apply(frame) {
     if (document.body.dataset.layout !== 'adaptive' || !frame) return;
+    if (frame.revision !== undefined) {
+      if (frame.revision < revision) return;
+      revision = frame.revision;
+    }
     const progress = Math.max(0, Math.min(1, Number(frame.progress) || 0));
     document.body.style.setProperty('--adaptive-progress', String(progress));
     document.body.style.setProperty('--adaptive-toolbar-height', `${frame.height}px`);

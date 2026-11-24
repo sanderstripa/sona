@@ -10,12 +10,13 @@ body[data-layout=adaptive] .classic-toolbar {
   display:block;position:relative;height:var(--chrome-height);padding:0;
 }
 body[data-layout=adaptive] .classic-main-row {
-  height:48px;
+  height:calc(68px - 20px * var(--adaptive-progress));
   grid-template-columns:minmax(210px,1fr) minmax(0,640px) minmax(210px,1fr);
 }
 body[data-layout=adaptive] .classic-toolbar .tabs-zone {
   position:absolute;top:48px;left:0;right:0;height:40px;padding:2px 8px 6px;
   opacity:var(--adaptive-progress);
+  clip-path:inset(0 0 calc(var(--geometry-adaptive-expanded-toolbar) - var(--adaptive-toolbar-height)) 0);
   transform:none;
 }
 body[data-layout=adaptive][data-adaptive-expanded=false] .tabs-zone {pointer-events:none}

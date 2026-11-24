@@ -102,12 +102,32 @@ def main():
             frames=s.evaluate(shell,"""new Promise(resolve=>{const frames=[],begin=performance.now();function tick(){frames.push({time:performance.now()-begin,height:document.querySelector('.classic-toolbar').getBoundingClientRect().height,progress:parseFloat(getComputedStyle(document.body).getPropertyValue('--adaptive-progress'))});if(performance.now()-begin<450)requestAnimationFrame(tick);else resolve(frames)}requestAnimationFrame(tick);browserShell.newTab()})""")
             evidence['expansionFrames']=frames;settled(True)
             check(len({round(f['height'],1) for f in frames})>=3,'Expansion contains intermediate frames rather than one geometry jump')
-            check(state()['adaptiveToolbar']['duration'] in (90,200),'Animation respects the 200ms duration or Windows reduced motion')
+            check(state()['adaptiveToolbar']['duration'] in (60,320),'Animation uses the Gecko duration or its reduced-motion duration')
             check(native_inset(88),'Expanded DOM and native page inset agree at 88px')
             check(s.evaluate(shell,"!document.querySelector('.tabs-zone').inert&&getComputedStyle(document.querySelector('.tabs-zone')).opacity==='1'"),'Second tab reveals the shared bottom tab row')
             capture('two')
+            check(s.evaluate(shell,"document.querySelector('.classic-main-row').offsetHeight")==48,
+                  'The expanded address row is 48px high')
             second=next(t['id'] for t in state()['tabs'] if t['id']!=first)
-            call('closeTab',second);settled(False)
+            collapse=s.evaluate(shell,f"""new Promise(resolve=>{{
+                const row=document.querySelector('.tabs-zone'), strip=document.querySelector('#tabStrip');
+                const upper=document.querySelector('.classic-main-row');
+                const ids=()=>Array.from(strip.children,tab=>Number(tab.dataset.tabId));
+                const frames=[],start=performance.now();
+                function tick(now){{
+                  frames.push({{opacity:Number(getComputedStyle(row).opacity),inert:row.inert,ids:ids(),
+                    upperHeight:upper.getBoundingClientRect().height}});
+                  if(now-start<520)requestAnimationFrame(tick);else resolve(frames);
+                }}
+                requestAnimationFrame(tick);
+                browserShell.closeTab({second});
+            }})""")
+            settled(False)
+            evidence['collapseFrames']=collapse
+            fading=[frame for frame in collapse if 0<frame['opacity']<1]
+            check(fading and all(frame['ids']==[first,second] and frame['inert'] for frame in fading),
+                  'The entire two-tab row fades together without an intermediate full-width tab')
+            check(collapse[-1]['upperHeight']==68,'The collapsed address row returns to its 68px height')
             after=s.evaluate(page,"({identity,scrollY,draft:document.querySelector('#draft').value,ticks})")
             check(after['identity']==original['identity'] and after['draft']=='Unsent text' and after['scrollY']==777 and after['ticks']>0,'Page document, form, scrolling and running script survive expansion and collapse')
             check(state()['tabs'][0]['generation']==generation,'Existing tab generation is unchanged by the transition')

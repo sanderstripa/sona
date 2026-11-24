@@ -151,6 +151,7 @@ class BrowserWindow final : public CefBaseRefCounted {
     std::string profile_id = "personal";
     bool incognito = false;
     bool pinned = false;
+    bool closing = false;
     double scroll_y = 0, glass_inset = -1;
     bool activate_on_attach = false;
     bool focus_address_on_attach = false;
@@ -289,10 +290,11 @@ class BrowserWindow final : public CefBaseRefCounted {
   CefRefPtr<CefDictionaryValue> AdaptiveToolbarState() const;
   bool adaptive_initialized_ = false, adaptive_expanded_ = false, adaptive_running_ = false;
   unsigned adaptive_generation_ = 0;
+  int adaptive_revision_ = 0;
   ULONGLONG adaptive_started_ = 0;
   double adaptive_height_ = 68, adaptive_progress_ = 0;
   double adaptive_from_height_ = 68, adaptive_from_progress_ = 0;
-  int adaptive_duration_ = 200;
+  int adaptive_duration_ = 320;
 
   void ShowWhenReady();
   void CloseAll();
@@ -369,6 +371,7 @@ class BrowserWindow final : public CefBaseRefCounted {
   std::string active_profile_id_ = "personal";
   inline static int next_tab_id_ = 1;
   int active_tab_id_ = 0;
+  int shown_content_tab_id_ = 0;
   std::map<std::string, int> last_normal_active_;
   int right_panel_width_ = 0;
   int suggestions_height_ = 0;

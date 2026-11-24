@@ -1,7 +1,8 @@
 #pragma once
 
 namespace soulu::motion {
-inline constexpr int kAdaptiveToolbarMs = 200;
+inline constexpr int kAdaptiveToolbarMs = 320;
+inline constexpr int kReducedAdaptiveToolbarMs = 60;
 inline constexpr int kMicroMs = 140;
 inline constexpr int kSurfaceMs = 180;
 inline constexpr int kStructuralMs = 300;

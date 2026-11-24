@@ -1349,7 +1349,7 @@ std::string BrowserWindow::VisibleProfileId() const {
 
 void BrowserWindow::SwitchTab(int id) {
   DismissSouluMenus(hwnd_);
-  auto* tab=FindTab(id);if(!tab)return;
+  auto* tab=FindTab(id);if(!tab||tab->closing)return;
   if (!closing_ && active_tab_id_ != id) KeepShellMotionFor(360);
   DismissAddressSuggestions();
   if (content_fullscreen_id_ && content_fullscreen_id_ != id) {
@@ -1362,7 +1362,13 @@ void BrowserWindow::SwitchTab(int id) {
     settings_loaded_=nullptr;
     active_profile_id_=tab->profile_id;LoadProfileSettings();RefreshSettingsProfile();
   }
-  if (active_tab_id_ != id) { if(auto* old=ActiveTab();old&&old->browser)HomeCancelVoice(old->browser->GetIdentifier());CancelSitePermissions(active_tab_id_); CaptureThumbnail(); }
+  if (active_tab_id_ != id) {
+    if (auto* old = ActiveTab(); old && old->browser && !old->closing) {
+      HomeCancelVoice(old->browser->GetIdentifier());
+      CaptureThumbnail();
+    }
+    CancelSitePermissions(active_tab_id_);
+  }
   active_tab_id_ = id;
   SetTabFrozen(id,false);
   if(!tab->incognito)last_normal_active_[tab->profile_id]=id;
@@ -1379,7 +1385,7 @@ int BrowserWindow::AdjacentTab(int id) const {
   int previous=0;bool passed=false;
   for(const auto& tab:tabs_){
     if(tab.id==id){passed=true;continue;}
-    if(tab.incognito!=closed->incognito||(!tab.incognito&&tab.profile_id!=closed->profile_id))continue;
+    if(tab.closing||tab.incognito!=closed->incognito||(!tab.incognito&&tab.profile_id!=closed->profile_id))continue;
     if(passed)return previous?previous:tab.id;
     previous=tab.id;
   }
@@ -1390,12 +1396,33 @@ void BrowserWindow::CloseTab(int id) {
   CancelSitePermissions(id);
   auto it = std::find_if(tabs_.begin(), tabs_.end(),
       [id](const Tab& tab) { return tab.id == id; });
-  if (it == tabs_.end()) return;
+  if (it == tabs_.end() || it->closing) return;
   if (!closing_) KeepShellMotionFor(360);
 
   if (it->browser) {
-    HomeCancelVoice(it->browser->GetIdentifier());
-    it->browser->GetHost()->CloseBrowser(true);
+    auto browser = it->browser;
+    const auto profile = VisibleProfileId();
+    const bool visible = it->incognito ? profile == "__incognito__" : it->profile_id == profile;
+    if (!closing_ && !Fullscreen() && adaptive_expanded_ && visible &&
+        EffectiveSettings()->GetString("layout") == "adaptive" &&
+        std::count_if(tabs_.begin(), tabs_.end(), [&](const Tab& tab) {
+          return !tab.closing && tab.incognito == it->incognito &&
+              (tab.incognito || tab.profile_id == it->profile_id);
+        }) == 2) {
+      const int adjacent = AdjacentTab(id);
+      if (auto* remaining = FindTab(adjacent); remaining && remaining->browser) {
+        // Commit the surviving tab and the collapse while both views still exist.
+        // Keep the closing tab alive until CEF sends its destruction callback.
+        it->closing = true;
+        if (id == active_tab_id_) SwitchTab(adjacent);
+        else {
+          Layout();
+          EmitState();
+        }
+      }
+    }
+    HomeCancelVoice(browser->GetIdentifier());
+    browser->GetHost()->CloseBrowser(true);
     return;
   }
   if(it->chrome_host)it->chrome_host->Close();
@@ -2158,6 +2185,7 @@ CefRefPtr<CefDictionaryValue> BrowserWindow::AdaptiveToolbarState() const {
   frame->SetBool("expanded", adaptive_expanded_);
   frame->SetBool("running", adaptive_running_);
   frame->SetInt("duration", adaptive_duration_);
+  frame->SetInt("revision", adaptive_revision_);
   return frame;
 }
 
@@ -2194,9 +2222,8 @@ void BrowserWindow::SyncAdaptiveToolbar() {
     return;
   }
   const std::string profile = VisibleProfileId();
-  const bool initializing=!IsWindowVisible(hwnd_);
   const auto count = std::count_if(tabs_.begin(), tabs_.end(), [&](const Tab& tab) {
-    if(!initializing&&!tab.browser)return false;
+    if(tab.closing)return false;
     return tab.incognito ? profile == "__incognito__" : tab.profile_id == profile;
   });
   const bool expanded = count > 1;
@@ -2208,6 +2235,7 @@ void BrowserWindow::SyncAdaptiveToolbar() {
     adaptive_running_ = false;
     adaptive_height_ = target;
     adaptive_progress_ = expanded ? 1 : 0;
+    ++adaptive_revision_;
     UpdateShellFrameRate();
     return;
   }
@@ -2218,8 +2246,9 @@ void BrowserWindow::SyncAdaptiveToolbar() {
   adaptive_started_ = 0; // Start the clock on the first runnable UI frame.
   BOOL animate = TRUE;
   SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animate, 0);
-  adaptive_duration_ = animate ? motion::kAdaptiveToolbarMs : motion::kReducedOverlayMs;
+  adaptive_duration_ = animate ? motion::kAdaptiveToolbarMs : motion::kReducedAdaptiveToolbarMs;
   adaptive_running_ = true;
+  ++adaptive_revision_;
   const unsigned generation = ++adaptive_generation_;
   UpdateShellFrameRate();
   CefRefPtr<BrowserWindow> self = this;
@@ -2233,16 +2262,18 @@ void BrowserWindow::AdvanceAdaptiveToolbar(unsigned generation) {
   if(!adaptive_started_)adaptive_started_=GetTickCount64();
   const double t = std::clamp(static_cast<double>(GetTickCount64() - adaptive_started_) /
       adaptive_duration_, 0.0, 1.0);
-  const double eased = t * t * (3 - 2 * t);
+  const double remaining = 1 - t;
+  const double eased = 1 - remaining * remaining * remaining;
   const double target = adaptive_expanded_ ? geometry::adaptiveExpandedToolbar : geometry::adaptiveSingleToolbar;
   adaptive_height_ = adaptive_from_height_ + (target - adaptive_from_height_) * eased;
   adaptive_progress_ = adaptive_from_progress_ + ((adaptive_expanded_ ? 1.0 : 0.0) - adaptive_from_progress_) * eased;
   adaptive_running_ = t < 1;
-  // Reposition existing CefBrowser hosts. No navigation, reload or tab creation.
+  ++adaptive_revision_;
   Layout();
   Emit("adaptiveGeometry", Wrap(AdaptiveToolbarState()));
   if (!adaptive_running_) {
     UpdateShellFrameRate();
+    EmitState();
     return;
   }
   CefRefPtr<BrowserWindow> self = this;
@@ -2262,13 +2293,18 @@ BrowserWindow::Geometry BrowserWindow::CurrentGeometry() const {
   const std::string layout = EffectiveSettings()->GetString("layout");
   const double height = layout == "adaptive" ? adaptive_height_ :
       layout == "classic" ? geometry::classicToolbar : geometry::mainToolbar;
-  g.toolbar = static_cast<int>(std::round((height + (BookmarksBarVisible() ? geometry::bookmarks : 0)) * scale));
+  const int bookmarks = BookmarksBarVisible() ? geometry::bookmarks : 0;
+  g.toolbar = static_cast<int>(std::round((height + bookmarks) * scale));
   if (Fullscreen()) g.toolbar = 0;
   g.panel = px(std::max(0, right_panel_width_));
   if (Fullscreen()) g.panel = 0;
   const auto* active=const_cast<BrowserWindow*>(this)->ActiveTab();
+  // Use a stable off-screen render surface during the motion. The toolbar's
+  // visible edge still follows g.toolbar and the document's native position.
+  const bool animating = layout == "adaptive" && adaptive_running_ && !Fullscreen();
+  const int shell_toolbar = animating ? px(geometry::adaptiveExpandedToolbar + bookmarks) : g.toolbar;
   g.shell_height = (active&&active->reader_active) || !permission_requests_.empty() || popover_visible_ || overview_visible_ || sidebar_visible_ || sidebar_motion_ || g.panel > 0 ? g.height :
-      std::min(g.height, std::max(g.toolbar, px(suggestions_height_)));
+      std::min(g.height, std::max(shell_toolbar, px(suggestions_height_)));
   const auto* page=const_cast<BrowserWindow*>(this)->ActiveTab();
   const int inset=EffectiveSettings()->GetBool("mattePanel") && page && !Fullscreen() ?
       g.toolbar-static_cast<int>(std::round(std::clamp(page->scroll_y*scale,0.0,double(g.toolbar)))) : g.toolbar;
@@ -2287,16 +2323,30 @@ void BrowserWindow::Layout() {
   std::vector<Position> positions;
   constexpr UINT flags = SWP_NOACTIVATE | SWP_NOCOPYBITS;
   const std::string profile = VisibleProfileId();
+  auto* shown = ActiveTab();
+  if (adaptive_initialized_ && shown && !shown->browser && !Fullscreen()) {
+    // The new tab enters the row immediately. Keep the old native view
+    // visible until the new view is attached so the root never flashes.
+    auto* previous = FindTab(shown_content_tab_id_);
+    if (previous && previous->browser && !previous->closing &&
+        previous->incognito == shown->incognito && previous->profile_id == shown->profile_id)
+      shown = previous;
+  }
+  shown_content_tab_id_ = shown && shown->browser ? shown->id : 0;
+  if (shown && shown->chrome_host && shown_content_tab_id_)
+    shown->chrome_host->SetVisible(true, false);
   for (auto& tab : tabs_) {
     if (!tab.browser) continue;
     HWND child = tab.browser->GetHost()->GetWindowHandle();
     const bool belongs = tab.incognito ? profile == "__incognito__" : tab.profile_id == profile;
     // The opaque shell overview covers the existing active view. Keeping that
     // view mapped lets an asynchronous compositor screenshot finish reliably.
-    const bool visible = belongs && tab.id == active_tab_id_;
-    if(tab.chrome_host)tab.chrome_host->SetVisible(visible,false);
+    const bool visible = belongs && !tab.closing && tab.id == shown_content_tab_id_;
+    if(tab.chrome_host && !visible)tab.chrome_host->SetVisible(false,false);
+    if (adaptive_running_ && !visible &&
+        !(GetWindowLongPtrW(child, GWL_STYLE) & WS_VISIBLE)) continue;
     positions.push_back({child, HWND_BOTTOM, g.content.x, g.content.y, g.content.width, g.content.height,
-        flags | (visible ? SWP_SHOWWINDOW : SWP_HIDEWINDOW)});
+        (adaptive_initialized_ ? SWP_NOACTIVATE : flags) | (visible ? SWP_SHOWWINDOW : SWP_HIDEWINDOW)});
   }
   const auto theme=EffectiveSettings()->GetString("theme").ToString();
   const bool dark=theme=="dark"||(theme=="system"&&IsWindowsDarkMode());
@@ -2408,6 +2458,7 @@ CefRefPtr<CefDictionaryValue> BrowserWindow::State() const {
   const std::string visible_profile = VisibleProfileId();
   for (size_t i = 0; i < tabs_.size(); ++i) {
     const auto& tab = tabs_[i];
+    if (tab.closing) continue;
     if (tab.incognito ? visible_profile != "__incognito__"
                       : tab.profile_id != visible_profile) continue;
     auto row = CefDictionaryValue::Create();

@@ -114,6 +114,16 @@ function reconcileClassicTabs(container,items,pinned){
   });
 }
 function renderClassicTabs(){
+  const input=$("#classicAddress");if(document.activeElement!==input)input.value=addressDisplay(state.page);input.placeholder=state.page?.url==='soulu://home'?'':tr("addressPlaceholder");
+  $(".classic-reload").classList.toggle("loading",!!state.page?.loading);
+  const frame = state.adaptiveToolbar;
+  if (document.body.dataset.layout === 'adaptive' && frame?.running && !frame.expanded &&
+      state.tabs.length === 1 && [tabStrip,classicPinnedTabs].some(strip =>
+        strip.querySelector(`[data-tab-id="${state.tabs[0].id}"]`))) {
+    // Keep both tab slots in the fading row. The address already belongs to
+    // the surviving page, and the next settled state reconciles the row.
+    return;
+  }
   const previousScroll=tabStrip.scrollLeft,previousPinnedScroll=classicPinnedTabs.scrollLeft;
   const pinned=state.tabs.filter(x=>x.pinned),normal=state.tabs.filter(x=>!x.pinned);
   const signature=JSON.stringify([state.settings?.language,state.tabs.map(x=>[x.id,x.title,x.label,x.favicon,x.active,x.pinned,x.audible,x.muted,x.microphoneActive,x.cameraActive])]);
@@ -146,8 +156,6 @@ function renderClassicTabs(){
     const signature=selected?`${selected.id}:${!!selected.pinned}`:null;
     if(signature!==classicVisibleTabId){classicVisibleTabId=signature;revealClassicTab();}
     else {tabStrip.scrollLeft=previousScroll;classicPinnedTabs.scrollLeft=previousPinnedScroll;}}
-  const input=$("#classicAddress");if(document.activeElement!==input)input.value=addressDisplay(state.page);input.placeholder=state.page?.url==='soulu://home'?'':tr("addressPlaceholder");
-  $(".classic-reload").classList.toggle("loading",!!state.page?.loading);
 }
 new ResizeObserver(()=>{sizeClassicTabs();revealClassicTab();}).observe(tabStrip);
 for(const strip of [tabStrip,classicPinnedTabs])strip.addEventListener("wheel",e=>{
@@ -332,6 +340,8 @@ function renderTabs(){
   const changed=key!==tabMotionKey||layout!==tabMotionLayout;
   const structural=cef&&tabMotionKey&&key!==tabMotionKey&&layout===tabMotionLayout&&
     !tabReducedMotion.matches&&!document.querySelector('.tab-reordering');
+  const adaptiveRowMotion = layout === 'adaptive' &&
+    (state.tabs.length < 2 || !tabMotionKey.includes(','));
   const geometry=()=>{
     const selector=layout==='compact'?'[data-compact-rendered]':'[data-tab-id]';
     const strips=layout==='compact'?[compactToolbar]:[classicPinnedTabs,tabStrip];
@@ -345,7 +355,7 @@ function renderTabs(){
     (previousCompactTabCount===2&&compactTabCount===1||previousCompactTabCount===1&&compactTabCount===2);
   const address=()=>flow.querySelector('[data-active-tab]');
   const oldAddressX=singleTabResize?address()?.getBoundingClientRect().left:undefined;
-  const before=structural&&!singleTabResize?new Map(geometry().map(({id,rect})=>[id,rect.left])):null;
+  const before=structural&&!singleTabResize&&!adaptiveRowMotion?new Map(geometry().map(({id,rect})=>[id,rect.left])):null;
   previousCompactTabCount=compactTabCount;
   if(changed)cancelTabMotion();
   tabMotionKey=key;
