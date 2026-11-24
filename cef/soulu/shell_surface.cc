@@ -39,6 +39,7 @@ void ShellSurface::CommitResize() {
   if (browser_ && resize_pending_) {
     if (screen_pending_) browser_->GetHost()->NotifyScreenInfoChanged();
     browser_->GetHost()->WasResized();
+    browser_->GetHost()->Invalidate(PET_VIEW);
     if (popup_visible_) browser_->GetHost()->Invalidate(PET_POPUP);
     resize_pending_ = screen_pending_ = false;
   }
@@ -94,14 +95,20 @@ void ShellSurface::OnPopupShow(CefRefPtr<CefBrowser>, bool show) {
       memcpy(pixels_, popup_background_.data(), popup_background_.size());
     popup_rect_ = CefRect(); popup_pixels_.clear(); popup_background_.clear();
     Present();
+    if (browser_) browser_->GetHost()->Invalidate(PET_VIEW);
   } else if (pixels_) {
     const auto* data = static_cast<const unsigned char*>(pixels_);
     popup_background_.assign(data, data + static_cast<size_t>(bitmap_width_) * bitmap_height_ * 4);
   }
 }
 void ShellSurface::OnPopupSize(CefRefPtr<CefBrowser>, const CefRect& rect) {
+  if (popup_rect_.x == rect.x && popup_rect_.y == rect.y && popup_rect_.width == rect.width && popup_rect_.height == rect.height) return;
   popup_rect_ = rect;
-  CompositePopup(); Present();
+  if (pixels_ && popup_background_.size() == static_cast<size_t>(bitmap_width_) * bitmap_height_ * 4)
+    memcpy(pixels_, popup_background_.data(), popup_background_.size());
+  popup_pixels_.clear();
+  Present();
+  if (browser_ && popup_visible_) browser_->GetHost()->Invalidate(PET_POPUP);
 }
 void ShellSurface::CompositePopup() {
   if (!pixels_ || !popup_visible_ || popup_pixels_.empty() ||

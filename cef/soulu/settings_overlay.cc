@@ -4,11 +4,16 @@
 #include <windowsx.h>
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 #include <cstdint>
 #include <vector>
 
 namespace soulu {
 namespace {
+ULONGLONG MotionNow() {
+  return static_cast<ULONGLONG>(std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count());
+}
 HBITMAP CreateSurface(HDC dc, int width, int height, uint32_t** pixels) {
   BITMAPINFO info{};
   info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
@@ -156,13 +161,13 @@ bool SettingsOverlay::Create() {
 void SettingsOverlay::Attach(HWND browser) { browser_ = browser; Layout(); }
 void SettingsOverlay::Open() {
   if (state_ != State::Loading) { Focus(); return; }
-  state_ = State::Opening; start_ = GetTickCount64();
+  state_ = State::Opening; start_ = MotionNow();
   SetTimer(hwnd_, 1, 16, nullptr); Tick(); Focus();
 }
 void SettingsOverlay::Close() {
   if (state_ == State::Closing || state_ == State::Closed) return;
   KillTimer(hwnd_,2);
-  state_ = State::Closing; close_start_ = progress_; start_ = GetTickCount64();
+  state_ = State::Closing; close_start_ = progress_; start_ = MotionNow();
   SetTimer(hwnd_, 1, 16, nullptr); Tick();
 }
 void SettingsOverlay::Focus() {
@@ -176,11 +181,11 @@ void SettingsOverlay::SetPanelHeight(int height) {
   if (state_ != State::Open || reduced_) {
     KillTimer(hwnd_, 2);display_height_ = static_cast<float>(next);Layout();return;
   }
-  resize_from_ = display_height_;resize_start_ = GetTickCount64();
+  resize_from_ = display_height_;resize_start_ = MotionNow();
   SetTimer(hwnd_, 2, 16, nullptr);ResizeTick();
 }
 void SettingsOverlay::ResizeTick() {
-  const float fraction = std::min(1.f,static_cast<float>(GetTickCount64()-resize_start_)/380.f);
+  const float fraction = std::min(1.f,static_cast<float>(MotionNow()-resize_start_)/380.f);
   const float eased = .5f-.5f*std::cos(fraction*3.14159265f);
   display_height_ = resize_from_+(requested_height_-resize_from_)*eased;
   panel_height_=std::min(height_,static_cast<int>(std::round(display_height_*GetDpiForWindow(owner_)/96.f)));
@@ -195,8 +200,11 @@ void SettingsOverlay::Layout() {
   const float scale = GetDpiForWindow(owner_) / 96.f;
   panel_width_ = std::min(width_, static_cast<int>(std::round(1020 * scale)));
   panel_height_ = std::min(height_, static_cast<int>(std::round(display_height_ * scale)));
-  SetWindowPos(hwnd_, HWND_TOP, p.x, p.y, width_, height_, SWP_NOACTIVATE | SWP_NOCOPYBITS);
-  InvalidateRect(hwnd_, nullptr, FALSE);
+  RECT actual{}; GetWindowRect(hwnd_, &actual);
+  if (actual.left != p.x || actual.top != p.y || actual.right-actual.left != width_ || actual.bottom-actual.top != height_) {
+    SetWindowPos(hwnd_, HWND_TOP, p.x, p.y, width_, height_, SWP_NOACTIVATE | SWP_NOCOPYBITS);
+    InvalidateRect(hwnd_, nullptr, FALSE);
+  }
   // Crop to the owner's client region, including its rounded normal-window
   // silhouette. No independent desktop-relative geometry is persisted.
   const int radius = IsZoomed(owner_) ? 0 : static_cast<int>(std::round(16 * scale));
@@ -221,18 +229,24 @@ void SettingsOverlay::ClipPanel() {
 void SettingsOverlay::PlacePanel() {
   if (!browser_) return;
   const float distance = reduced_ ? std::min(12, panel_height_) : panel_height_;
-  const int old_y = panel_y_;
+  RECT old{}; GetWindowRect(browser_, &old);
+  MapWindowPoints(nullptr, hwnd_, reinterpret_cast<POINT*>(&old), 2);
   panel_y_ = state_ == State::Loading ? -panel_height_ :
       static_cast<int>(std::round(-(1-progress_) * distance));
-  SetWindowPos(browser_, HWND_TOP, (width_-panel_width_)/2, panel_y_,
-      panel_width_, panel_height_, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+  const int x = (width_-panel_width_)/2;
+  const bool visible = (GetWindowLongPtrW(browser_, GWL_STYLE) & WS_VISIBLE) != 0;
+  if (visible && old.left == x && old.top == panel_y_ &&
+      old.right-old.left == panel_width_ && old.bottom-old.top == panel_height_) return;
+  SetWindowPos(browser_, HWND_TOP, x, panel_y_, panel_width_, panel_height_,
+       SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOCOPYBITS);
   const int margin = MulDiv(30, GetDpiForWindow(owner_), 96);
-  RECT changed{0, std::min(old_y, panel_y_) - margin, width_,
-               std::max(old_y, panel_y_) + panel_height_ + margin};
-  InvalidateRect(hwnd_, &changed, FALSE);
+  RECT changed{std::min(old.left, static_cast<LONG>(x))-margin, std::min(old.top, static_cast<LONG>(panel_y_))-margin,
+               std::max(old.right, static_cast<LONG>(x+panel_width_))+margin,
+               std::max(old.bottom, static_cast<LONG>(panel_y_+panel_height_))+margin};
+  RedrawWindow(hwnd_, &changed, nullptr, RDW_INVALIDATE | RDW_NOCHILDREN | RDW_UPDATENOW);
 }
 void SettingsOverlay::Tick() {
-  const float fraction = std::min(1.f, static_cast<float>(GetTickCount64()-start_) / duration_);
+  const float fraction = std::min(1.f, static_cast<float>(MotionNow()-start_) / duration_);
   progress_ = state_ == State::Closing
       ? close_start_ * motion::EaseOut(1-fraction)
       : motion::EaseOut(fraction);
@@ -241,7 +255,10 @@ void SettingsOverlay::Tick() {
   if (fraction < 1) return;
   KillTimer(hwnd_, 1);
   if (state_ == State::Closing) {
-    state_ = State::Closed; ShowWindow(hwnd_, SW_HIDE);
+    state_ = State::Closed;
+    if (browser_) ShowWindow(browser_, SW_HIDE);
+    ShowWindow(hwnd_, SW_HIDE);
+    RedrawWindow(owner_, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN);
     // The callback initiates asynchronous CEF close. The host is retained until
     // OnBeforeClose, so its browser cannot outlive the native parent.
     const auto closed = closed_; closed();
@@ -258,7 +275,15 @@ LRESULT CALLBACK SettingsOverlay::Proc(HWND hwnd, UINT message, WPARAM wp, LPARA
     case WM_ERASEBKGND: return 1;
     case WM_PAINT: {
       PAINTSTRUCT paint{};
-      HDC dc = BeginPaint(hwnd, &paint);
+      HDC target = BeginPaint(hwnd, &paint);
+      // Compose the backdrop and shadow before exposing the new frame.
+      const int w = paint.rcPaint.right-paint.rcPaint.left;
+      const int h = paint.rcPaint.bottom-paint.rcPaint.top;
+      HDC buffer = w>0 && h>0 ? CreateCompatibleDC(target) : nullptr;
+      HBITMAP frame = buffer ? CreateCompatibleBitmap(target, w, h) : nullptr;
+      HGDIOBJ previous_frame = frame ? SelectObject(buffer, frame) : nullptr;
+      HDC dc = frame ? buffer : target;
+      if (frame) SetViewportOrgEx(dc, -paint.rcPaint.left, -paint.rcPaint.top, nullptr);
       HDC memory = self->backdrop_ ? CreateCompatibleDC(dc) : nullptr;
       if (memory) {
         HGDIOBJ previous = SelectObject(memory, self->backdrop_);
@@ -271,6 +296,13 @@ LRESULT CALLBACK SettingsOverlay::Proc(HWND hwnd, UINT message, WPARAM wp, LPARA
         FillRect(dc, &paint.rcPaint, GetSysColorBrush(COLOR_WINDOW));
       }
       self->PaintPanelShadow(dc);
+      if (frame) {
+        SetViewportOrgEx(dc, 0, 0, nullptr);
+        BitBlt(target, paint.rcPaint.left, paint.rcPaint.top, w, h, dc, 0, 0, SRCCOPY);
+        SelectObject(buffer, previous_frame);
+        DeleteObject(frame);
+      }
+      if (buffer) DeleteDC(buffer);
       EndPaint(hwnd, &paint);
       return 0;
     }

@@ -259,6 +259,10 @@
     else alert(error.message);
   }
   let sidebarAnimation=null, lastMotion=-1;
+  function clearSidebarMotion(){
+    const previous=sidebarAnimation;sidebarAnimation=null;
+    previous?.cancel();document.body.removeAttribute('data-bookmarks-moving');
+  }
   function setSidebar(open,motion){
     if(motion&&motion.startAt<lastMotion)return;
     document.body.toggleAttribute('data-bookmarks-sidebar',open);
@@ -268,10 +272,8 @@
     if(!open)closeActions(false);
     if(!motion||motion.startAt===lastMotion)return;
     lastMotion=motion.startAt;
-    sidebarAnimation?.cancel();
-    sidebarAnimation=null;
+    clearSidebarMotion();
     const body=document.body;
-    body.removeAttribute('data-bookmarks-moving');
     if(!motion.duration||motion.open!==open)return;
     const to=getComputedStyle(body).getPropertyValue('--sona-bookmarks-width').trim();
     const animation=body.animate([{'--sona-bookmarks-width':motion.from},{'--sona-bookmarks-width':to}],
@@ -281,9 +283,8 @@
     body.setAttribute('data-bookmarks-moving','');
     animation.finished.then(()=>{
       if(sidebarAnimation!==animation)return;
-      sidebarAnimation=null;
-      body.removeAttribute('data-bookmarks-moving');
-    },()=>{});
+      clearSidebarMotion();
+    },()=>{if(sidebarAnimation===animation)clearSidebarMotion();});
   }
   async function refreshReading(kind='get',payload){
     const epoch=++readingEpoch;
@@ -557,7 +558,9 @@ function renderOverview(){
  }
  for(const node of existing.values())node.remove();let add=grid.querySelector('.overview-new');if(!add){add=button('+ Новая вкладка',async()=>{await api.newTab();await api.setOverview(false);});add.classList.add('overview-new');grid.append(add);}if(grid.lastElementChild!==add)grid.append(add);
 }
-  function render(){renderBar();if(!menu.hidden)renderMenu();overview.hidden=!state.overviewVisible;renderOverview();}
+  let overviewMotion=null, overviewClosing=false;
+  function stopOverviewMotion(){const old=overviewMotion;overviewMotion=null;old?.cancel();overviewClosing=false;}
+  function render(){renderBar();if(!menu.hidden)renderMenu();overview.hidden=!state.overviewVisible;if(overview.hidden&&overviewMotion)stopOverviewMotion();renderOverview();}
   async function importMenu(){pane='import';contents.replaceChildren(el('p','','Chrome / Edge / Brave / другие Chromium: файл Bookmarks (JSON) или экспорт HTML. Firefox: экспорт закладок HTML. Пароли не импортируются.'));const input=el('input');input.type='file';input.setAttribute('aria-label','Файл закладок Chromium JSON или HTML-экспорт');contents.append(input);input.onchange=async()=>{try{const file=input.files[0];if(!file)return;const profile=String(state.activeProfileId)+':'+String(state.incognito);if(file.size>20*1024*1024)throw Error('Файл превышает 20 МБ');const text=await file.text();if(menu.hidden||pane!=='import')return;if(profile!==String(state.activeProfileId)+':'+String(state.incognito))throw Error('Профиль изменился. Откройте импорт заново.');let nodes=[];if(text.trim().startsWith('{')){const data=JSON.parse(text);if(!data.roots)throw Error('Нужен стандартный Chromium Bookmarks JSON');nodes=Object.values(data.roots);}else{const doc=new DOMParser().parseFromString(text,'text/html');if(!doc.querySelector('dl'))throw Error('Нужен экспорт закладок HTML');const parse=dl=>[...dl.children].filter(n=>n.tagName==='DT').map(dt=>{const a=dt.querySelector(':scope > a'),h=dt.querySelector(':scope > h3');if(a)return {type:'url',name:a.textContent,url:a.getAttribute('href')};const nested=dt.querySelector(':scope > dl');return h?{type:'folder',name:h.textContent,children:nested?parse(nested):[]}:null;}).filter(Boolean);nodes=parse(doc.querySelector('dl'));}const next=rows.map(r=>({...r}));let id=nextId(),added=0;const walk=(ns,p,depth=0)=>{if(depth>64)throw Error('Слишком глубокая вложенность');for(const n of ns){if(next.length>=20000)throw Error('Слишком много закладок');if(n.type==='folder'||n.children){let existing=next.find(r=>r.type==='folder'&&(r.parentId||0)===p&&r.title===(n.name||'Импорт'));if(!existing){existing={id:id++,type:'folder',title:n.name||'Импорт',parentId:p,order:next.length,createdAt:Date.now()};next.push(existing);added++;}walk(n.children||[],existing.id,depth+1);}else if(/^https?:\/\//i.test(n.url||'')&&!next.some(r=>r.type==='url'&&(r.parentId||0)===p&&r.title===(n.name||n.url)&&r.url===n.url)){next.push({id:id++,type:'url',title:n.name||n.url,url:n.url,parentId:p,order:next.length,createdAt:Date.now()});added++;}}};walk(nodes,0);if(!added){alert('Новых закладок нет. Дубликаты пропущены.');return;}if(!confirm('Добавить '+added+' элементов из '+file.name+'? Совпадающие элементы в той же папке будут пропущены.'))return;pane='list';await persist(next);alert('Импорт завершён');}catch(error){alert(error.message);}};}
   for(const [selector,before] of [['.classic-main-row','#newTabButton'],['.compact-center-cluster','#compactNewTabButton']]){const host=document.querySelector(selector);if(!host)continue;const tabs=button('',async()=>{closeMenu();await api.setOverview(!state.overviewVisible);});tabs.classList.add('navigation-toolbar-button',selector==='.classic-main-row'?'toolbar-button':'compact-control');tabs.title='Обзор вкладок';tabs.setAttribute('aria-label','Обзор вкладок');tabs.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 7V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/><rect x="7" y="7" width="14" height="14" rx="1.8"/></svg>';tabs.id=before==='#compactNewTabButton'?'compactTabOverviewButton':'tabOverviewButton';host.querySelector(before)?.before(tabs);}
   document.addEventListener('click',e=>{if(e.target.closest('#favoritesButton,[data-favorites]')){e.preventDefault();e.stopImmediatePropagation();edit();}else if(e.target.closest('#sidebarButton,#compactSidebarButton')){e.preventDefault();e.stopImmediatePropagation();closeEditor(false);if(gecko?menu.inert:menu.hidden)openMenu();else closeMenu();}},true);
@@ -569,10 +572,18 @@ function renderOverview(){
   bar.addEventListener('pointerenter',()=>clearTimeout(autoTimer));bar.addEventListener('pointerleave',()=>{if(state.settings?.bookmarksBarMode==='auto'&&(gecko?menu.inert:menu.hidden))api.setBookmarksAuto(false);});
   window.addEventListener('resize',renderBar);
   if(gecko)new ResizeObserver(()=>{barSignature='';renderBar();}).observe(document.querySelector('.classic-toolbar'));
-  window.souluNavigation={openBookmarks:openMenu,animateOverviewClose:async()=>{
-    if(overview.hidden)return;const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;
-    await overview.animate([{opacity:1,transform:'none'},{opacity:0,transform:reduced?'none':'translateY(6px)'}],{duration:reduced?60:240,easing:'cubic-bezier(.4,0,.6,1)'}).finished.catch(()=>{});
+  window.souluNavigation={openBookmarks:openMenu,cancelOverviewClose:()=>{
+    if(overviewClosing)stopOverviewMotion();
+  },animateOverviewClose:async()=>{
+    if(overview.hidden)return;
+    if(overviewClosing&&overviewMotion)return overviewMotion.finished.catch(()=>{});
+    const current=getComputedStyle(overview),opacity=current.opacity,transform=current.transform;
+    stopOverviewMotion();overviewClosing=true;
+    const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;
+    const animation=overview.animate([{opacity,transform},{opacity:0,transform:reduced?'none':'translateY(6px)'}],{duration:reduced?60:180,easing:'cubic-bezier(.4,0,.6,1)',fill:'forwards'});
+    overviewMotion=animation;
+    await animation.finished.catch(()=>{});
   }};
   api.onEditBookmark?.(async id=>{rows=await api.getBookmarks();const row=rows.find(r=>r.id===id);if(row)edit(row);});
-  const apply=s=>{const changed=profileKey()!==String(s.activeProfileId)+':'+String(s.incognito),entered=s.overviewVisible&&!state.overviewVisible;state=s;if(changed)closeEditor(false);if(changed){reading=[];++readingEpoch;sidebarAnimation?.cancel();lastMotion=-1;if(section==='reading'&&s.bookmarksSidebarVisible)refreshReading().catch(report);}rows=s.bookmarks||rows;if(gecko)setSidebar(!!s.bookmarksSidebarVisible&&!s.fullscreen,s.bookmarksSidebarMotion);else menu.hidden=!s.bookmarksSidebarVisible;if(entered){closeEditor(false);closeMenu();}render();document.querySelectorAll('#sidebarButton,#compactSidebarButton').forEach(n=>{n.title=s.settings?.language==='en'?'Bookmarks':'Закладки';n.setAttribute('aria-label',n.title);n.setAttribute('aria-expanded',String(!!s.bookmarksSidebarVisible&&!s.fullscreen));});document.querySelectorAll('#favoritesButton,[data-favorites]').forEach(n=>{n.title=s.settings?.language==='en'?'Save bookmark':'Сохранить закладку';const saved=rows.some(r=>r.url===s.page?.url);n.classList.toggle('bookmark-saved',saved);n.setAttribute('aria-pressed',String(saved));});if(entered){search.value='';renderOverview();search.focus();const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;overview.animate([{opacity:0,transform:reduced?'none':'translateY(8px)'},{opacity:1,transform:'none'}],{duration:reduced?60:320,easing:'cubic-bezier(.22,1,.36,1)'});}};api.onState(apply);api.getState().then(apply);
+  const apply=s=>{const changed=profileKey()!==String(s.activeProfileId)+':'+String(s.incognito),entered=s.overviewVisible&&!state.overviewVisible;state=s;if(changed)closeEditor(false);if(changed){reading=[];++readingEpoch;clearSidebarMotion();lastMotion=-1;if(section==='reading'&&s.bookmarksSidebarVisible)refreshReading().catch(report);}rows=s.bookmarks||rows;if(gecko)setSidebar(!!s.bookmarksSidebarVisible&&!s.fullscreen,s.bookmarksSidebarMotion);else menu.hidden=!s.bookmarksSidebarVisible;if(entered){closeEditor(false);closeMenu();}render();document.querySelectorAll('#sidebarButton,#compactSidebarButton').forEach(n=>{n.title=s.settings?.language==='en'?'Bookmarks':'Закладки';n.setAttribute('aria-label',n.title);n.setAttribute('aria-expanded',String(!!s.bookmarksSidebarVisible&&!s.fullscreen));});document.querySelectorAll('#favoritesButton,[data-favorites]').forEach(n=>{n.title=s.settings?.language==='en'?'Save bookmark':'Сохранить закладку';const saved=rows.some(r=>r.url===s.page?.url);n.classList.toggle('bookmark-saved',saved);n.setAttribute('aria-pressed',String(saved));});if(entered){search.value='';renderOverview();search.focus();const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;stopOverviewMotion();const animation=overview.animate([{opacity:0,transform:reduced?'none':'translateY(8px)'},{opacity:1,transform:'none'}],{duration:reduced?60:240,easing:'cubic-bezier(.22,1,.36,1)'});overviewMotion=animation;animation.finished.then(()=>{if(overviewMotion===animation)stopOverviewMotion();},()=>{});}};api.onState(apply);api.getState().then(apply);
 })();

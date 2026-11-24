@@ -1205,6 +1205,7 @@ bool BrowserWindow::NewTab(const std::string& url, bool incognito,
                           const std::string& profile_id) {
   InitializeProfiles();
   if (IsSettingsUrl(url)) { OpenSettingsOverlay(); return false; }
+  if (!closing_) KeepShellMotionFor(360);
   const int id = next_tab_id_++;
   Tab tab;
   tab.id = id;
@@ -1350,6 +1351,7 @@ std::string BrowserWindow::VisibleProfileId() const {
 void BrowserWindow::SwitchTab(int id) {
   DismissSouluMenus(hwnd_);
   auto* tab=FindTab(id);if(!tab)return;
+  if (!closing_ && active_tab_id_ != id) KeepShellMotionFor(360);
   DismissAddressSuggestions();
   if (content_fullscreen_id_ && content_fullscreen_id_ != id) {
     if (auto* old = FindTab(content_fullscreen_id_); old && old->browser)
@@ -1390,6 +1392,7 @@ void BrowserWindow::CloseTab(int id) {
   auto it = std::find_if(tabs_.begin(), tabs_.end(),
       [id](const Tab& tab) { return tab.id == id; });
   if (it == tabs_.end()) return;
+  if (!closing_) KeepShellMotionFor(360);
 
   if (it->browser) {
     HomeCancelVoice(it->browser->GetIdentifier());
@@ -1428,6 +1431,7 @@ void BrowserWindow::BrowserClosed(CefRefPtr<CefBrowser> browser, int tab_id,
     const bool incognito = tab->incognito;
     const std::string profile = tab->profile_id;
     const int adjacent=AdjacentTab(tab_id);
+    if (!closing_) KeepShellMotionFor(360);
     tabs_.erase(std::remove_if(tabs_.begin(), tabs_.end(),
         [tab_id](const Tab& tab) { return tab.id == tab_id; }), tabs_.end());
     if (active_tab_id_ == tab_id) {
@@ -2160,7 +2164,7 @@ CefRefPtr<CefDictionaryValue> BrowserWindow::AdaptiveToolbarState() const {
 
 void BrowserWindow::UpdateShellFrameRate() {
   if(!shell_)return;
-  const bool animated=adaptive_running_||sidebar_motion_||GetTickCount64()<shell_motion_until_;
+  const bool animated=adaptive_running_||sidebar_motion_||bookmarks_motion_duration_||GetTickCount64()<shell_motion_until_;
   const int rate=animated?motion::kShellMotionFrameRate:motion::kShellIdleFrameRate;
   if(rate==shell_frame_rate_)return;
   shell_frame_rate_=rate;
@@ -2272,7 +2276,7 @@ BrowserWindow::Geometry BrowserWindow::CurrentGeometry() const {
   }
   if (Fullscreen()) g.sidebar = g.panel = 0;
   const auto* active=const_cast<BrowserWindow*>(this)->ActiveTab();
-  g.shell_height = (active&&active->reader_active) || !permission_requests_.empty() || popover_visible_ || overview_visible_ || sidebar_visible_ || sidebar_motion_ || g.panel > 0 ? g.height :
+  g.shell_height = (active&&active->reader_active) || !permission_requests_.empty() || popover_visible_ || overview_visible_ || sidebar_visible_ || sidebar_motion_ || bookmarks_motion_duration_ || g.panel > 0 ? g.height :
       std::min(g.height, std::max(g.toolbar, px(suggestions_height_)));
   const auto* page=const_cast<BrowserWindow*>(this)->ActiveTab();
   const int inset=EffectiveSettings()->GetBool("mattePanel") && page && !Fullscreen() ?
@@ -3145,6 +3149,7 @@ void BrowserWindow::HandleBridge(const std::string& request,
       BOOL animate=TRUE;
       SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION,0,&animate,0);
       bookmarks_motion_duration_=animate&&!Fullscreen()?220:0;
+      KeepShellMotionFor(bookmarks_motion_duration_+120);
       const auto lead=bookmarks_motion_duration_?50:0;
       bookmarks_motion_start_=GetTickCount64()+lead;
       bookmarks_motion_epoch_=static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -3929,6 +3934,7 @@ LRESULT CALLBACK BrowserWindow::WindowProc(HWND hwnd, UINT message, WPARAM wpara
         if(GetTickCount64()>=self->bookmarks_motion_start_+self->bookmarks_motion_duration_){
           self->bookmarks_motion_duration_=0;
           KillTimer(hwnd,7302);
+          self->UpdateShellFrameRate();
         }
         self->Layout();
         return 0;

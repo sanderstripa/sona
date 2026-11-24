@@ -31,6 +31,7 @@
   // Independent surfaces may overlap during a transition. Closing one must
   // not shrink the OSR host while another still owns client-area content.
   const popovers = new Set();
+  let overviewEpoch=0;
   window.browserShell = {
     showMenu: (items,x,y) => invoke("browser.menu.show",{items,x:Math.round(x),y:Math.round(y)}),
     translation: (action,payload) => invoke("browser.translate."+action,payload),
@@ -122,11 +123,16 @@
     suggestions: value => invoke("browser.suggestions", value),
     getDownloads: () => invoke("browser.downloads.get"),
     setOverview: async value => {
-      if(!value){
+      const epoch=++overviewEpoch;
+      if(value)window.souluNavigation?.cancelOverviewClose?.();
+      else {
         await invoke("browser.shell.motion",300);
+        if(epoch!==overviewEpoch)return;
         await window.souluNavigation?.animateOverviewClose?.();
       }
-      return invoke("browser.overview",value);
+      if(epoch!==overviewEpoch)return;
+      try{return await invoke("browser.overview",value);}
+      catch(error){if(epoch===overviewEpoch)window.souluNavigation?.cancelOverviewClose?.();throw error;}
     },
     onEditBookmark: callback => subscribe("editBookmark",callback),
     setPopover: (value, owner = 'default') => {
