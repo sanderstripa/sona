@@ -186,11 +186,33 @@ def main():
                         }
                         throw Error("Bookmarks sidebar did not settle");
                     };
+                    // Observe the state event in the renderer. Polling after
+                    // the native RPC round trip can miss a short exit fade.
+                    const toggle=async open=>{
+                        let unsubscribe;
+                        let timer;
+                        const observed=new Promise((resolve,reject)=>{
+                            timer=setTimeout(()=>reject(Error("Missing bookmarks state: "+open)),3000);
+                            unsubscribe=api.onState(state=>{
+                                if(state.bookmarksSidebarVisible!==open)return;
+                                const frames=menu.getAnimations().flatMap(animation=>animation.effect.getKeyframes());
+                                if(menu.inert!==!open||!frames.some(frame=>Object.hasOwn(frame,"opacity"))){
+                                    reject(Error("Missing bookmarks overlay fade: "+open));
+                                    return;
+                                }
+                                resolve();
+                            });
+                        });
+                        try{
+                            await Promise.all([observed,api.setBookmarksSidebar(open)]);
+                        }finally{
+                            clearTimeout(timer);
+                            unsubscribe();
+                        }
+                    };
                     for(let i=0;i<20;i++){
-                        await api.setBookmarksSidebar(true);
-                        await wait(()=>!menu.inert&&menu.getAnimations().length===1);
-                        await api.setBookmarksSidebar(false);
-                        await wait(()=>menu.inert&&menu.getAnimations().length===1);
+                        await toggle(true);
+                        await toggle(false);
                     }
                     await wait(()=>menu.hidden&&menu.getAnimations().length===0);
                     return souluMotion.activeCount===0&&getComputedStyle(menu).display==="none";

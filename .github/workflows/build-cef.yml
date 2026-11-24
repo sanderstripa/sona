@@ -266,59 +266,6 @@ jobs:
           python browser/scripts/test-cef-browser-import-files.py "$env:build_dir/Soulu.exe" browser/artifacts/browser-import-files.json
           exit $LASTEXITCODE
 
-      - name: Package and verify Windows x64 CEF preview
-        if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/cef-chromium-import'
-        shell: pwsh
-        working-directory: browser
-        run: |
-          $version = & ./scripts/get-soulu-version.ps1
-          $out = Join-Path $PWD "artifacts/preview"
-          New-Item -ItemType Directory -Force $out | Out-Null
-          $files = Get-ChildItem -LiteralPath $env:build_dir |
-            Where-Object { $_.Extension -notin @('.lib','.pdb','.exp','.ilk') }
-          $zip = Join-Path $out "Sona-Preview-$version-CEF-x64.zip"
-          Compress-Archive -LiteralPath $files.FullName -DestinationPath $zip -CompressionLevel Fastest
-          $expanded = Join-Path $env:RUNNER_TEMP "sona-cef-$env:GITHUB_RUN_ID"
-          Expand-Archive -LiteralPath $zip -DestinationPath $expanded
-          & ./scripts/verify-cef-engine.ps1 -BuildDir $expanded -ReportPath (Join-Path $out 'engine-version.json')
-          if (!(Test-Path -LiteralPath (Join-Path $expanded 'ui/sona-home.png'))) {
-            throw 'The Sona home asset is missing from the archive'
-          }
-          Move-Item -LiteralPath (Join-Path $expanded 'Soulu.exe') -Destination (Join-Path $expanded 'Sona Preview.exe')
-          Remove-Item -LiteralPath $zip
-          Compress-Archive -Path "$expanded/*" -DestinationPath $zip -CompressionLevel Fastest
-          $setup = Join-Path $out "Sona-Preview-$version-CEF-x64-Setup.exe"
-          $env:CONNECT_INSTALLER_CI_TEST = "1"
-          & ./scripts/build-connect-installer.ps1 -PayloadPath $zip -Version $version -OutFile $setup
-          $manifest = Get-Content -LiteralPath "$setup.build.json" -Raw | ConvertFrom-Json
-          if ($manifest.payloadSHA256 -ne (Get-FileHash -LiteralPath $zip).Hash.ToLowerInvariant() -or
-              $manifest.sha256 -ne (Get-FileHash -LiteralPath $setup).Hash.ToLowerInvariant()) {
-            throw 'Installer or payload failed SHA-256 verification'
-          }
-          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          $installerHash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
-          @("$hash *$(Split-Path -Leaf $zip)", "$installerHash *$(Split-Path -Leaf $setup)") |
-            Set-Content (Join-Path $out 'SHA256SUMS.txt') -Encoding ascii
-          @"
-          Sona Preview $version (CEF), Windows x64. CEF 156.0.30 / Chromium 156.0.8078.96.
-          Изменён диалог выбора профиля и данных. Импорт CSV использует CSVFieldParser и ConsumeCSVLine Chromium. Проверены выбор CSV и запись в хранилище паролей Sona, импорт истории и вложенной закладки из профилей установленных Chrome и Edge, сохранение закладки после перезапуска и неизменность исходных файлов.
-          Вкладки, автозаполнение и прямой перенос защищённых паролей для всех перечисленных браузеров этим прогоном не подтверждены.
-          Исходный коммит: $env:GITHUB_SHA
-          "@ | Set-Content (Join-Path $PWD 'artifacts/cef-preview-release.md') -Encoding utf8
-
-      - name: Publish Sona CEF Windows x64 prerelease
-        if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/cef-chromium-import'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: cef-preview-${{ env.BETA_VERSION }}
-          name: Sona Preview ${{ env.BETA_VERSION }} (CEF)
-          target_commitish: ${{ github.sha }}
-          prerelease: true
-          make_latest: false
-          fail_on_unmatched_files: true
-          body_path: browser/artifacts/cef-preview-release.md
-          files: browser/artifacts/preview/*
-
       - name: Upload candidate native executable before runtime checks
         if: ${{ always() && steps.native_build.outcome == 'success' }}
         uses: actions/upload-artifact@v4
@@ -1160,3 +1107,55 @@ jobs:
           files: |
             browser/artifacts/Soulu-Beta-1.0.${{ env.BETA_NUMBER }}-x64.exe
             browser/artifacts/Soulu-Beta-1.0.${{ env.BETA_NUMBER }}-x64.zip
+
+      - name: Package and verify Windows x64 CEF preview
+        if: github.ref == 'refs/heads/cef-chromium-import' && !inputs.native_only && (github.event_name == 'push' || inputs.publish)
+        shell: pwsh
+        working-directory: browser
+        run: |
+          $version = & ./scripts/get-soulu-version.ps1
+          $out = Join-Path $PWD "artifacts/preview"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          $files = Get-ChildItem -LiteralPath $env:build_dir |
+            Where-Object { $_.Extension -notin @('.lib','.pdb','.exp','.ilk') }
+          $zip = Join-Path $out "Sona-Preview-$version-CEF-x64.zip"
+          Compress-Archive -LiteralPath $files.FullName -DestinationPath $zip -CompressionLevel Fastest
+          $expanded = Join-Path $env:RUNNER_TEMP "sona-cef-$env:GITHUB_RUN_ID"
+          Expand-Archive -LiteralPath $zip -DestinationPath $expanded
+          & ./scripts/verify-cef-engine.ps1 -BuildDir $expanded -ReportPath (Join-Path $out 'engine-version.json')
+          if (!(Test-Path -LiteralPath (Join-Path $expanded 'ui/sona-home.png'))) {
+            throw 'The Sona home asset is missing from the archive'
+          }
+          Move-Item -LiteralPath (Join-Path $expanded 'Soulu.exe') -Destination (Join-Path $expanded 'Sona Preview.exe')
+          Remove-Item -LiteralPath $zip
+          Compress-Archive -Path "$expanded/*" -DestinationPath $zip -CompressionLevel Fastest
+          $setup = Join-Path $out "Sona-Preview-$version-CEF-x64-Setup.exe"
+          $env:CONNECT_INSTALLER_CI_TEST = "1"
+          & ./scripts/build-connect-installer.ps1 -PayloadPath $zip -Version $version -OutFile $setup
+          $manifest = Get-Content -LiteralPath "$setup.build.json" -Raw | ConvertFrom-Json
+          if ($manifest.payloadSHA256 -ne (Get-FileHash -LiteralPath $zip).Hash.ToLowerInvariant() -or
+              $manifest.sha256 -ne (Get-FileHash -LiteralPath $setup).Hash.ToLowerInvariant()) {
+            throw 'Installer or payload failed SHA-256 verification'
+          }
+          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $installerHash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          @("$hash *$(Split-Path -Leaf $zip)", "$installerHash *$(Split-Path -Leaf $setup)") |
+            Set-Content (Join-Path $out 'SHA256SUMS.txt') -Encoding ascii
+          @"
+          Sona Preview $version (CEF), Windows x64. CEF 156.0.30 / Chromium 156.0.8078.96.
+          Windows-сборка из ветки cef-chromium-import.
+          Исходный коммит: $env:GITHUB_SHA
+          "@ | Set-Content (Join-Path $PWD 'artifacts/cef-preview-release.md') -Encoding utf8
+
+      - name: Publish Sona CEF Windows x64 prerelease
+        if: github.ref == 'refs/heads/cef-chromium-import' && !inputs.native_only && (github.event_name == 'push' || inputs.publish)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: cef-preview-${{ env.BETA_VERSION }}-${{ github.run_id }}
+          name: Sona Preview ${{ env.BETA_VERSION }} (CEF)
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          make_latest: false
+          fail_on_unmatched_files: true
+          body_path: browser/artifacts/cef-preview-release.md
+          files: browser/artifacts/preview/*
