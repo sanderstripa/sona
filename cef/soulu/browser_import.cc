@@ -1,3 +1,4 @@
+#include "chromium_import/bookmark_html.h"
 #include "chromium_import/csv_field_parser.h"
 #include "examples/soulu/browser_import.h"
 #include "examples/soulu/history_store.h"
@@ -249,7 +250,41 @@ std::vector<ImportSource> BrowserImportSources(){
   std::sort(out.begin(),out.end(),[](const auto& a,const auto& b){return std::tie(a.browser,a.name,a.id)<std::tie(b.browser,b.name,b.id);});
   return out;
 }
-std::string ReadImportFile(const std::filesystem::path& path){return ReadText(path,20*1024*1024);}
+CefRefPtr<CefListValue> ReadImportBookmarkFile(const std::filesystem::path& path,
+    const std::shared_ptr<ImportControl>& control) {
+  const auto text = ReadText(path, 20*1024*1024);
+  auto nodes = CefListValue::Create();
+  const auto first = text.find_first_not_of(" \t\r\n");
+  if (first != std::string::npos && text[first] == '{') {
+    auto json = CefParseJSON(text, JSON_PARSER_RFC);
+    auto roots = json && json->GetType() == VTYPE_DICTIONARY
+        ? json->GetDictionary()->GetDictionary("roots") : nullptr;
+    if (!roots) throw std::runtime_error("Invalid Chromium bookmark file");
+    CefDictionaryValue::KeyList keys;
+    roots->GetKeys(keys);
+    for (const auto& key : keys) {
+      if (auto node = roots->GetDictionary(key))
+        nodes->SetDictionary(nodes->GetSize(), node->Copy(false));
+    }
+    return nodes;
+  }
+  const auto parsed = chromium_import::ParseBookmarkHtml(text);
+  const auto visit = [&](const auto& self, const auto& entries, auto result) -> void {
+    for (const auto& entry : entries) {
+      if (control->cancelled) return;
+      if (!entry.folder && WebOrigin(entry.url).empty()) continue;
+      auto node = Node(entry.folder ? "folder" : "url", entry.title, entry.url);
+      if (entry.folder) self(self, entry.children, node->GetList("children"));
+      else if (entry.icon.size() <= 65536 &&
+               (entry.icon.starts_with("data:image/png;base64,") ||
+                entry.icon.starts_with("data:image/x-icon;base64,")))
+        node->SetString("favicon", entry.icon);
+      result->SetDictionary(result->GetSize(), node);
+    }
+  };
+  visit(visit, parsed, nodes);
+  return nodes;
+}
 CefRefPtr<CefListValue> BrowserImportCatalog(){auto sources=BrowserImportSources();auto rows=CefListValue::Create();std::set<std::string> listed;
   auto add=[&](const std::string& name,bool installed){auto profiles=CefListValue::Create();for(const auto& p:sources)if(p.browser==name){auto row=CefDictionaryValue::Create();row->SetString("id",p.id);row->SetString("name",p.name);row->SetString("family",p.family);profiles->SetDictionary(profiles->GetSize(),row);}
     if((!installed&&!profiles->GetSize())||!listed.insert(name).second)return;

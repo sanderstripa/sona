@@ -2958,8 +2958,6 @@ void BrowserWindow::HandleBridge(const std::string& request,
           if(ext!=L".csv"&&ext!=L".html"&&ext!=L".htm"&&ext!=L".json"&&path.filename()!=L"Bookmarks")throw std::runtime_error("Choose an HTML bookmarks export or UTF-8 password CSV");
           if(((requested_kind=="bookmarks"||requested_kind=="tabs")&&ext==L".csv")||(requested_kind=="passwords"&&ext!=L".csv"))throw std::runtime_error("File does not match the selected import category");
           result->SetString("kind",ext==L".csv"?"passwords":requested_kind=="tabs"?"tabs":"bookmarks");result->SetString("name",CefString(path.filename().wstring()).ToString());
-          // CSV plaintext never crosses the renderer bridge or becomes a preview.
-          if(ext!=L".csv")result->SetString("text",ReadImportFile(path));
         }result->SetString("id",id);
         CefPostTask(TID_UI,new FunctionTask([self,callback,path,folder,portable,id,result](){if(folder){for(const auto& source:portable)self->import_portable_[source.id]=source;}else self->import_files_[id]=path;self->Reply(callback,result);}));
       }catch(const std::exception& e){std::string message=e.what();CefPostTask(TID_UI,new FunctionTask([callback,message](){callback->Failure(400,message);}));}
@@ -2974,25 +2972,24 @@ void BrowserWindow::HandleBridge(const std::string& request,
     // Resolve catalog IDs in the worker, never accept arbitrary renderer paths.
     if(run&&std::none_of(profiles_.begin(),profiles_.end(),[&](const Profile& p){return p.id==target;})){callback->Failure(400,"Unknown target profile");return;}
     bool bookmarks=run&&data->GetBool("bookmarks"),history=run&&data->GetBool("history"),passwords=run&&data->GetBool("passwords"),autofill=run&&data->GetBool("autofill"),tabs=run&&data->GetBool("tabs");
-    auto nodes=data->GetList("nodes");if(nodes)nodes=nodes->Copy();
     if(run&&(!bookmarks&&!history&&!passwords&&!autofill&&!tabs)){callback->Failure(400,"Choose supported data");return;}
     auto file=from_file?import_files_[source_id]:std::filesystem::path();
     auto extension=file.extension().wstring();std::transform(extension.begin(),extension.end(),extension.begin(),[](wchar_t c){return std::towlower(c);});
     if(passwords&&(!data->GetBool("consent")||(from_file&&extension!=L".csv"))){callback->Failure(400,"Explicit password import consent required");return;}
-    if(from_file&&((history||autofill)||(passwords&&(bookmarks||tabs))||((bookmarks||tabs)&&!nodes))){callback->Failure(400,"Invalid file import selection");return;}
+    if(from_file&&((history||autofill)||(passwords&&(bookmarks||tabs)))){callback->Failure(400,"Invalid file import selection");return;}
     if(from_file&&(((bookmarks||tabs)&&extension==L".csv")||(passwords&&extension!=L".csv"))){callback->Failure(400,"File category does not match the selected export");return;}
     if(run){importing_=true;import_control_=std::make_shared<ImportControl>();}
     auto control=run?import_control_:std::make_shared<ImportControl>();CefRefPtr<BrowserWindow> self=this;
     auto existing_bookmarks=bookmarks_->Copy();auto bookmark_path=UserDataDirectory()/L"bookmarks.json";
-    CefPostTask(TID_FILE_BACKGROUND,new FunctionTask([self,callback,source,source_id,target,run,from_file,file,nodes,bookmarks,history,passwords,autofill,tabs,control,existing_bookmarks,bookmark_path]()mutable{
+    CefPostTask(TID_FILE_BACKGROUND,new FunctionTask([self,callback,source,source_id,target,run,from_file,file,bookmarks,history,passwords,autofill,tabs,control,existing_bookmarks,bookmark_path]()mutable{
       auto result=CefDictionaryValue::Create();result->SetString("status","ok");auto reports=CefDictionaryValue::Create();result->SetDictionary("categories",reports);reports=result->GetDictionary("categories");
-      CefRefPtr<CefListValue> imported_nodes=nodes;
+      CefRefPtr<CefListValue> imported_nodes;
       CefRefPtr<CefListValue> merged_bookmarks,imported_tabs;
       try{
         if(!from_file&&source.id.empty()){auto sources=BrowserImportSources();auto found=std::find_if(sources.begin(),sources.end(),[&](const ImportSource& s){return s.id==source_id;});if(found==sources.end())throw std::runtime_error("Source profile is no longer available");source=*found;}
         if(!run){result=BrowserImportCapabilities(source);}
         else{
-          if(bookmarks&&!from_file){try{imported_nodes=ReadImportBookmarks(source,control);}catch(const std::exception& e){auto r=CefDictionaryValue::Create();r->SetString("status","error");r->SetString("message",e.what());reports->SetDictionary("bookmarks",r);}}
+          if(bookmarks){try{imported_nodes=from_file?ReadImportBookmarkFile(file,control):ReadImportBookmarks(source,control);}catch(const std::exception& e){auto r=CefDictionaryValue::Create();r->SetString("status","error");r->SetString("message",e.what());reports->SetDictionary("bookmarks",r);}}
           if(bookmarks&&imported_nodes&&!control->cancelled){auto r=CefDictionaryValue::Create();r->SetInt("imported",0);r->SetInt("skipped",0);r->SetInt("failed",0);r->SetString("status","ok");
             try{std::error_code error;bool exists=std::filesystem::exists(bookmark_path,error);if(error)throw std::runtime_error("Target bookmarks unavailable");
               auto saved=exists?ReadJson(bookmark_path):nullptr;
@@ -3010,7 +3007,7 @@ void BrowserWindow::HandleBridge(const std::string& request,
               else{imported_tabs=CefListValue::Create();size_t scanned=0;std::set<std::string> seen;
                 std::function<void(CefRefPtr<CefListValue>,int)> walk=[&](CefRefPtr<CefListValue> list,int depth){if(!list||depth>64)throw std::runtime_error("Invalid HTML tab tree");
                   for(size_t i=0;i<list->GetSize();++i){if(control->cancelled)return;if(++scanned>20000)throw std::runtime_error("HTML tab list too large");auto node=list->GetDictionary(i);if(!node)throw std::runtime_error("Invalid HTML tab");
-                    if(node->GetString("type")=="folder")walk(node->GetList("children"),depth+1);else{std::string url=node->GetString("url");if(!WebOrigin(url).empty()&&url.size()<=65536&&seen.insert(url).second){if(imported_tabs->GetSize()>=500)throw std::runtime_error("Import exceeds 500 tabs");imported_tabs->SetString(imported_tabs->GetSize(),url);}}}};walk(nodes,0);}
+                    if(node->GetString("type")=="folder")walk(node->GetList("children"),depth+1);else{std::string url=node->GetString("url");if(!WebOrigin(url).empty()&&url.size()<=65536&&seen.insert(url).second){if(imported_tabs->GetSize()>=500)throw std::runtime_error("Import exceeds 500 tabs");imported_tabs->SetString(imported_tabs->GetSize(),url);}}}};walk(imported_nodes?imported_nodes:ReadImportBookmarkFile(file,control),0);}
             }catch(const std::exception& e){imported_tabs=nullptr;r->SetInt("failed",1);r->SetString("status","error");r->SetString("message",e.what());}reports->SetDictionary("tabs",r);}
 
         }

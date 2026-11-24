@@ -27,18 +27,17 @@ with tempfile.TemporaryDirectory(prefix='soulu-import-pickers-',ignore_cleanup_e
     button=next(c for c in controls if c[1]=='Button' and c[3]==2);u.SetForegroundWindow(u.GetAncestor(button[0],2));ButtonWrapper(button[0]).click_input()
    result=m.wait(lambda:(r,) if (r:=s.evaluate(settings,'window.__pickerResult')) is not None else None)[0];assert 'error' not in result,result;return result
   assert pick('file','bookmarks')=={};checks.append('cancelled-native-picker-does-not-start-import')
-  h=pick('file','bookmarks',html);assert h['kind']=='bookmarks' and 'text' in h;checks.append('native-HTML-file-picker')
+  h=pick('file','bookmarks',html);assert h['kind']=='bookmarks' and 'text' not in h;checks.append('native-HTML-file-picker')
   c=pick('file','passwords',csv);assert c['kind']=='passwords' and 'text' not in c and 'synthetic-picker-only' not in json.dumps(c);checks.append('native-CSV-picker-does-not-send-passwords-to-renderer')
   f=pick('portable',path=portable);assert f['family']=='chromium' and f['id'].startswith('portable:');checks.append('native-portable-profile-folder-picker')
   def run(payload):return s.evaluate(settings,'browserShell.browserImport("run",'+json.dumps(payload)+')')
-  nodes=s.evaluate(settings,'souluBrowserImport.parseHtml('+json.dumps(h['text'])+')')
-  payload={'source':h['id'],'target':'personal','bookmarks':True,'nodes':nodes}
+  payload={'source':h['id'],'target':'personal','bookmarks':True}
   assert run(payload)['categories']['bookmarks']['imported']==1;checks.append('native-HTML-bookmark-import')
   assert run(payload)['categories']['bookmarks']['imported']==0;checks.append('native-HTML-repeat-deduplication')
   rejected=s.evaluate(settings,'browserShell.browserImport("run",'+json.dumps({'source':c['id'],'target':'personal','passwords':True})+').then(()=>false,()=>true)')
   assert rejected;checks.append('native-CSV-requires-explicit-password-consent')
   assert run({'source':c['id'],'target':'personal','passwords':True,'consent':True})['categories']['passwords']['imported']==1;checks.append('native-CSV-password-import')
-  assert run({'source':h['id'],'target':'personal','tabs':True,'nodes':nodes})['categories']['tabs']['imported']==1;checks.append('native-HTML-open-tab-import')
+  assert run({'source':h['id'],'target':'personal','tabs':True})['categories']['tabs']['imported']==1;checks.append('native-HTML-open-tab-import')
   assert run({'source':f['id'],'target':'personal','bookmarks':True})['categories']['bookmarks']['imported']==2;checks.append('native-portable-profile-import')
   user_data=root/'multi-profile';user_data.mkdir()
   for folder in ('Default','Person 2'):

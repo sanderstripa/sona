@@ -263,7 +263,7 @@ jobs:
           exit $LASTEXITCODE
 
       - name: Package and verify Windows x64 CEF preview
-        if: github.event_name == 'push' && github.ref == 'refs/heads/cef-chromium-import'
+        if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/cef-chromium-import'
         shell: pwsh
         working-directory: browser
         run: |
@@ -303,7 +303,7 @@ jobs:
           "@ | Set-Content (Join-Path $PWD 'artifacts/cef-preview-release.md') -Encoding utf8
 
       - name: Publish Sona CEF Windows x64 prerelease
-        if: github.event_name == 'push' && github.ref == 'refs/heads/cef-chromium-import'
+        if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/cef-chromium-import'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: cef-preview-${{ env.BETA_VERSION }}

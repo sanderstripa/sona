@@ -1,56 +1,6 @@
 (() => {
   'use strict';
   const names={bookmarks:['Закладки и папки','Bookmarks and folders'],history:['История посещений','Browsing history'],passwords:['Сохранённые пароли','Saved passwords'],autofill:['Автозаполнение','Autofill'],tabs:['Открытые вкладки','Open tabs'],favicons:['Значки сайтов','Favicons'],preferences:['Настройки браузера','Browser preferences'],other:['Другие данные','Other data']};
-  const statuses={available:['Доступно','Available'],not_found:['Не найдено','Not found'],action_required:['Требует действия','Action required'],unsupported:['Не поддерживается','Unsupported'],blocked:['Недоступно','Unavailable']};
-  const reasons={
-    passwords:['Экспортируйте пароли штатными средствами браузера и выберите CSV-файл.','Export passwords using the source browser, then choose its CSV file.'],
-    autofill:['В Sona Preview нет поддерживаемого хранилища адресов и полей форм.','Sona Preview has no supported address and form autofill store.'],
-    tabs:['Чтение сессий пока не проверено. Приватные вкладки и авторизация не переносятся.','Session reading is not verified. Private tabs and authentication are excluded.'],
-    favicons:['Отдельная база значков пока не переносится. Поддерживаются безопасные значки в HTML-экспорте.','Separate favicon databases are not imported. Safe icons in HTML exports are supported.'],
-    preferences:['Совместимость настроек с Sona Preview пока не проверена.','Preferences have no verified mapping to Sona Preview.'],
-    other:['Для загрузок и расширений нет проверенного механизма переноса.','Downloads and extensions have no verified import binding.']
-  };
-  function parseHtml(text) {
-    if(typeof text!=='string'||text.length>20*1024*1024||!/NETSCAPE-Bookmark-file-1/i.test(text)||!/<DL[\s>]/i.test(text))throw Error('Нужен стандартный HTML-экспорт закладок.');
-    // Retain only structural bookmark tags. Never adopt exported DOM, execute
-    // scripts or request remote images/resources from an untrusted export.
-    const safe=text.replace(/<!--[\s\S]*?-->/g,'').replace(/<\/?([a-z][\w:-]*)\b[^>]*>/gi,(tag,name)=>['dl','dt','h3','a','p'].includes(name.toLowerCase())?tag:'');
-    const doc=new DOMParser().parseFromString(safe,'text/html');let count=0;
-    const parse=(dl,depth=0)=>{
-      if(depth>64)throw Error('Слишком глубокая вложенность папок.');const nodes=[];
-      for(const dt of [...dl.children].filter(n=>n.tagName==='DT')){
-        if(++count>20000)throw Error('Слишком много закладок.');
-        const a=dt.querySelector(':scope > a'),h=dt.querySelector(':scope > h3');
-        if(a){const raw=a.getAttribute('href');let url;try{url=new URL(raw);}catch{continue;}if(!['https:','http:'].includes(url.protocol)||url.username||url.password)continue;
-          const n={type:'url',name:a.textContent,url:url.href};const icon=a.getAttribute('icon');if(icon?.length<=65536&&/^data:image\/(png|x-icon);base64,/i.test(icon))n.favicon=icon;nodes.push(n);
-        }else if(h){const nested=dt.querySelector(':scope > dl')||(dt.nextElementSibling?.tagName==='DL'?dt.nextElementSibling:null);nodes.push({type:'folder',name:h.textContent,children:nested?parse(nested,depth+1):[]});}
-      }return nodes;
-    };
-    const root=doc.querySelector('dl');if(!root)throw Error('Неверная структура HTML-экспорта.');const nodes=parse(root);if(!count)throw Error('В файле нет закладок.');return nodes;
-  }
-  function parseBookmarks(text) {
-    if(!text.trimStart().startsWith('{'))return parseHtml(text);
-    const {roots}=JSON.parse(text);
-    if(!roots||typeof roots!=='object'||Array.isArray(roots))throw Error('Invalid Chromium bookmark export');
-    let count=0;
-    function read(nodes,depth=0) {
-      if(!Array.isArray(nodes)||depth>64)throw Error('Invalid bookmark folder structure');
-      const result=[];
-      for(const node of nodes){
-        if(++count>20000)throw Error('Too many bookmarks');
-        if(node?.type==='folder'){
-          result.push({type:'folder',name:String(node.name||''),children:read(node.children,depth+1)});
-        }else if(node?.type==='url'){
-          let url;
-          try{url=new URL(node.url);}catch{continue;}
-          if(!['http:','https:'].includes(url.protocol)||url.username||url.password)continue;
-          result.push({type:'url',name:String(node.name||url.href),url:url.href});
-        }
-      }
-      return result;
-    }
-    return read(Object.values(roots));
-  }
   async function open({ui=window.souluSettings,api=window.browserShell,sourceHint='',currentProfileOnly=false}={}) {
     const {t,el,button,dialog}=ui;
     const call=(action,payload)=>api.browserImport(action,payload);
@@ -159,12 +109,10 @@
         if(portable){const profiles=(selected.profiles?.length?selected.profiles:[selected]).map(p=>({...p,text:label('Папка профиля · ','Profile folder · ')+p.name}));extraSources.push(...profiles);sourceChoices();return inspect(profiles[0]);}
         if(selected.kind!==kind)throw Error(label('Формат файла не соответствует выбранному источнику.','The file does not match the selected source format.'));
         const chosen={id:selected.id,kind,name:selected.name,text:label(kind!=='passwords'?'HTML · ':'CSV · ',kind!=='passwords'?'HTML · ':'CSV · ')+selected.name};
-        if(kind!=='passwords')chosen.nodes=parseBookmarks(selected.text);
         extraSources.push(chosen);sourceChoices();selectFile(chosen);
       }catch(e){if(closed||token!==serial)return;pending=false;error(e);lock();}
     }
     function selectFile(chosen){++serial;source=chosen;pending=false;from.setValue(chosen.id,chosen.text);caps={[chosen.kind]:{status:'available'}};
-      if(chosen.nodes){let count=0;const walk=nodes=>{for(const n of nodes)n.type==='folder'?walk(n.children):++count;};walk(chosen.nodes);caps[chosen.kind].count=count;}
       notice.hidden=true;execution.hidden=true;drawCategories();
     }
     async function discover() {
@@ -188,7 +136,7 @@
         }catch(e){if(closed)return;phase='form';box.dataset.importState=phase;execution.hidden=true;error(e);lock();return;}
       }
       phase='running';box.dataset.importState=phase;box.setAttribute('aria-busy','true');execution.hidden=false;execution.textContent=label('Импортируем выбранные данные…','Importing selected data…');lock();
-      const payload={source:selected.id,target:destination,...chosen,consent:approved};if(selected.nodes)payload.nodes=selected.nodes;
+      const payload={source:selected.id,target:destination,...chosen,consent:approved};
       let pollPending=false;
       timer=setInterval(async()=>{if(pollPending)return;pollPending=true;try{const p=await call('progress');if(!closed&&phase==='running'&&!cancelRequested)execution.textContent=label(`Обработано записей: ${p.processed.toLocaleString()}`,`Entries processed: ${p.processed.toLocaleString()}`);}catch{}finally{pollPending=false;}},500);
       let result;try{result=await call('run',payload);}catch(e){result={status:'error',message:e.message};}finally{clearInterval(timer);box.removeAttribute('aria-busy');}
@@ -234,7 +182,7 @@
       targetChoices();to.setValue(targets.some(p=>p.id===activeTarget)?activeTarget:targets[0]?.id||'');
       drawCategories();
     });
-    
+
     const escape=e=>{if(phase==='running'||phase==='creating'){e.preventDefault();if(phase==='running')requestCancel().catch(error);}};
     closeButton.onclick=wrap(requestCancel);modal.addEventListener('cancel',escape);
     const cleanup=()=>{closed=true;++serial;clearInterval(timer);if(phase==='running')call('cancel').catch(()=>{});box.classList.remove('browser-import');modal.classList.remove('browser-import-dialog');closeButton.onclick=previousClose;modal.removeEventListener('cancel',escape);modal.removeEventListener('close',cleanup);};modal.addEventListener('close',cleanup);
@@ -245,5 +193,5 @@
     }
     if(!closed)from.toggle.focus();
   }
-  window.souluBrowserImport={open,parseHtml};
+  window.souluBrowserImport={open};
 })();
