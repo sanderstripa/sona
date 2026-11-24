@@ -70,13 +70,9 @@
     keepShellMotion: duration => invoke("browser.shell.motion",duration),
     reorderTab: (id,target) => invoke("browser.reorderTab",{id,target}),
     pinTab: id => invoke("browser.pinTab", id),
-    setBookmarksSidebar: async value => {
-      await invoke("browser.bookmarks.sidebar", value);
-      return invoke("browser.state.get");
-    },
+    setBookmarksSidebar: value => invoke("browser.bookmarks.sidebar", value),
     exportBookmarks: () => invoke("browser.bookmarks.export"),
     readingList: (kind, payload) => invoke("browser.readingList", {kind,...payload}),
-    onBookmarksMotion: callback => subscribe("bookmarksMotion", callback),
     onReadingListChanged: callback => subscribe("readingListChanged", callback),
     manageBookmarks: () => invoke("browser.settings.openWindow", "bookmarks"),
     changeBookmark: async data => {

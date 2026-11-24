@@ -171,16 +171,33 @@ def main():
             check(s.evaluate(shell,'document.querySelector("#sidebar").inert'),'Closing sidebar immediately releases keyboard targets')
             time.sleep(.35)
             check(s.evaluate(shell,'getComputedStyle(document.querySelector("#sidebar")).visibility==="hidden"'),'Sidebar exits before OSR host shrinks')
-            baseline=s.evaluate(page,'innerWidth')
-            s.evaluate(page,'window.bookmarkWidths=[];addEventListener("resize",()=>bookmarkWidths.push(innerWidth))')
-            s.evaluate(shell,'browserShell.setBookmarksSidebar(true)')
-            narrow=o.wait(lambda:s.evaluate(page,f'innerWidth<{baseline}&&innerWidth'))
-            o.wait(lambda:s.evaluate(shell,'!document.body.hasAttribute("data-bookmarks-moving")'))
-            s.evaluate(shell,'browserShell.setBookmarksSidebar(false)')
-            o.wait(lambda:s.evaluate(page,'innerWidth')==baseline)
-            o.wait(lambda:s.evaluate(shell,'!document.body.hasAttribute("data-bookmarks-sidebar")'))
-            check(set(s.evaluate(page,'bookmarkWidths'))=={baseline,narrow},
-                  'Bookmarks transition resizes the page only at the endpoints')
+            baseline=s.evaluate(page,'[innerWidth,innerHeight]')
+            s.evaluate(page,'window.bookmarkResizes=0;addEventListener("resize",()=>bookmarkResizes++)')
+            for bookmarks in [[],[{'id':1,'type':'url','title':'Motion test','url':'https://example.com/','parentId':0,'order':0}]]:
+                s.evaluate(shell,'browserShell.replaceBookmarks('+json.dumps(bookmarks)+')')
+                # Reverse both directions while the previous animation is still running.
+                result=s.evaluate(shell,'''(async()=>{
+                    const menu=document.querySelector(".sona-bookmarks-sidebar");
+                    const api=browserShell;
+                    const wait=async test=>{
+                        for(let i=0;i<120;i++){
+                            if(test())return;
+                            await new Promise(requestAnimationFrame);
+                        }
+                        throw Error("Bookmarks sidebar did not settle");
+                    };
+                    for(let i=0;i<20;i++){
+                        await api.setBookmarksSidebar(true);
+                        await wait(()=>!menu.inert&&menu.getAnimations().length===1);
+                        await api.setBookmarksSidebar(false);
+                        await wait(()=>menu.inert&&menu.getAnimations().length===1);
+                    }
+                    await wait(()=>menu.hidden&&menu.getAnimations().length===0);
+                    return souluMotion.activeCount===0&&getComputedStyle(menu).display==="none";
+                })()''')
+                check(result,f'Bookmarks sidebar cleans up after 20 reversals (bookmarks: {len(bookmarks)})')
+                check(s.evaluate(page,'[innerWidth,innerHeight]')==baseline and
+                      s.evaluate(page,'bookmarkResizes')==0,'Bookmarks overlay keeps page dimensions constant')
             report['passed']=True
         finally:
             for ws in sockets:

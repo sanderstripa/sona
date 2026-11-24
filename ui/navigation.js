@@ -19,7 +19,7 @@
   const menuHeading=el('div','bookmarks-heading');menuHeading.append(el('strong','','Закладки'));
   menu.append(menuHeading,menuSearch,contents,actions);
   if(gecko){
-    document.body.classList.add('sona-bookmarks-layout');
+    if(!cef)document.body.classList.add('sona-bookmarks-layout');
     menu.classList.add('sona-bookmarks-sidebar');
     contents.tabIndex=-1;
     actions.hidden=true;
@@ -36,7 +36,12 @@
     render();
     return result.id;
   }
-  let menuEpoch=0;
+  let menuEpoch=0, cefSidebarRequest=null;
+  async function requestCefSidebar(open,epoch){
+    cefSidebarRequest=open;
+    try{await api.setBookmarksSidebar(open);}
+    finally{if(epoch===menuEpoch)cefSidebarRequest=null;}
+  }
   async function closeMenu(){
     const epoch=++menuEpoch;
     if(!gecko&&!menu.hidden){
@@ -51,6 +56,7 @@
       }
     }else menu.hidden=true;
     pane='list';
+    if(cef)return requestCefSidebar(false,epoch);
     const current=await api.setBookmarksSidebar(false);
     if(gecko&&epoch===menuEpoch)setSidebar(false,current?.bookmarksSidebarMotion);
     if(!gecko){updatePopover();api.setSuggestionsHeight(0);}
@@ -62,6 +68,7 @@
     parent=id;manage=editor;pane='list';query='';menuSearch.value='';
     if(gecko){
       section='bookmarks';
+      if(cef)return requestCefSidebar(true,epoch);
       const current=await api.setBookmarksSidebar(true);
       if(epoch===menuEpoch)setSidebar(Boolean(current?.bookmarksSidebarVisible),current?.bookmarksSidebarMotion);
       renderMenu();
@@ -259,6 +266,39 @@
     if(status&&!menu.inert)status.textContent=error.message;
     else alert(error.message);
   }
+  let cefSidebarMotion=null;
+  function setCefSidebar(open,animate){
+    if(open===!menu.inert){
+      if(!animate)cefSidebarMotion?.finish();
+      return;
+    }
+    const {tokens,reduced,transaction}=window.souluMotion;
+    const offscreen='translateX(-100%)';
+    const current=cefSidebarMotion&&getComputedStyle(menu);
+    const from={opacity:current?Number(current.opacity):Number(!open)};
+    const to={opacity:Number(open)};
+    if(!reduced){
+      from.transform=current?.transform||(open?offscreen:'translateX(0)');
+      to.transform=open?'translateX(0)':offscreen;
+    }
+    menu.inert=!open;
+    menu.setAttribute('aria-hidden',String(!open));
+    if(!open)closeActions(false);
+    cefSidebarMotion?.finish();
+    menu.hidden=!open&&!animate;
+    if(!animate)return;
+
+    const motion=transaction();
+    cefSidebarMotion=motion;
+    motion.cleanup(()=>{
+      menu.hidden=menu.inert;
+      cefSidebarMotion=null;
+    });
+    motion.animate(menu,[from,to],open?tokens.sidebarOpen:tokens.sidebarClose,
+      {easing:open?tokens.enter:tokens.exit});
+    motion.play();
+  }
+
   let sidebarAnimations=[], lastMotion=-1;
   function clearSidebarMotion(){
     const previous=sidebarAnimations;
@@ -270,40 +310,26 @@
     if(motion&&motion.startAt<lastMotion)return;
     const body=document.body;
     const moving=motion&&motion.startAt!==lastMotion;
-    const interrupted=cef&&moving&&sidebarAnimations.length?getComputedStyle(menu).transform:null;
     if(moving){
       lastMotion=motion.startAt;
       clearSidebarMotion();
     }
-    // CEF reserves a fixed column while the panel slides over it.
-    body.toggleAttribute('data-bookmarks-sidebar',open||
-      (cef&&(moving?motion.duration>0:sidebarAnimations.length>0)));
+    body.toggleAttribute('data-bookmarks-sidebar',open);
     menu.inert=!open;
     menu.setAttribute('aria-hidden',String(!open));
     menu.hidden=false;
     if(!open)closeActions(false);
     if(!moving||!motion.duration||motion.open!==open)return;
-    const options={duration:motion.duration,easing:'cubic-bezier(.22,1,.36,1)',fill:'both'};
-    let animations;
-    if(cef){
-      const start=interrupted||(open?'translateX(-100%)':'none');
-      animations=[menu.animate([{transform:start},{transform:open?'none':'translateX(-100%)'}],options)];
-    }else{
-      const to=getComputedStyle(body).getPropertyValue('--sona-bookmarks-width').trim();
-      animations=[body.animate([{'--sona-bookmarks-width':motion.from},{'--sona-bookmarks-width':to}],
-        {...options,fill:'backwards'})];
-    }
-    // CEF captures the current transform when reversing. Start that segment
-    // on the next compositor frame, without waiting at the sampled position.
-    if(!cef)for(const animation of animations)animation.startTime=motion.startAt-performance.timeOrigin;
-    sidebarAnimations=animations;
+    const to=getComputedStyle(body).getPropertyValue('--sona-bookmarks-width').trim();
+    const animation=body.animate([{'--sona-bookmarks-width':motion.from},{'--sona-bookmarks-width':to}],
+      {duration:motion.duration,easing:'cubic-bezier(.22,1,.36,1)',fill:'backwards'});
+    animation.startTime=motion.startAt-performance.timeOrigin;
+    const animations=sidebarAnimations=[animation];
     body.setAttribute('data-bookmarks-moving','');
     function finish(){
-      if(sidebarAnimations!==animations)return;
-      clearSidebarMotion();
-      if(cef)body.toggleAttribute('data-bookmarks-sidebar',!menu.inert);
+      if(sidebarAnimations===animations)clearSidebarMotion();
     }
-    Promise.all(animations.map(animation=>animation.finished)).then(finish,finish);
+    animation.finished.then(finish,finish);
   }
   async function refreshReading(kind='get',payload){
     const epoch=++readingEpoch;
@@ -399,8 +425,9 @@
     readingTab.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v13m0-13C9 4 5 4 3 5v13c3-1 6-1 9 1 3-2 6-2 9-1V5c-2-1-6-1-9 1Z"/></svg>';
     tabs.append(bookmarkTab,readingTab);
     menu.append(status,tabs);
-    setSidebar(false);
-    api.onBookmarksMotion(motion=>{
+    if(cef)setCefSidebar(false,false);
+    else setSidebar(false);
+    if(!cef)api.onBookmarksMotion(motion=>{
       setSidebar(motion.open,motion);
       if(motion.open)renderMenu();
     });
@@ -584,7 +611,7 @@ function renderOverview(){
   function render(){renderBar();if(!menu.hidden)renderMenu();overview.hidden=!state.overviewVisible;if(overview.hidden&&overviewMotion)stopOverviewMotion();renderOverview();}
   async function importMenu(){pane='import';contents.replaceChildren(el('p','','Chrome / Edge / Brave / другие Chromium: файл Bookmarks (JSON) или экспорт HTML. Firefox: экспорт закладок HTML. Пароли не импортируются.'));const input=el('input');input.type='file';input.setAttribute('aria-label','Файл закладок Chromium JSON или HTML-экспорт');contents.append(input);input.onchange=async()=>{try{const file=input.files[0];if(!file)return;const profile=String(state.activeProfileId)+':'+String(state.incognito);if(file.size>20*1024*1024)throw Error('Файл превышает 20 МБ');const text=await file.text();if(menu.hidden||pane!=='import')return;if(profile!==String(state.activeProfileId)+':'+String(state.incognito))throw Error('Профиль изменился. Откройте импорт заново.');let nodes=[];if(text.trim().startsWith('{')){const data=JSON.parse(text);if(!data.roots)throw Error('Нужен стандартный Chromium Bookmarks JSON');nodes=Object.values(data.roots);}else{const doc=new DOMParser().parseFromString(text,'text/html');if(!doc.querySelector('dl'))throw Error('Нужен экспорт закладок HTML');const parse=dl=>[...dl.children].filter(n=>n.tagName==='DT').map(dt=>{const a=dt.querySelector(':scope > a'),h=dt.querySelector(':scope > h3');if(a)return {type:'url',name:a.textContent,url:a.getAttribute('href')};const nested=dt.querySelector(':scope > dl');return h?{type:'folder',name:h.textContent,children:nested?parse(nested):[]}:null;}).filter(Boolean);nodes=parse(doc.querySelector('dl'));}const next=rows.map(r=>({...r}));let id=nextId(),added=0;const walk=(ns,p,depth=0)=>{if(depth>64)throw Error('Слишком глубокая вложенность');for(const n of ns){if(next.length>=20000)throw Error('Слишком много закладок');if(n.type==='folder'||n.children){let existing=next.find(r=>r.type==='folder'&&(r.parentId||0)===p&&r.title===(n.name||'Импорт'));if(!existing){existing={id:id++,type:'folder',title:n.name||'Импорт',parentId:p,order:next.length,createdAt:Date.now()};next.push(existing);added++;}walk(n.children||[],existing.id,depth+1);}else if(/^https?:\/\//i.test(n.url||'')&&!next.some(r=>r.type==='url'&&(r.parentId||0)===p&&r.title===(n.name||n.url)&&r.url===n.url)){next.push({id:id++,type:'url',title:n.name||n.url,url:n.url,parentId:p,order:next.length,createdAt:Date.now()});added++;}}};walk(nodes,0);if(!added){alert('Новых закладок нет. Дубликаты пропущены.');return;}if(!confirm('Добавить '+added+' элементов из '+file.name+'? Совпадающие элементы в той же папке будут пропущены.'))return;pane='list';await persist(next);alert('Импорт завершён');}catch(error){alert(error.message);}};}
   for(const [selector,before] of [['.classic-main-row','#newTabButton'],['.compact-center-cluster','#compactNewTabButton']]){const host=document.querySelector(selector);if(!host)continue;const tabs=button('',async()=>{closeMenu();await api.setOverview(!state.overviewVisible);});tabs.classList.add('navigation-toolbar-button',selector==='.classic-main-row'?'toolbar-button':'compact-control');tabs.title='Обзор вкладок';tabs.setAttribute('aria-label','Обзор вкладок');tabs.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 7V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/><rect x="7" y="7" width="14" height="14" rx="1.8"/></svg>';tabs.id=before==='#compactNewTabButton'?'compactTabOverviewButton':'tabOverviewButton';host.querySelector(before)?.before(tabs);}
-  document.addEventListener('click',e=>{if(e.target.closest('#favoritesButton,[data-favorites]')){e.preventDefault();e.stopImmediatePropagation();edit();}else if(e.target.closest('#sidebarButton,#compactSidebarButton')){e.preventDefault();e.stopImmediatePropagation();closeEditor(false);if(gecko?menu.inert:menu.hidden)openMenu();else closeMenu();}},true);
+  document.addEventListener('click',e=>{if(e.target.closest('#favoritesButton,[data-favorites]')){e.preventDefault();e.stopImmediatePropagation();edit();}else if(e.target.closest('#sidebarButton,#compactSidebarButton')){e.preventDefault();e.stopImmediatePropagation();closeEditor(false);if(cef?!(cefSidebarRequest??!menu.inert):gecko?menu.inert:menu.hidden)openMenu();else closeMenu();}},true);
   document.addEventListener('pointerdown',e=>{if(!e.target.closest('.bookmark-context')){document.querySelector('.bookmark-context')?.remove();updatePopover();}});
   shield.addEventListener('pointerdown',()=>closeEditor());
   document.addEventListener('keydown',e=>{if(e.defaultPrevented)return;if(e.key==='Escape'){if(editor){closeEditor();return;}if(!gecko||menu.contains(e.target))closeMenu();if(state.overviewVisible)api.setOverview(false);}if(e.ctrlKey&&e.shiftKey&&e.key.toLowerCase()==='b'){e.preventDefault();api.setBookmarksAuto(!state.bookmarksBarVisible);}});
@@ -606,5 +633,5 @@ function renderOverview(){
     await animation.finished.catch(()=>{});
   }};
   api.onEditBookmark?.(async id=>{rows=await api.getBookmarks();const row=rows.find(r=>r.id===id);if(row)edit(row);});
-  const apply=s=>{const changed=profileKey()!==String(s.activeProfileId)+':'+String(s.incognito),entered=s.overviewVisible&&!state.overviewVisible;state=s;if(changed)closeEditor(false);if(changed){reading=[];++readingEpoch;clearSidebarMotion();lastMotion=-1;if(section==='reading'&&s.bookmarksSidebarVisible)refreshReading().catch(report);}rows=s.bookmarks||rows;if(gecko)setSidebar(!!s.bookmarksSidebarVisible&&!s.fullscreen,s.bookmarksSidebarMotion);else menu.hidden=!s.bookmarksSidebarVisible;if(entered){closeEditor(false);closeMenu();}render();document.querySelectorAll('#sidebarButton,#compactSidebarButton').forEach(n=>{n.title=s.settings?.language==='en'?'Bookmarks':'Закладки';n.setAttribute('aria-label',n.title);n.setAttribute('aria-expanded',String(!!s.bookmarksSidebarVisible&&!s.fullscreen));});document.querySelectorAll('#favoritesButton,[data-favorites]').forEach(n=>{n.title=s.settings?.language==='en'?'Save bookmark':'Сохранить закладку';const saved=rows.some(r=>r.url===s.page?.url);n.classList.toggle('bookmark-saved',saved);n.setAttribute('aria-pressed',String(saved));});if(entered){search.value='';renderOverview();search.focus();const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;stopOverviewMotion();const animation=overview.animate([{opacity:0,transform:reduced?'none':'translateY(8px)'},{opacity:1,transform:'none'}],{duration:reduced?60:240,easing:'cubic-bezier(.22,1,.36,1)'});overviewMotion=animation;animation.finished.then(()=>{if(overviewMotion===animation)stopOverviewMotion();},()=>{});}};api.onState(apply);api.getState().then(apply);
+  const apply=s=>{const changed=profileKey()!==String(s.activeProfileId)+':'+String(s.incognito),entered=s.overviewVisible&&!state.overviewVisible;state=s;if(changed)closeEditor(false);if(changed){reading=[];++readingEpoch;clearSidebarMotion();lastMotion=-1;if(section==='reading'&&s.bookmarksSidebarVisible)refreshReading().catch(report);}rows=s.bookmarks||rows;if(cef)setCefSidebar(!!s.bookmarksSidebarVisible&&!s.fullscreen,!changed&&!s.fullscreen);else if(gecko)setSidebar(!!s.bookmarksSidebarVisible&&!s.fullscreen,s.bookmarksSidebarMotion);else menu.hidden=!s.bookmarksSidebarVisible;if(entered){closeEditor(false);closeMenu();}render();document.querySelectorAll('#sidebarButton,#compactSidebarButton').forEach(n=>{n.title=s.settings?.language==='en'?'Bookmarks':'Закладки';n.setAttribute('aria-label',n.title);n.setAttribute('aria-expanded',String(!!s.bookmarksSidebarVisible&&!s.fullscreen));});document.querySelectorAll('#favoritesButton,[data-favorites]').forEach(n=>{n.title=s.settings?.language==='en'?'Save bookmark':'Сохранить закладку';const saved=rows.some(r=>r.url===s.page?.url);n.classList.toggle('bookmark-saved',saved);n.setAttribute('aria-pressed',String(saved));});if(entered){search.value='';renderOverview();search.focus();const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;stopOverviewMotion();const animation=overview.animate([{opacity:0,transform:reduced?'none':'translateY(8px)'},{opacity:1,transform:'none'}],{duration:reduced?60:240,easing:'cubic-bezier(.22,1,.36,1)'});overviewMotion=animation;animation.finished.then(()=>{if(overviewMotion===animation)stopOverviewMotion();},()=>{});}};api.onState(apply);api.getState().then(apply);
 })();

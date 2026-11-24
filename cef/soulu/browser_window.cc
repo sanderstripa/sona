@@ -1482,7 +1482,6 @@ struct BrowserWindow::WindowTabDrag {
 };
 std::unique_ptr<BrowserWindow::WindowTabDrag> BrowserWindow::window_tab_drag_;
 namespace {
-constexpr UINT_PTR kBookmarksExitTimer = 7302;
 constexpr UINT_PTR kTabDragTimer=7303;
 constexpr int kTabDetachDistance=25;
 
@@ -2265,17 +2264,16 @@ BrowserWindow::Geometry BrowserWindow::CurrentGeometry() const {
       layout == "classic" ? geometry::classicToolbar : geometry::mainToolbar;
   g.toolbar = static_cast<int>(std::round((height + (BookmarksBarVisible() ? geometry::bookmarks : 0)) * scale));
   if (Fullscreen()) g.toolbar = 0;
-  g.sidebar = ((sidebar_visible_ && bookmarks_sidebar_) || bookmarks_exit_at_) ? std::min({px(276),std::max(px(156),g.width-px(510)),g.width*35/100}) : 0;
   g.panel = px(std::max(0, right_panel_width_));
-  if (Fullscreen()) g.sidebar = g.panel = 0;
+  if (Fullscreen()) g.panel = 0;
   const auto* active=const_cast<BrowserWindow*>(this)->ActiveTab();
   g.shell_height = (active&&active->reader_active) || !permission_requests_.empty() || popover_visible_ || overview_visible_ || sidebar_visible_ || sidebar_motion_ || g.panel > 0 ? g.height :
       std::min(g.height, std::max(g.toolbar, px(suggestions_height_)));
   const auto* page=const_cast<BrowserWindow*>(this)->ActiveTab();
   const int inset=EffectiveSettings()->GetBool("mattePanel") && page && !Fullscreen() ?
       g.toolbar-static_cast<int>(std::round(std::clamp(page->scroll_y*scale,0.0,double(g.toolbar)))) : g.toolbar;
-  g.content = CefRect(g.sidebar, inset,
-      std::max(1, g.width - g.sidebar - g.panel), std::max(1, g.height - inset));
+  g.content = CefRect(0, inset,
+      std::max(1, g.width - g.panel), std::max(1, g.height - inset));
   return g;
 }
 
@@ -3128,35 +3126,12 @@ void BrowserWindow::HandleBridge(const std::string& request,
   else if (action == "browser.bookmarks.sidebar" || action == "browser.toggleSidebar") {
     const bool tab_toggle = action == "browser.toggleSidebar";
     const bool show_bookmarks = !tab_toggle && payload && payload->GetType()==VTYPE_BOOL && payload->GetBool();
-    const bool old_bookmarks=sidebar_visible_&&bookmarks_sidebar_;
     const bool closing_tabs = !tab_toggle && !show_bookmarks && sidebar_visible_ && !bookmarks_sidebar_;
     if (tab_toggle) {
       sidebar_visible_ = bookmarks_sidebar_ || !sidebar_visible_; bookmarks_sidebar_ = false;
     } else {
       sidebar_visible_ = show_bookmarks;
       if (!closing_tabs) bookmarks_sidebar_ = true;
-    }
-    const bool open_bookmarks=sidebar_visible_&&bookmarks_sidebar_;
-    if(old_bookmarks!=open_bookmarks){
-      BOOL animate=TRUE;
-      SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION,0,&animate,0);
-      const int duration = animate && !Fullscreen() ? motion::kBookmarksSlideMs : 0;
-      const int hold = duration + motion::kBookmarksFrameSlackMs;
-      KillTimer(hwnd_, kBookmarksExitTimer);
-      bookmarks_exit_at_ = 0;
-      // Keep the dock and the 60 fps budget through the last compositor frame.
-      if (!open_bookmarks && duration > 0 &&
-          SetTimer(hwnd_, kBookmarksExitTimer, hold, nullptr))
-        bookmarks_exit_at_ = GetTickCount64() + hold;
-      if (duration > 0) KeepShellMotionFor(hold);
-      const double now = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(
-          std::chrono::system_clock::now().time_since_epoch()).count());
-      bookmarks_motion_epoch_ = std::max(bookmarks_motion_epoch_ + 1, now);
-      auto transition = CefDictionaryValue::Create();
-      transition->SetBool("open", open_bookmarks);
-      transition->SetInt("duration", open_bookmarks || bookmarks_exit_at_ ? duration : 0);
-      transition->SetDouble("startAt", bookmarks_motion_epoch_);
-      Emit("bookmarksMotion",Wrap(transition));
     }
     { // Both bookmark and tab sidebars retain their host for the exit fade.
       sidebar_motion_ = true; const auto generation = ++sidebar_motion_generation_;
@@ -3925,15 +3900,6 @@ LRESULT CALLBACK BrowserWindow::WindowProc(HWND hwnd, UINT message, WPARAM wpara
     case WM_TIMER:
       if(wparam==kTabDragTimer){self->TickWindowTabDrag();return 0;}
       if(wparam==7301){self->ApplyPerformancePolicy();return 0;}
-      if (wparam == kBookmarksExitTimer) {
-        // KillTimer does not remove an already queued WM_TIMER.
-        if (self->bookmarks_exit_at_ && GetTickCount64() >= self->bookmarks_exit_at_) {
-          KillTimer(hwnd, kBookmarksExitTimer);
-          self->bookmarks_exit_at_ = 0;
-          self->Layout();
-        }
-        return 0;
-      }
       break;
     case ShellSurface::kPointerDown: self->CancelHomeFocus();return 0;
     case WM_ACTIVATE:

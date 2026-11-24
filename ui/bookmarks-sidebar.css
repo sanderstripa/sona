@@ -8,7 +8,10 @@
 body.sona-bookmarks-layout {
   --sona-bookmarks-width: 0px;
 }
-body[data-bookmarks-sidebar] { --sona-bookmarks-width: min(276px, max(156px, calc(100vw - 510px)), 35vw); }
+body {
+  --sona-bookmarks-panel-width: min(276px, max(156px, calc(100vw - 510px)), 35vw);
+}
+body[data-bookmarks-sidebar] { --sona-bookmarks-width: var(--sona-bookmarks-panel-width); }
 body.sona-bookmarks-layout .browser-toolbar {
   left: var(--sona-bookmarks-width);
   width: calc(100% - var(--sona-bookmarks-width));
@@ -52,8 +55,13 @@ body .sona-bookmarks-sidebar {
   line-height: 1.35;
   font-size: 13px;
 }
-html.cef-runtime body[data-bookmarks-moving] .sona-bookmarks-sidebar {
-  will-change: transform;
+html.cef-runtime body .sona-bookmarks-sidebar {
+  inset: var(--content-top) auto 0 0 !important;
+  width: var(--sona-bookmarks-panel-width);
+  contain: layout paint;
+}
+html.cef-runtime body .sona-bookmarks-sidebar[hidden] {
+  display: none;
 }
 .sona-bookmarks-sidebar[inert] { pointer-events: none; }
 .sona-bookmarks-sidebar > .bookmark-actions,

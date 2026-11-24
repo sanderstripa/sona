@@ -273,7 +273,7 @@ class BrowserWindow final : public CefBaseRefCounted {
   RECT fullscreen_bounds_ = {};
   LONG_PTR fullscreen_style_ = 0;
   struct Geometry {
-    int width, height, toolbar, shell_height, sidebar, panel;
+    int width, height, toolbar, shell_height, panel;
     float scale;
     CefRect content;
   };
@@ -375,8 +375,6 @@ class BrowserWindow final : public CefBaseRefCounted {
   bool sidebar_visible_ = false;
   bool bookmarks_sidebar_ = false;
   bool sidebar_motion_ = false;
-  double bookmarks_motion_epoch_ = 0;
-  ULONGLONG bookmarks_exit_at_ = 0;
 
   unsigned sidebar_motion_generation_ = 0;
   bool overview_visible_ = false;
