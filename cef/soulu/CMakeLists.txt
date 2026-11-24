@@ -58,6 +58,7 @@ set(SOULU_SRCS
   import_source_file.h
   browser_import.h
   chromium_import/bookmark_html.cc
+  chromium_import/session_reader.cc
   chromium_import/csv_field_parser.cc
   browser_import.cc
   browser_import_tests.cc

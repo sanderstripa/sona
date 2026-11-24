@@ -1,3 +1,4 @@
+#include "chromium_import/session_reader.h"
 #include "chromium_import/bookmark_html.h"
 #include "chromium_import/csv_field_parser.h"
 #include "examples/soulu/browser_import.h"
@@ -10,7 +11,6 @@
 #include <windows.h>
 #include <algorithm>
 #include <cmath>
-#include <climits>
 #include <cctype>
 #include <cwctype>
 #include <fstream>
@@ -381,39 +381,9 @@ CefRefPtr<CefListValue> ReadImportTabs(const ImportSource& source,const std::sha
       for(size_t t=0;t<tabs->GetSize();++t){if(control->cancelled)return rows;++control->processed;auto tab=tabs->GetDictionary(t);if(!tab||tab->GetBool("isPrivate"))continue;
         auto entries=tab->GetList("entries");int index=tab->GetInt("index")-1;if(!entries||index<0||static_cast<size_t>(index)>=entries->GetSize())continue;
         auto entry=entries->GetDictionary(index);if(entry)append(entry->GetString("url"));}}
-  }else{
-    if(bytes.size()<8||bytes.compare(0,4,"SNSS"))throw std::runtime_error("Invalid Chromium session");auto version=U32(bytes,4);
-    if(version!=1&&version!=3)throw std::runtime_error("Encrypted or unsupported session: export the open tabs as bookmarks and import their HTML file");
-    struct Tab{int window=0,index=0,selected=-1;std::map<int,std::string> urls;};std::map<int,Tab> tabs;std::map<int,int> windows;std::set<int> closed;bool marker=version==1;
-    for(size_t at=8;at<bytes.size();){if(control->cancelled)return rows;++control->processed;
-      if(bytes.size()-at<3)throw std::runtime_error("Truncated session command");size_t count=static_cast<unsigned char>(bytes[at])|(static_cast<unsigned char>(bytes[at+1])<<8);at+=2;
-      if(!count||count>bytes.size()-at)throw std::runtime_error("Invalid session command length");unsigned id=static_cast<unsigned char>(bytes[at]);std::string p=bytes.substr(at+1,count-1);at+=count;
-      if(id==255){marker=true;continue;}if(tabs.size()>10000)throw std::runtime_error("Oversized session");
-      if(id==0||id==2||id==7||id==9){int key=static_cast<int>(U32(p,0)),value=static_cast<int>(U32(p,4));if(id==0)tabs[value].window=key;else if(id==2)tabs[key].index=value;else if(id==7)tabs[key].selected=value;else windows[key]=value;}
-      else if(id==16)tabs.erase(static_cast<int>(U32(p,0)));else if(id==17)closed.insert(static_cast<int>(U32(p,0)));
-      else if(id==6){if(p.size()<16||U32(p,0)!=p.size()-4)throw std::runtime_error("Invalid navigation pickle");int key=static_cast<int>(U32(p,4)),index=static_cast<int>(U32(p,8));size_t length=U32(p,12);
-        if(length>p.size()-16||length>65536)throw std::runtime_error("Invalid navigation URL");tabs[key].urls[index]=p.substr(16,length);}
-      else if(id==5){int key=static_cast<int>(U32(p,0)),start=static_cast<int>(U32(p,4));auto& urls=tabs[key].urls;urls.erase(urls.lower_bound(start),urls.end());}
-      else if(id==11||id==24){
-        // Chromium session_service_commands.cc: ProcessTabNavigationPathPrunedCommand.
-        int key=static_cast<int>(U32(p,0));
-        int index=id==11?0:static_cast<int>(U32(p,4));
-        int pruned_count=static_cast<int>(U32(p,id==11?4:8));
-        if(index<0||pruned_count<=0||index>INT_MAX-pruned_count)throw std::runtime_error("Invalid session navigation range");
-        auto& tab=tabs[key];
-        if(tab.selected>=index && tab.selected<index+pruned_count)tab.selected=index-1;
-        else if(tab.selected>=index+pruned_count)tab.selected-=pruned_count;
-        tab.urls.erase(tab.urls.lower_bound(index),tab.urls.lower_bound(index+pruned_count));
-        for(auto it=tab.urls.lower_bound(index+pruned_count);it!=tab.urls.end();){
-          auto entry=tab.urls.extract(it++);
-          entry.key()-=pruned_count;
-          tab.urls.insert(std::move(entry));
-        }
-      }
-    }
-    if(!marker)throw std::runtime_error("Incomplete session snapshot");std::vector<std::pair<int,Tab>> sorted(tabs.begin(),tabs.end());
-    std::sort(sorted.begin(),sorted.end(),[](const auto& a,const auto& b){return std::tie(a.second.window,a.second.index)<std::tie(b.second.window,b.second.index);});
-    for(const auto& item:sorted){const auto& tab=item.second;if(closed.count(tab.window)||!windows.count(tab.window)||windows[tab.window]!=0)continue;auto found=tab.urls.find(tab.selected);if(found!=tab.urls.end())append(found->second);}
+  } else {
+    for (const auto& url : chromium_import::ReplaySession(bytes, control->cancelled, control->processed))
+      append(url);
   }SecureZeroMemory(bytes.data(),bytes.size());return rows;
 }
 namespace {
