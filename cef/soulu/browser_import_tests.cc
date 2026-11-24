@@ -55,10 +55,10 @@ int RunBrowserImportTests(const std::filesystem::path& output){
               "Empty,https://empty.test/,fixture,,\r\n"
               "Edge,https://edge.test/,,edge-secret\r\n"
               "Short,https://short.test/,fixture\r\n");
-    auto mixed=ImportPasswordCsv(csv,"import-one",control);
+    auto mixed=ImportPasswordCsv(csv,"import-three",control);
     check(mixed->GetString("status")=="partial"&&mixed->GetInt("imported")==2&&mixed->GetInt("skipped")==3&&
-          PasswordVault("import-one").Contains("https://other.test","fixture")&&
-          PasswordVault("import-one").Contains("https://edge.test",""),"csv-mixed-records-preserve-supported-credentials");
+          PasswordVault("import-three").Contains("https://other.test","fixture")&&
+          PasswordVault("import-three").Contains("https://edge.test",""),"csv-mixed-records-preserve-supported-credentials");
     write(csv,"url,username,password\nhttps://new.test/,fixture,valid\nhttps://bad.test/,fixture,\"unterminated");
     check(ImportPasswordCsv(csv,"import-one",control)->GetString("status")=="error"&&
           !PasswordVault("import-one").Contains("https://new.test","fixture"),"malformed-csv-is-rejected-before-writes");
