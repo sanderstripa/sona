@@ -625,7 +625,7 @@ bool BrowserClient::OnOpenURLFromTab(CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefFrame>, const CefString& url, WindowOpenDisposition disposition,
     bool) {
   CEF_REQUIRE_UI_THREAD();
-  if (role_ == BrowserRole::kShell || role_ == BrowserRole::kSettings) return false;
+  if (role_ == BrowserRole::kShell) return false;
   if (owner_->IsSettingsUrl(url)) { owner_->GuardSettingsNavigation(tab_id_, url); return true; }
   if (role_ == BrowserRole::kSettings) { owner_->GuardSettingsNavigation(tab_id_, url); return true; }
   switch (disposition) {
@@ -678,7 +678,7 @@ bool BrowserClient::DoClose(CefRefPtr<CefBrowser> browser) {
   // Chrome Views owns its window teardown and must keep its browser model
   // alive until Chromium finishes closing extension popups.
   if (browser->GetHost()->GetRuntimeStyle()==CEF_RUNTIME_STYLE_CHROME) return false;
-  if (role_ == BrowserRole::kShell) return false;
+  if (role_ == BrowserRole::kShell || role_ == BrowserRole::kSettings) return false;
   // Alloy's default close targets the top-level parent. A tab must destroy
   // only its own child HWND, allowing OnBeforeClose to update the tab manager.
   // The Soulu host stays alive until every browser and cookie flush completes.
