@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="ui/soulu-icon.png" width="150" alt="Soulu">
+  <img src="ui/sona-icon.png" width="150" alt="Sona">
 </p>
 
-<h1 align="center">Soulu</h1>
+<h1 align="center">Sona</h1>
 
 <p align="center">
   A Windows browser with its own interface, built-in VPN,
@@ -11,19 +11,21 @@
 
 ---
 
-## Soulu
+## Sona
 
-Soulu is an experimental browser for Windows built on Chromium and CEF.
+Sona is an experimental browser for Windows built on Chromium and CEF.
 
 The project grew from the idea of creating a browser where the interface does not take up half of the screen, settings are located where you expect to find them, and VPN is part of the browser itself without interfering with the Windows system proxy.
 
-Soulu is currently in the Beta stage and is actively evolving.
+The primary branch is [`cef-chromium-import`](https://github.com/sanderstripa/sona/tree/cef-chromium-import). It tracks the Windows CEF edition.
+
+The Gecko edition is archived in [`gecko-archive`](https://github.com/sanderstripa/sona/tree/gecko-archive). Its original branches and releases are preserved.
 
 ## What already works
 
 ### Custom interface
 
-Soulu uses a compact top bar where tabs, the address bar, and the main actions are combined into a single space.
+Sona uses a compact top bar where tabs, the address bar, and the main actions are combined into a single space.
 
 Two interface modes are available:
 
@@ -31,19 +33,19 @@ Two interface modes are available:
 
 **Compact** — the single-row toolbar.
 
-Light and dark themes are supported, as well as Windows-style frosted transparency.
+Light and dark themes are supported.
 
 ### Chromium + CEF
 
-The browser uses Chromium through Chromium Embedded Framework (CEF), while the native Soulu shell handles the window, interface, and Windows integration.
+The browser uses Chromium through Chromium Embedded Framework (CEF), while the native Sona shell handles the window, interface, and Windows integration.
 
-Soulu Beta 1.0.73 uses stable CEF 156.0.14 / Chromium 156.0.8078.48.
+Sona build 563 uses CEF 156.0.30 / Chromium 156.0.8078.96.
 See [CEF_UPGRADE.md](CEF_UPGRADE.md) for dependency provenance, runtime checks
 and the mandatory release gates.
 
 ### Profiles
 
-Soulu supports separate profiles with independent:
+Sona supports separate profiles with independent:
 
 - cookies;
 - cache;
@@ -54,15 +56,15 @@ An incognito mode is also available.
 
 ### Start page
 
-You can keep the new tab page blank or specify your own URL that Soulu will open on startup.
+You can keep the new tab page blank or specify your own URL that Sona will open on startup.
 
 ### VPN
 
-Soulu includes its own built-in VPN layer.
+Sona includes its own built-in VPN layer.
 
 Xray and Sudoku configurations are supported.
 
-The VPN works inside Soulu and does not change the Windows system proxy settings.
+The VPN works inside Sona and does not change the Windows system proxy settings.
 
 ### Address bar
 
@@ -78,13 +80,13 @@ See [HISTORY.md](HISTORY.md) for backend details and limitations.
 
 ### Native menus and local translation
 
-Browser menus share Soulu's native Onest menu surface, including web-page,
+Browser menus share Sona's native Onest menu surface, including web-page,
 link, image, media, editing, tab, bookmark and toolbar menus. It follows the
 browser theme, supports nested menus and keyboard navigation, and exposes
 labels and states to Windows accessibility services.
 
 Choose **Translate to Russian** in a page menu or use the translation button
-on a foreign-language page. Soulu Translate processes visible page text locally
+on a foreign-language page. Sona Translate processes visible page text locally
 in a Bergamot WASM worker. The first use downloads the required Mozilla model;
 verified models are cached for offline use after a browser restart. Supported
 routes are English → Russian, Russian → English and German → English, with
@@ -99,10 +101,10 @@ limitations and verification commands.
 
 ## Download
 
-The latest version is always available in the **Releases** section.
+Download the Windows x64 installer from [Latest](https://github.com/sanderstripa/sona/releases/latest).
 
 ---
 
-Soulu is under active development.
+Sona is under active development.
 
-Some Beta features may change as the project evolves.
+Some Preview features may change as the project evolves.
