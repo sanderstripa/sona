@@ -63,10 +63,10 @@ def main():
    check(reduced or any(250<=d<=400 for d in durations),'Tab overview opens with a smooth timed transition')
    time.sleep(.35);durations=animate('setOverview',False,'.tab-overview');report['overviewCloseDurations']=durations
    check(reduced or any(200<=d<=400 for d in durations),'Tab overview closes with a smooth timed transition')
-   durations=animate('setBookmarksSidebar',True,'.bookmarks-menu');report['bookmarksOpenDurations']=durations
-   check(reduced or any(250<=d<=400 for d in durations),'Bookmarks open with a smooth timed transition')
-   time.sleep(.3);durations=animate('setBookmarksSidebar',False,'.bookmarks-menu');report['bookmarksCloseDurations']=durations
-   check(reduced or any(250<=d<=400 for d in durations),'Bookmarks retain their exit animation')
+   durations=animate('setBookmarksSidebar',True,'body');report['bookmarksOpenDurations']=durations
+   check(reduced or 220 in durations,'Bookmarks open with a smooth timed transition')
+   time.sleep(.3);durations=animate('setBookmarksSidebar',False,'body');report['bookmarksCloseDurations']=durations
+   check(reduced or 220 in durations,'Bookmarks retain their exit animation')
    time.sleep(.35);call('openSettingsWindow');settings=connect('/ui/settings.html')
    o.wait(lambda:state()['settingsOverlayReady']);o.wait(lambda:state()['settingsOverlayProgress']==1)
    current=state();report['settingsDuration']=current['settingsOverlayDuration'];report['settingsTicks']=current['settingsOverlayTicks']

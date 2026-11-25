@@ -355,7 +355,8 @@
   async function sync(next) {
     state = next; await renderPrompt(next); const readerTop = chromeHeight();
     reader.style.top = `${readerTop}px`; reader.style.setProperty('--reader-top', `${readerTop}px`);
-    reader.style.left = state.bookmarksSidebarVisible && !document.documentElement.classList.contains('cef-runtime') ? '276px' : '0';
+    reader.style.left = document.documentElement.classList.contains('cef-runtime')
+      ? 'var(--sona-bookmarks-width, 0px)' : state.bookmarksSidebarVisible ? '276px' : '0';
     const nextKey = `${state.activeTabId}|${state.page?.url || 'about:blank'}|${state.page?.generation}`;
     if (key !== nextKey) {
       // Applying this site's blocker reloads its resources. Keep the anchored

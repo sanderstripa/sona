@@ -380,6 +380,16 @@ class BrowserWindow final : public CefBaseRefCounted {
   bool sidebar_motion_ = false;
 
   unsigned sidebar_motion_generation_ = 0;
+  void StartBookmarksMotion(bool open);
+  void AdvanceBookmarksMotion(unsigned generation);
+  double BookmarksWidth(double client_width) const;
+  unsigned bookmarks_motion_generation_ = 0;
+  bool bookmarks_motion_running_ = false;
+  int bookmarks_motion_duration_ = 0;
+  ULONGLONG bookmarks_motion_start_ = 0;
+  double bookmarks_motion_epoch_ = 0;
+  double bookmarks_motion_from_ = 0;
+  double bookmarks_motion_to_ = 0;
   bool overview_visible_ = false;
   bool popover_visible_ = false;
   bool reported_maximized_ = false;

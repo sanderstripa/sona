@@ -172,54 +172,49 @@ def main():
             time.sleep(.35)
             check(s.evaluate(shell,'getComputedStyle(document.querySelector("#sidebar")).visibility==="hidden"'),'Sidebar exits before OSR host shrinks')
             baseline=s.evaluate(page,'[innerWidth,innerHeight]')
-            s.evaluate(page,'window.bookmarkResizes=0;addEventListener("resize",()=>bookmarkResizes++)')
-            for bookmarks in [[],[{'id':1,'type':'url','title':'Motion test','url':'https://example.com/','parentId':0,'order':0}]]:
+            s.evaluate(page,'window.bookmarkMotionDocument=Symbol()')
+            for bookmarks in [[],[{'id':i,'type':'url','title':f'Motion test {i}','url':f'https://example.com/{i}','parentId':0,'order':i} for i in range(1,100)]]:
                 s.evaluate(shell,'browserShell.replaceBookmarks('+json.dumps(bookmarks)+')')
-                # Reverse both directions while the previous animation is still running.
+                geometry=s.evaluate(shell,'''(async()=>{
+                    const menu=document.querySelector(".sona-bookmarks-sidebar");
+                    const toolbar=document.querySelector(".classic-toolbar");
+                    const body=document.body;
+                    const width=()=>menu.getBoundingClientRect().width;
+                    const closeRight=()=>document.querySelector("#windowClose").getBoundingClientRect().right;
+                    const before=closeRight();
+                    await browserShell.setBookmarksSidebar(true);
+                    await new Promise(resolve=>setTimeout(resolve,350));
+                    const rect=menu.getBoundingClientRect(), bar=toolbar.getBoundingClientRect();
+                    const frames=body.getAnimations().flatMap(a=>a.effect.getKeyframes());
+                    return {width:width(),top:rect.top,bottom:rect.bottom,height:innerHeight,
+                        toolbar:bar.left,captionShift:closeRight()-before,
+                        expected:Math.min(276,Math.max(156,innerWidth-510),innerWidth*.35),
+                        thumb:!menu.querySelector(".bookmark-scroll-thumb").hidden,
+                        interactive:!menu.inert, settled:!frames.some(f=>Object.hasOwn(f,"--sona-bookmarks-width"))};
+                })()''')
+                check(abs(geometry['width']-geometry['expected'])<1 and geometry['top']==0 and
+                      geometry['bottom']==geometry['height'] and geometry['interactive'] and geometry['settled'],
+                      f'Bookmarks use full-height Gecko geometry (bookmarks: {len(bookmarks)})')
+                check(abs(geometry['toolbar']-geometry['width'])<1 and abs(geometry['captionShift'])<1,
+                      'Toolbar follows the dock and caption controls stay at the right edge')
+                viewport=s.evaluate(page,'[innerWidth,innerHeight]')
+                check(abs((baseline[0]-viewport[0])-geometry['width'])<=2 and viewport[1]==baseline[1],
+                      'Native viewport begins at the bookmarks edge')
+                check(geometry['thumb']==bool(bookmarks),'Gecko scrollbar appears only when the list overflows')
                 result=s.evaluate(shell,'''(async()=>{
                     const menu=document.querySelector(".sona-bookmarks-sidebar");
-                    const api=browserShell;
-                    const wait=async test=>{
-                        for(let i=0;i<120;i++){
-                            if(test())return;
-                            await new Promise(requestAnimationFrame);
-                        }
-                        throw Error("Bookmarks sidebar did not settle");
-                    };
-                    // Observe the state event in the renderer. Polling after
-                    // the native RPC round trip can miss a short exit fade.
-                    const toggle=async open=>{
-                        let unsubscribe;
-                        let timer;
-                        const observed=new Promise((resolve,reject)=>{
-                            timer=setTimeout(()=>reject(Error("Missing bookmarks state: "+open)),3000);
-                            unsubscribe=api.onState(state=>{
-                                if(state.bookmarksSidebarVisible!==open)return;
-                                const frames=menu.getAnimations().flatMap(animation=>animation.effect.getKeyframes());
-                                if(menu.inert!==!open||!frames.some(frame=>Object.hasOwn(frame,"opacity"))){
-                                    reject(Error("Missing bookmarks overlay fade: "+open));
-                                    return;
-                                }
-                                resolve();
-                            });
-                        });
-                        try{
-                            await Promise.all([observed,api.setBookmarksSidebar(open)]);
-                        }finally{
-                            clearTimeout(timer);
-                            unsubscribe();
-                        }
-                    };
                     for(let i=0;i<20;i++){
-                        await toggle(true);
-                        await toggle(false);
+                        await browserShell.setBookmarksSidebar(false);
+                        await browserShell.setBookmarksSidebar(true);
                     }
-                    await wait(()=>menu.hidden&&menu.getAnimations().length===0);
-                    return souluMotion.activeCount===0&&getComputedStyle(menu).display==="none";
+                    await browserShell.setBookmarksSidebar(false);
+                    await new Promise(resolve=>setTimeout(resolve,350));
+                    return menu.hidden&&menu.inert&&!document.body.hasAttribute("data-bookmarks-moving");
                 })()''')
                 check(result,f'Bookmarks sidebar cleans up after 20 reversals (bookmarks: {len(bookmarks)})')
                 check(s.evaluate(page,'[innerWidth,innerHeight]')==baseline and
-                      s.evaluate(page,'bookmarkResizes')==0,'Bookmarks overlay keeps page dimensions constant')
+                      s.evaluate(page,'typeof window.bookmarkMotionDocument==="symbol"'),
+                      'Closing restores the viewport without navigating or reloading')
             report['passed']=True
         finally:
             for ws in sockets:

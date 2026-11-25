@@ -17,9 +17,40 @@
   const menuSearch=el('input','navigation-search');menuSearch.placeholder='Поиск закладок';menuSearch.setAttribute('aria-label','Поиск закладок');menuSearch.oninput=()=>{pane='list';query=menuSearch.value;renderMenu();};
   const contents=el('div','bookmark-tree'), actions=el('div','bookmark-actions');
   const menuHeading=el('div','bookmarks-heading');menuHeading.append(el('strong','','Закладки'));
-  menu.append(menuHeading,menuSearch,contents,actions);
+  const scrollArea = el('div', 'bookmark-scroll-area');
+  const thumb = el('div', 'bookmark-scroll-thumb');
+  thumb.setAttribute('aria-hidden', 'true');
+  scrollArea.append(contents, thumb);
+  menu.append(menuHeading, menuSearch, scrollArea, actions);
+
+  function updateThumb() {
+    const height = contents.clientHeight;
+    const range = contents.scrollHeight - height;
+    thumb.hidden = range <= 0 || height === 0;
+    scrollArea.toggleAttribute('data-overflow', !thumb.hidden);
+    if (thumb.hidden) return;
+    const size = Math.min(height, Math.max(24, height * height / contents.scrollHeight));
+    thumb.style.height = size + 'px';
+    thumb.style.transform = 'translateY(' + (height - size) * contents.scrollTop / range + 'px)';
+  }
+  new ResizeObserver(updateThumb).observe(contents);
+  new MutationObserver(updateThumb).observe(contents, { childList: true, subtree: true });
+  contents.addEventListener('scroll', updateThumb, { passive: true });
+  let dragOffset = 0;
+  thumb.onpointerdown = event => {
+    if (event.button !== 0) return;
+    dragOffset = event.clientY - thumb.getBoundingClientRect().top;
+    thumb.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  };
+  thumb.onpointermove = event => {
+    if (!thumb.hasPointerCapture(event.pointerId)) return;
+    const travel = contents.clientHeight - thumb.offsetHeight;
+    if (travel > 0) contents.scrollTop = (event.clientY - scrollArea.getBoundingClientRect().top - dragOffset)
+      * (contents.scrollHeight - contents.clientHeight) / travel;
+  };
   if(gecko){
-    if(!cef)document.body.classList.add('sona-bookmarks-layout');
+    document.body.classList.add('sona-bookmarks-layout');
     menu.classList.add('sona-bookmarks-sidebar');
     contents.tabIndex=-1;
     actions.hidden=true;
@@ -266,39 +297,6 @@
     if(status&&!menu.inert)status.textContent=error.message;
     else alert(error.message);
   }
-  let cefSidebarMotion=null;
-  function setCefSidebar(open,animate){
-    if(open===!menu.inert){
-      if(!animate)cefSidebarMotion?.finish();
-      return;
-    }
-    const {tokens,reduced,transaction}=window.souluMotion;
-    const offscreen='translateX(-100%)';
-    const current=cefSidebarMotion&&getComputedStyle(menu);
-    const from={opacity:current?Number(current.opacity):Number(!open)};
-    const to={opacity:Number(open)};
-    if(!reduced){
-      from.transform=current?.transform||(open?offscreen:'translateX(0)');
-      to.transform=open?'translateX(0)':offscreen;
-    }
-    menu.inert=!open;
-    menu.setAttribute('aria-hidden',String(!open));
-    if(!open)closeActions(false);
-    cefSidebarMotion?.finish();
-    menu.hidden=!open&&!animate;
-    if(!animate)return;
-
-    const motion=transaction();
-    cefSidebarMotion=motion;
-    motion.cleanup(()=>{
-      menu.hidden=menu.inert;
-      cefSidebarMotion=null;
-    });
-    motion.animate(menu,[from,to],open?tokens.sidebarOpen:tokens.sidebarClose,
-      {easing:open?tokens.enter:tokens.exit});
-    motion.play();
-  }
-
   let sidebarAnimations=[], lastMotion=-1;
   function clearSidebarMotion(){
     const previous=sidebarAnimations;
@@ -308,6 +306,7 @@
   }
   function setSidebar(open,motion){
     if(motion&&motion.startAt<lastMotion)return;
+    if(!motion)clearSidebarMotion();
     const body=document.body;
     const moving=motion&&motion.startAt!==lastMotion;
     if(moving){
@@ -315,9 +314,13 @@
       clearSidebarMotion();
     }
     body.toggleAttribute('data-bookmarks-sidebar',open);
+    if(!open&&menu.contains(document.activeElement)){
+      [...document.querySelectorAll('#sidebarButton,#compactSidebarButton')]
+        .find(button=>button.getClientRects().length)?.focus({preventScroll:true});
+    }
     menu.inert=!open;
     menu.setAttribute('aria-hidden',String(!open));
-    menu.hidden=false;
+    menu.hidden=!open&&!sidebarAnimations.length&&!(moving&&motion.duration&&motion.open===open);
     if(!open)closeActions(false);
     if(!moving||!motion.duration||motion.open!==open)return;
     const to=getComputedStyle(body).getPropertyValue('--sona-bookmarks-width').trim();
@@ -327,7 +330,9 @@
     const animations=sidebarAnimations=[animation];
     body.setAttribute('data-bookmarks-moving','');
     function finish(){
-      if(sidebarAnimations===animations)clearSidebarMotion();
+      if(sidebarAnimations!==animations)return;
+      clearSidebarMotion();
+      menu.hidden=menu.inert;
     }
     animation.finished.then(finish,finish);
   }
@@ -425,8 +430,7 @@
     readingTab.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v13m0-13C9 4 5 4 3 5v13c3-1 6-1 9 1 3-2 6-2 9-1V5c-2-1-6-1-9 1Z"/></svg>';
     tabs.append(bookmarkTab,readingTab);
     menu.append(status,tabs);
-    if(cef)setCefSidebar(false,false);
-    else setSidebar(false);
+    setSidebar(false);
     if(!cef)api.onBookmarksMotion(motion=>{
       setSidebar(motion.open,motion);
       if(motion.open)renderMenu();
@@ -633,5 +637,5 @@ function renderOverview(){
     await animation.finished.catch(()=>{});
   }};
   api.onEditBookmark?.(async id=>{rows=await api.getBookmarks();const row=rows.find(r=>r.id===id);if(row)edit(row);});
-  const apply=s=>{const changed=profileKey()!==String(s.activeProfileId)+':'+String(s.incognito),entered=s.overviewVisible&&!state.overviewVisible;state=s;if(changed)closeEditor(false);if(changed){reading=[];++readingEpoch;clearSidebarMotion();lastMotion=-1;if(section==='reading'&&s.bookmarksSidebarVisible)refreshReading().catch(report);}rows=s.bookmarks||rows;if(cef)setCefSidebar(!!s.bookmarksSidebarVisible&&!s.fullscreen,!changed&&!s.fullscreen);else if(gecko)setSidebar(!!s.bookmarksSidebarVisible&&!s.fullscreen,s.bookmarksSidebarMotion);else menu.hidden=!s.bookmarksSidebarVisible;if(entered){closeEditor(false);closeMenu();}render();document.querySelectorAll('#sidebarButton,#compactSidebarButton').forEach(n=>{n.title=s.settings?.language==='en'?'Bookmarks':'Закладки';n.setAttribute('aria-label',n.title);n.setAttribute('aria-expanded',String(!!s.bookmarksSidebarVisible&&!s.fullscreen));});document.querySelectorAll('#favoritesButton,[data-favorites]').forEach(n=>{n.title=s.settings?.language==='en'?'Save bookmark':'Сохранить закладку';const saved=rows.some(r=>r.url===s.page?.url);n.classList.toggle('bookmark-saved',saved);n.setAttribute('aria-pressed',String(saved));});if(entered){search.value='';renderOverview();search.focus();const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;stopOverviewMotion();const animation=overview.animate([{opacity:0,transform:reduced?'none':'translateY(8px)'},{opacity:1,transform:'none'}],{duration:reduced?60:240,easing:'cubic-bezier(.22,1,.36,1)'});overviewMotion=animation;animation.finished.then(()=>{if(overviewMotion===animation)stopOverviewMotion();},()=>{});}};api.onState(apply);api.getState().then(apply);
+  const apply=s=>{const changed=profileKey()!==String(s.activeProfileId)+':'+String(s.incognito),entered=s.overviewVisible&&!state.overviewVisible;state=s;if(changed)closeEditor(false);if(changed){reading=[];++readingEpoch;clearSidebarMotion();lastMotion=-1;if(section==='reading'&&s.bookmarksSidebarVisible)refreshReading().catch(report);}rows=s.bookmarks||rows;if(gecko)setSidebar(!!s.bookmarksSidebarVisible&&!s.fullscreen,s.fullscreen?null:s.bookmarksSidebarMotion);else menu.hidden=!s.bookmarksSidebarVisible;if(entered){closeEditor(false);closeMenu();}render();document.querySelectorAll('#sidebarButton,#compactSidebarButton').forEach(n=>{n.title=s.settings?.language==='en'?'Bookmarks':'Закладки';n.setAttribute('aria-label',n.title);n.setAttribute('aria-expanded',String(!!s.bookmarksSidebarVisible&&!s.fullscreen));});document.querySelectorAll('#favoritesButton,[data-favorites]').forEach(n=>{n.title=s.settings?.language==='en'?'Save bookmark':'Сохранить закладку';const saved=rows.some(r=>r.url===s.page?.url);n.classList.toggle('bookmark-saved',saved);n.setAttribute('aria-pressed',String(saved));});if(entered){search.value='';renderOverview();search.focus();const reduced=matchMedia('(prefers-reduced-motion:reduce)').matches;stopOverviewMotion();const animation=overview.animate([{opacity:0,transform:reduced?'none':'translateY(8px)'},{opacity:1,transform:'none'}],{duration:reduced?60:240,easing:'cubic-bezier(.22,1,.36,1)'});overviewMotion=animation;animation.finished.then(()=>{if(overviewMotion===animation)stopOverviewMotion();},()=>{});}};api.onState(apply);api.getState().then(apply);
 })();

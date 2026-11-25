@@ -2191,7 +2191,7 @@ CefRefPtr<CefDictionaryValue> BrowserWindow::AdaptiveToolbarState() const {
 
 void BrowserWindow::UpdateShellFrameRate() {
   if(!shell_)return;
-  const bool animated=adaptive_running_||sidebar_motion_||GetTickCount64()<shell_motion_until_;
+  const bool animated=adaptive_running_||sidebar_motion_||bookmarks_motion_running_||GetTickCount64()<shell_motion_until_;
   const int rate=animated?motion::kShellMotionFrameRate:motion::kShellIdleFrameRate;
   if(rate==shell_frame_rate_)return;
   shell_frame_rate_=rate;
@@ -2282,6 +2282,67 @@ void BrowserWindow::AdvanceAdaptiveToolbar(unsigned generation) {
   }), 16);
 }
 
+namespace {
+double BookmarksDockWidth(double client_width) {
+  return std::min({276.0, std::max(156.0, client_width - 510), client_width * .35});
+}
+
+double UnixMilliseconds() {
+  return std::chrono::duration<double, std::milli>(
+      std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+constexpr int kBookmarksDurationMs = 220;
+constexpr int kBookmarksStartDelayMs = 50;
+}  // namespace
+
+double BrowserWindow::BookmarksWidth(double client_width) const {
+  if (Fullscreen()) return 0;
+  const bool open = sidebar_visible_ && bookmarks_sidebar_;
+  if (!bookmarks_motion_running_) return open ? BookmarksDockWidth(client_width) : 0;
+  const double elapsed = static_cast<double>(GetTickCount64()) - bookmarks_motion_start_;
+  const double progress = std::clamp(elapsed / bookmarks_motion_duration_, 0.0, 1.0);
+  const double eased = progress == 0 || progress == 1 ? progress : motion::EaseOut(static_cast<float>(progress));
+  return bookmarks_motion_from_ + (bookmarks_motion_to_ - bookmarks_motion_from_) * eased;
+}
+
+void BrowserWindow::StartBookmarksMotion(bool open) {
+  // Match Gecko's shared timeline. The lead time lets the OSR surface resize
+  // and the renderer start the same width animation before the page moves.
+  BOOL animate = TRUE;
+  SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animate, 0);
+  bookmarks_motion_duration_ = animate && !Fullscreen() ? kBookmarksDurationMs : 0;
+  const int delay = bookmarks_motion_duration_ ? kBookmarksStartDelayMs : 0;
+  bookmarks_motion_start_ = GetTickCount64() + delay;
+  bookmarks_motion_epoch_ = UnixMilliseconds() + delay;
+  RECT client{};
+  GetClientRect(hwnd_, &client);
+  const double scale = GetDpiForWindow(hwnd_) / 96.0;
+  bookmarks_motion_to_ = open ? BookmarksDockWidth(std::ceil(client.right / scale)) : 0;
+  bookmarks_motion_running_ = bookmarks_motion_duration_ > 0;
+  const unsigned generation = ++bookmarks_motion_generation_;
+  UpdateShellFrameRate();
+  if (!bookmarks_motion_running_) return;
+  CefRefPtr<BrowserWindow> self = this;
+  CefPostDelayedTask(TID_UI, new FunctionTask([self, generation] {
+    self->AdvanceBookmarksMotion(generation);
+  }), delay);
+}
+
+void BrowserWindow::AdvanceBookmarksMotion(unsigned generation) {
+  if (generation != bookmarks_motion_generation_ || closing_ || !hwnd_) return;
+  bookmarks_motion_running_ = GetTickCount64() < bookmarks_motion_start_ + bookmarks_motion_duration_;
+  Layout();
+  if (!bookmarks_motion_running_) {
+    UpdateShellFrameRate();
+    return;
+  }
+  CefRefPtr<BrowserWindow> self = this;
+  CefPostDelayedTask(TID_UI, new FunctionTask([self, generation] {
+    self->AdvanceBookmarksMotion(generation);
+  }), 16);
+}
+
 BrowserWindow::Geometry BrowserWindow::CurrentGeometry() const {
   RECT client = {}; GetClientRect(hwnd_, &client);
   const float scale = GetDpiForWindow(hwnd_) / 96.0f;
@@ -2303,13 +2364,14 @@ BrowserWindow::Geometry BrowserWindow::CurrentGeometry() const {
   // visible edge still follows g.toolbar and the document's native position.
   const bool animating = layout == "adaptive" && adaptive_running_ && !Fullscreen();
   const int shell_toolbar = animating ? px(geometry::adaptiveExpandedToolbar + bookmarks) : g.toolbar;
-  g.shell_height = (active&&active->reader_active) || !permission_requests_.empty() || popover_visible_ || overview_visible_ || sidebar_visible_ || sidebar_motion_ || g.panel > 0 ? g.height :
+  g.shell_height = (active&&active->reader_active) || !permission_requests_.empty() || popover_visible_ || overview_visible_ || sidebar_visible_ || sidebar_motion_ || bookmarks_motion_running_ || g.panel > 0 ? g.height :
       std::min(g.height, std::max(shell_toolbar, px(suggestions_height_)));
   const auto* page=const_cast<BrowserWindow*>(this)->ActiveTab();
   const int inset=EffectiveSettings()->GetBool("mattePanel") && page && !Fullscreen() ?
       g.toolbar-static_cast<int>(std::round(std::clamp(page->scroll_y*scale,0.0,double(g.toolbar)))) : g.toolbar;
-  g.content = CefRect(0, inset,
-      std::max(1, g.width - g.panel), std::max(1, g.height - inset));
+  const int left = static_cast<int>(std::round(BookmarksWidth(std::ceil(g.width / scale)) * scale));
+  g.content = CefRect(left, inset,
+      std::max(1, g.width - left - g.panel), std::max(1, g.height - inset));
   return g;
 }
 
@@ -2343,7 +2405,7 @@ void BrowserWindow::Layout() {
     // view mapped lets an asynchronous compositor screenshot finish reliably.
     const bool visible = belongs && !tab.closing && tab.id == shown_content_tab_id_;
     if(tab.chrome_host && !visible)tab.chrome_host->SetVisible(false,false);
-    if (adaptive_running_ && !visible &&
+    if ((adaptive_running_ || bookmarks_motion_running_) && !visible &&
         !(GetWindowLongPtrW(child, GWL_STYLE) & WS_VISIBLE)) continue;
     positions.push_back({child, HWND_BOTTOM, g.content.x, g.content.y, g.content.width, g.content.height,
         (adaptive_initialized_ ? SWP_NOACTIVATE : flags) | (visible ? SWP_SHOWWINDOW : SWP_HIDEWINDOW)});
@@ -2494,6 +2556,14 @@ CefRefPtr<CefDictionaryValue> BrowserWindow::State() const {
   state->SetInt("activeTabId", active_tab_id_);
   state->SetBool("sidebarVisible", sidebar_visible_);
   state->SetBool("bookmarksSidebarVisible", sidebar_visible_ && bookmarks_sidebar_);
+  if (bookmarks_motion_epoch_ > 0) {
+    auto animation = CefDictionaryValue::Create();
+    animation->SetBool("open", sidebar_visible_ && bookmarks_sidebar_);
+    animation->SetString("from", std::to_string(bookmarks_motion_from_) + "px");
+    animation->SetDouble("startAt", bookmarks_motion_epoch_);
+    animation->SetInt("duration", bookmarks_motion_duration_);
+    state->SetDictionary("bookmarksSidebarMotion", animation);
+  }
   state->SetBool("overviewVisible", overview_visible_);
   auto* active=const_cast<BrowserWindow*>(this)->ActiveTab();
   state->SetBool("readerActive",active&&active->reader_active);
@@ -3177,14 +3247,23 @@ void BrowserWindow::HandleBridge(const std::string& request,
   else if (action == "browser.bookmarks.sidebar" || action == "browser.toggleSidebar") {
     const bool tab_toggle = action == "browser.toggleSidebar";
     const bool show_bookmarks = !tab_toggle && payload && payload->GetType()==VTYPE_BOOL && payload->GetBool();
-    const bool closing_tabs = !tab_toggle && !show_bookmarks && sidebar_visible_ && !bookmarks_sidebar_;
+    const bool was_tabs = sidebar_visible_ && !bookmarks_sidebar_;
+    const bool was_bookmarks = sidebar_visible_ && bookmarks_sidebar_;
+    const bool closing_tabs = !tab_toggle && !show_bookmarks && was_tabs;
+    const auto g = CurrentGeometry();
+    const double from = BookmarksWidth(std::ceil(g.width / g.scale));
     if (tab_toggle) {
       sidebar_visible_ = bookmarks_sidebar_ || !sidebar_visible_; bookmarks_sidebar_ = false;
     } else {
       sidebar_visible_ = show_bookmarks;
       if (!closing_tabs) bookmarks_sidebar_ = true;
     }
-    { // Both bookmark and tab sidebars retain their host for the exit fade.
+    const bool open_bookmarks = sidebar_visible_ && bookmarks_sidebar_;
+    if (open_bookmarks != was_bookmarks) {
+      bookmarks_motion_from_ = from;
+      StartBookmarksMotion(open_bookmarks);
+    }
+    if (was_tabs != (sidebar_visible_ && !bookmarks_sidebar_)) {
       sidebar_motion_ = true; const auto generation = ++sidebar_motion_generation_;
       UpdateShellFrameRate();
       CefRefPtr<BrowserWindow> self = this;

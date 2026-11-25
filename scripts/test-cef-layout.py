@@ -147,9 +147,12 @@ def check(label, sidebar=False, screenshot=False):
         # same bounds, viewport and live modal-loop assertions below.
         host = ch['CefBrowserWindow'] if 'CefBrowserWindow' in ch else ch['Chrome_WidgetWin_1']
         content = child_rect(host)
-        left = round(300 * scale) if sidebar else 0
+        dip_width = evaluate(shell, 'innerWidth')
+        sidebar_width = min(276, max(156, dip_width - 510), dip_width * .35) if sidebar else 0
+        left = round(sidebar_width * scale)
         if sidebar:
-            assert evaluate(shell, 'document.querySelector(".bookmarks-menu").getBoundingClientRect().width') == 300
+            width_dom = evaluate(shell, 'document.querySelector(".bookmarks-menu").getBoundingClientRect().width')
+            assert abs(width_dom - sidebar_width) < 1
         layout = evaluate(shell, 'document.body.dataset.layout')
         base_height = 86 if layout == 'classic' else 58
         bar_visible = evaluate(shell, 'document.body.dataset.bookmarksBar === "true"')
