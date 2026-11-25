@@ -70,7 +70,7 @@ def main():
    time.sleep(.35);call('openSettingsWindow');settings=connect('/ui/settings.html')
    o.wait(lambda:state()['settingsOverlayReady']);o.wait(lambda:state()['settingsOverlayProgress']==1)
    current=state();report['settingsDuration']=current['settingsOverlayDuration'];report['settingsTicks']=current['settingsOverlayTicks']
-   check(current['settingsOverlayDuration'] in (90,320) and current['settingsOverlayTicks']>=2,'Settings opening reaches its final position through native animation ticks')
+   check(current['settingsOverlayDuration'] in (90,360) and current['settingsOverlayTicks']>=2,'Settings opening reaches its final position through native animation ticks')
    s.evaluate(settings,'souluSettingsRequestClose()');o.wait(lambda:not state()['settingsOverlayOpen'])
    check(True,'Settings closing completes without leaving an overlay')
    ImageGrab.grab().save(out/'final.png');report['passed']=True

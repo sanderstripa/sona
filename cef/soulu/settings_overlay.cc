@@ -10,6 +10,12 @@
 
 namespace soulu {
 namespace {
+constexpr int kSettingsSlideMs = 360;
+
+int ShadowRadius(HWND owner) {
+  return std::max(1, MulDiv(22, GetDpiForWindow(owner), 96));
+}
+
 ULONGLONG MotionNow() {
   return static_cast<ULONGLONG>(std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now().time_since_epoch()).count());
@@ -55,6 +61,13 @@ SettingsOverlay::SettingsOverlay(HWND owner, std::function<void()> closed,
     : owner_(owner), closed_(std::move(closed)), request_close_(std::move(request_close)) {}
 SettingsOverlay::~SettingsOverlay() {
   if (IsWindow(hwnd_)) DestroyWindow(hwnd_);
+  if (frame_dc_) {
+    if (frame_bitmap_) {
+      SelectObject(frame_dc_, frame_original_);
+      DeleteObject(frame_bitmap_);
+    }
+    DeleteDC(frame_dc_);
+  }
   if (backdrop_cache_) {
     SelectObject(backdrop_cache_, backdrop_original_);
     DeleteDC(backdrop_cache_);
@@ -144,8 +157,9 @@ void SettingsOverlay::PaintBackdrop(HDC dc, const RECT& dirty) {
 }
 
 void SettingsOverlay::PaintPanelShadow(HDC dc) {
-  if (!browser_ || state_ == State::Loading || panel_y_ + panel_height_ <= 0) return;
-  const int radius = std::max(1, MulDiv(22, GetDpiForWindow(owner_), 96));
+  if (!browser_ || state_ == State::Loading) return;
+  const int radius = ShadowRadius(owner_);
+  if (panel_y_ + panel_height_ + radius + radius / 4 <= 0) return;
   const int width = panel_width_ + 2 * radius;
   const int height = panel_height_ + 2 * radius;
   if (!shadow_ || shadow_panel_width_ != panel_width_ || shadow_radius_ != radius ||
@@ -188,6 +202,40 @@ void SettingsOverlay::PaintPanelShadow(HDC dc) {
   }
 }
 
+void SettingsOverlay::PaintFrame(HDC target, const RECT& dirty) {
+  if (!frame_dc_) frame_dc_ = CreateCompatibleDC(target);
+  if (frame_dc_ && (frame_width_ != width_ || frame_height_ != height_)) {
+    if (HBITMAP next = CreateCompatibleBitmap(target, width_, height_)) {
+      const HGDIOBJ previous = SelectObject(frame_dc_, next);
+      if (previous) {
+        if (frame_bitmap_) DeleteObject(frame_bitmap_);
+        else frame_original_ = previous;
+        frame_bitmap_ = next;
+        frame_width_ = width_;
+        frame_height_ = height_;
+      } else {
+        DeleteObject(next);
+      }
+    }
+  }
+  if (frame_width_ != width_ || frame_height_ != height_) {
+    PaintBackdrop(target, dirty);
+    PaintPanelShadow(target);
+    return;
+  }
+  // Present the blur and shadow together in the same update.
+  PaintBackdrop(frame_dc_, dirty);
+  if (const int saved = SaveDC(frame_dc_)) {
+    IntersectClipRect(frame_dc_, dirty.left, dirty.top, dirty.right, dirty.bottom);
+    PaintPanelShadow(frame_dc_);
+    RestoreDC(frame_dc_, saved);
+  } else {
+    PaintPanelShadow(frame_dc_);
+  }
+  BitBlt(target, dirty.left, dirty.top, dirty.right - dirty.left, dirty.bottom - dirty.top,
+         frame_dc_, dirty.left, dirty.top, SRCCOPY);
+}
+
 bool SettingsOverlay::Create() {
   CaptureBackground();
   WNDCLASSEXW wc = {sizeof(wc)};
@@ -199,15 +247,17 @@ bool SettingsOverlay::Create() {
       wc.lpszClassName, L"Sona Preview Settings", WS_POPUP | WS_CLIPCHILDREN,
       0, 0, 1, 1, owner_, nullptr, wc.hInstance, this);
   if (!hwnd_) return false;
-  // No independent Windows corners: the owner supplies the external silhouette.
+  // The owner supplies the external silhouette, including the desktop shadow.
   const DWORD corners = 1; // DWMWCP_DONOTROUND
   DwmSetWindowAttribute(hwnd_, 33, &corners, sizeof(corners));
+  const auto non_client = DWMNCRP_DISABLED;
+  DwmSetWindowAttribute(hwnd_, DWMWA_NCRENDERING_POLICY, &non_client, sizeof(non_client));
   const BOOL disable_dwm_transitions = TRUE;
   DwmSetWindowAttribute(hwnd_, DWMWA_TRANSITIONS_FORCEDISABLED,
                         &disable_dwm_transitions, sizeof(disable_dwm_transitions));
   BOOL animate = TRUE;
   if (SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animate, 0)) reduced_ = !animate;
-  duration_ = reduced_ ? motion::kReducedOverlayMs : motion::kStructuralMs;
+  duration_ = reduced_ ? motion::kReducedOverlayMs : kSettingsSlideMs;
   Layout();
   // The invisible panel starts above the clipping bounds. Showing the host now
   // blocks input immediately and allows Chromium to prepare its first frame.
@@ -296,40 +346,39 @@ void SettingsOverlay::ClipPanel() {
 }
 void SettingsOverlay::PlacePanel() {
   if (!browser_) return;
-  const float distance = reduced_ ? std::min(12, panel_height_) : panel_height_;
+  const int radius = ShadowRadius(owner_);
+  const int hidden_travel = panel_height_ + radius + radius / 4;
+  const float distance = reduced_ ? std::min(12, panel_height_) : hidden_travel;
   RECT old{}; GetWindowRect(browser_, &old);
   MapWindowPoints(nullptr, hwnd_, reinterpret_cast<POINT*>(&old), 2);
-  panel_y_ = state_ == State::Loading ? -panel_height_ :
+  panel_y_ = state_ == State::Loading ? -hidden_travel :
       static_cast<int>(std::round(-(1-progress_) * distance));
   const int x = (width_-panel_width_)/2;
   const bool visible = (GetWindowLongPtrW(browser_, GWL_STYLE) & WS_VISIBLE) != 0;
   const bool same_size = old.right-old.left == panel_width_ &&
                          old.bottom-old.top == panel_height_;
   if (visible && same_size && old.left == x && old.top == panel_y_) return;
-  UINT flags = SWP_NOACTIVATE | SWP_NOZORDER;
+  UINT flags = SWP_NOACTIVATE | SWP_NOZORDER | SWP_DEFERERASE;
   if (same_size) flags |= SWP_NOSIZE;
   if (!visible) flags |= SWP_SHOWWINDOW;
   SetWindowPos(browser_, nullptr, x, panel_y_, panel_width_, panel_height_, flags);
-  const int margin = MulDiv(30, GetDpiForWindow(owner_), 96);
-  // Windows damages the exposed child area. Repaint the shadow around it.
-  const LONG left = std::min(old.left, static_cast<LONG>(x));
-  const LONG right = std::max(old.right, static_cast<LONG>(x + panel_width_));
-  const LONG top = std::min(old.top, static_cast<LONG>(panel_y_)) - margin;
-  const LONG end = std::max(old.bottom, static_cast<LONG>(panel_y_ + panel_height_)) + margin;
-  const LONG bottom = std::min(old.bottom, static_cast<LONG>(panel_y_ + panel_height_)) - margin;
-  const RECT shadow_regions[] = {
-      {left - margin, top, left + margin, end},
-      {right - margin, top, right + margin, end},
-      {left + margin, bottom, right - margin, end},
+  const int margin = radius + radius / 4;
+  const RECT changed{
+      std::min(old.left, static_cast<LONG>(x)) - margin,
+      std::min(old.top, static_cast<LONG>(panel_y_)) - margin,
+      std::max(old.right, static_cast<LONG>(x + panel_width_)) + margin,
+      std::max(old.bottom, static_cast<LONG>(panel_y_ + panel_height_)) + margin,
   };
-  for (const RECT& region : shadow_regions) InvalidateRect(hwnd_, &region, FALSE);
+  // Commit the new shadow position before processing another window movement.
+  RedrawWindow(hwnd_, &changed, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_NOCHILDREN);
 }
 void SettingsOverlay::Tick() {
   if (state_ != State::Opening && state_ != State::Closing) return;
   const float fraction = std::min(1.f, static_cast<float>(MotionNow()-start_) / duration_);
+  const float eased = fraction * fraction * (3.f - 2.f * fraction);
   progress_ = state_ == State::Closing
-      ? close_start_ * motion::EaseOut(1.f - fraction)
-      : motion::EaseOut(fraction);
+      ? close_start_ * (1.f - eased)
+      : eased;
   ++ticks_;
   if (fraction < 1 || state_ != State::Closing) PlacePanel();
   if (fraction < 1) return;
@@ -356,10 +405,7 @@ LRESULT CALLBACK SettingsOverlay::Proc(HWND hwnd, UINT message, WPARAM wp, LPARA
     case WM_PAINT: {
       PAINTSTRUCT paint{};
       HDC dc = BeginPaint(hwnd, &paint);
-      if (!IsRectEmpty(&paint.rcPaint)) {
-        self->PaintBackdrop(dc, paint.rcPaint);
-        self->PaintPanelShadow(dc);
-      }
+      if (!IsRectEmpty(&paint.rcPaint)) self->PaintFrame(dc, paint.rcPaint);
       EndPaint(hwnd, &paint);
       return 0;
     }
