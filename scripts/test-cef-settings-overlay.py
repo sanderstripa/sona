@@ -128,13 +128,22 @@ def main():
             nonlocal settings
             before = state(); start = time.monotonic(); call('openSettingsWindow')
             settings = socket('/ui/settings.html')
+            overlay = wait(lambda:windows(process.pid, 'SouluSettingsOverlay'))[0]
+            panel = wait(lambda:u.GetWindow(overlay,5))
+            # CEF may finish loading before CDP connects. In every phase its
+            # interactive window must stay inside the fixed overlay viewport.
+            def opening_panel():
+                bounds, child = rect(overlay), rect(panel)
+                assert bounds[0] <= child[0] < child[2] <= bounds[2]
+                assert child[1] == bounds[1] and child[3] <= bounds[3]
+                return state()['settingsOverlayReady']
             wait(lambda:edit("document.body?.classList.contains('ready')"))
-            wait(lambda:state()['settingsOverlayReady'])
+            wait(opening_panel)
             timings.append((time.monotonic()-start)*1000)
             after = state()
             check(after['activeTabId'] == before['activeTabId'] and [{k:t[k] for k in ('id','url','pinned','incognito')} for t in after['tabs']] == [{k:t[k] for k in ('id','url','pinned','incognito')} for t in before['tabs']],
                   'Settings leaves tab strip, selected tab and URLs unchanged')
-            return wait(lambda:windows(process.pid, 'SouluSettingsOverlay'))[0]
+            return overlay
         def close_settings():
             edit('souluSettingsRequestClose()')
             wait(lambda:not state()['settingsOverlayOpen'])
@@ -249,6 +258,7 @@ def main():
                 time.sleep(.005)
             check(transition is not None,'A native close animation frame is observable')
             check(transition['settingsOverlayOpen'] and 0<transition['settingsOverlayProgress']<1,'Close transition retains the overlay and blocker while blur fades')
+            check(not u.IsWindowVisible(panel), 'The panel HWND is hidden while its pixels slide out inside the overlay')
             wait(lambda:not state()['settingsOverlayOpen']);settings.close()
             check(focus(main_window)==previous_focus or bool(u.IsChild(main_window,focus(main_window))),'Closing restores a valid previous browser focus target')
             after=s.evaluate(content,"({url:location.href,scroll:scrollY,marker:sessionStorage.marker,loads,media:v.currentTime,paused:v.paused})")

@@ -181,7 +181,8 @@ bool BrowserWindow::HandleSettingsBridge(int id,const std::string& request,
       if(extensions_panel_)extensions_panel_->Place(RECT{});
       ReplyEmpty(callback);return true;
     }
-    RECT client={};GetClientRect(settings_browser_->GetHost()->GetWindowHandle(),&client);
+    const HWND panel = settings_overlay_->surface()->hwnd();
+    RECT client={};GetClientRect(panel,&client);
     const double scale=GetDpiForWindow(settings_overlay_->hwnd())/96.0;
     auto number=[&](const char* key){return payload->GetType(key)==VTYPE_INT?double(payload->GetInt(key)):payload->GetType(key)==VTYPE_DOUBLE?payload->GetDouble(key):-1.0;};
     const double dx=number("x"),dy=number("y"),dw=number("width"),dh=number("height");
@@ -190,7 +191,7 @@ bool BrowserWindow::HandleSettingsBridge(int id,const std::string& request,
     const int x=static_cast<int>(dx*scale),y=static_cast<int>(dy*scale);
     const int w=static_cast<int>(dw*scale),h=static_cast<int>(dh*scale);
     if(x<0||y<0||w<1||h<1||x+w>client.right+1||y+h>client.bottom+1){callback->Failure(400,"Invalid extension panel bounds");return true;}
-    if(!extensions_panel_)extensions_panel_=CreateExtensionsPanel(settings_browser_->GetHost()->GetWindowHandle(),ContextForNewTab(false));
+    if(!extensions_panel_)extensions_panel_=CreateExtensionsPanel(panel,ContextForNewTab(false));
     if(!extensions_panel_){callback->Failure(500,"Не удалось открыть менеджер расширений Chromium.");return true;}
     extensions_panel_->Place(RECT{x,y,x+w,y+h});
     const std::string page=payload->GetString("page");

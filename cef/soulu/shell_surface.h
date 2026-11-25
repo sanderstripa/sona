@@ -1,13 +1,14 @@
 #pragma once
 #include <windows.h>
+#include <functional>
 #include <vector>
 #include "include/cef_render_handler.h"
 #include "include/cef_browser.h"
 namespace soulu {
-// Only browser chrome uses OSR. Web content keeps the accelerated native view.
+// Browser chrome uses OSR. Web content keeps the accelerated native view.
 class ShellSurface final : public CefRenderHandler {
  public:
-  explicit ShellSurface(HWND parent);
+  explicit ShellSurface(HWND parent, std::function<void()> composed_frame = {});
   void Attach(CefRefPtr<CefBrowser> browser);
   void Detach();
   // Layout owns HWND geometry. Prepare the OSR viewport before positioning
@@ -18,6 +19,9 @@ class ShellSurface final : public CefRenderHandler {
   static constexpr UINT kPointerDown = WM_APP + 74;
   void Focus();
   void Cursor(HCURSOR cursor);
+  bool HasFrame() const;
+  void DrawFrame(HDC target, int x, int y, int width, int height) const;
+  void ShowComposedSurface(bool show);
   void SetMaximizeRect(CefRect rect) { maximize_rect_ = rect; }
   bool MaximizeHit(POINT client) const;
   RECT MaximizeBounds() const;
@@ -48,6 +52,7 @@ class ShellSurface final : public CefRenderHandler {
   HWND hwnd_ = nullptr;
   HCURSOR cursor_ = nullptr;
   CefRefPtr<CefBrowser> browser_;
+  std::function<void()> composed_frame_;
   HDC memory_ = nullptr;
   HBITMAP bitmap_ = nullptr;
   HGDIOBJ original_ = nullptr;

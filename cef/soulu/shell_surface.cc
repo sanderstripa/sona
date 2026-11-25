@@ -5,7 +5,8 @@
 #include <cmath>
 #include <cstring>
 namespace soulu {
-ShellSurface::ShellSurface(HWND parent) : parent_(parent) {
+ShellSurface::ShellSurface(HWND parent, std::function<void()> composed_frame)
+    : parent_(parent), composed_frame_(std::move(composed_frame)) {
   scale_ = GetDpiForWindow(parent) / 96.0f;
   if (scale_ <= 0) scale_ = 1;
   WNDCLASSEXW wc = {sizeof(wc)};
@@ -13,8 +14,10 @@ ShellSurface::ShellSurface(HWND parent) : parent_(parent) {
   wc.lpszClassName = L"SouluAlphaToolbar"; wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
   wc.style = CS_DBLCLKS;
   RegisterClassExW(&wc);
-  hwnd_ = CreateWindowExW(WS_EX_LAYERED, wc.lpszClassName, L"Soulu toolbar",
-      WS_CHILD | WS_VISIBLE | WS_TABSTOP, 0, 0, 1, geometry::mainToolbar, parent, nullptr, wc.hInstance, this);
+  const DWORD style = WS_CHILD | WS_TABSTOP | (composed_frame_ ? 0 : WS_VISIBLE);
+  hwnd_ = CreateWindowExW(WS_EX_LAYERED, wc.lpszClassName,
+      composed_frame_ ? L"Sona Settings panel" : L"Soulu toolbar",
+      style, 0, 0, 1, geometry::mainToolbar, parent, nullptr, wc.hInstance, this);
 }
 ShellSurface::~ShellSurface() {
   if (IsWindow(hwnd_)) DestroyWindow(hwnd_);
@@ -29,6 +32,25 @@ void ShellSurface::ReleaseBitmap() {
 }
 void ShellSurface::Attach(CefRefPtr<CefBrowser> browser) { browser_ = browser; browser_->GetHost()->WasResized(); }
 void ShellSurface::Detach() { browser_ = nullptr; }
+bool ShellSurface::HasFrame() const {
+  return pixels_ && bitmap_width_ == width_ && bitmap_height_ == height_;
+}
+void ShellSurface::DrawFrame(HDC target, int x, int y, int width, int height) const {
+  if (!pixels_) return;
+  if (width == bitmap_width_ && height == bitmap_height_) {
+    BitBlt(target, x, y, width, height, memory_, 0, 0, SRCCOPY);
+  } else {
+    StretchBlt(target, x, y, width, height, memory_, 0, 0, bitmap_width_, bitmap_height_, SRCCOPY);
+  }
+}
+void ShellSurface::ShowComposedSurface(bool show) {
+  if (show) {
+    Present();
+    ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
+  } else {
+    ShowWindow(hwnd_, SW_HIDE);
+  }
+}
 void ShellSurface::PrepareResize(int width, int height, float scale) {
   screen_pending_ |= scale != scale_;
   resize_pending_ |= width != width_ || height != height_ || screen_pending_;
@@ -193,11 +215,12 @@ void ShellSurface::OnPaint(CefRefPtr<CefBrowser>, PaintElementType type, const R
     popup_background_.assign(data, data + static_cast<size_t>(width) * height * 4);
     CompositePopup();
   }
+  if (composed_frame_) composed_frame_();
   if (full || paint_error_) Present();
   else if (!IsRectEmpty(&damage)) Present(&damage);
 }
 void ShellSurface::Present(const RECT* dirty) {
-  if (!pixels_ || bitmap_width_ != width_ || bitmap_height_ != height_) return;
+  if (!HasFrame()) return;
   const int width = bitmap_width_, height = bitmap_height_;
   SIZE size = {width, height}; POINT source = {0, 0};
   BLENDFUNCTION blend = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
@@ -210,6 +233,7 @@ void ShellSurface::Present(const RECT* dirty) {
     painted = UpdateLayeredWindowIndirect(hwnd_, &update);
   }
   paint_error_ = painted ? 0 : static_cast<int>(GetLastError());
+  if (composed_frame_) return;
   bool visible_pixels=false;
   if(!first_frame_){const auto* data=static_cast<const unsigned char*>(pixels_);for(size_t i=3;i<static_cast<size_t>(width)*height*4;i+=4)if(data[i]){visible_pixels=true;break;}}
   if (!paint_error_ && !first_frame_ && visible_pixels) {

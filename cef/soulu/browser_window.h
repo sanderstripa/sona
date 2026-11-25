@@ -95,6 +95,9 @@ class BrowserWindow final : public CefBaseRefCounted {
   bool HandleTranslationBridge(const std::string& action,CefRefPtr<CefValue> payload,
       CefRefPtr<CefMessageRouterBrowserSide::Callback> callback);
   CefRefPtr<ShellSurface> surface() const { return surface_; }
+  CefRefPtr<ShellSurface> settings_surface() const {
+    return settings_overlay_ ? settings_overlay_->surface() : nullptr;
+  }
   void ApplyContentTheme();
   void PageScroll(int tab_id,double y);
   void HandleVideoRequest(int,CefRefPtr<CefFrame>,int,const std::string&);

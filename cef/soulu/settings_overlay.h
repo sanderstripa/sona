@@ -1,7 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <functional>
-#include <string>
+#include "examples/soulu/shell_surface.h"
 
 namespace soulu {
 class SettingsOverlay final {
@@ -10,7 +10,8 @@ class SettingsOverlay final {
                            std::function<void()> request_close);
   ~SettingsOverlay();
   bool Create();
-  void Attach(HWND browser);
+  void Attach(CefRefPtr<CefBrowser> browser);
+  CefRefPtr<ShellSurface> surface() const { return surface_; }
   void Open();
   void Close();
   void Layout();
@@ -26,13 +27,18 @@ class SettingsOverlay final {
   enum class State { Loading, Opening, Open, Closing, Closed };
   static LRESULT CALLBACK Proc(HWND, UINT, WPARAM, LPARAM);
   void Tick();
+  void StartSlide();
+  void OnPanelFrame();
   void PlacePanel();
-  void ClipPanel();
+  HRGN PanelRegion(int x, int y) const;
   void CaptureBackground();
   void PaintPanelShadow(HDC dc);
   void PaintBackdrop(HDC dc, const RECT& dirty);
   void PaintFrame(HDC target, const RECT& dirty);
-  HBITMAP backdrop_ = nullptr, shadow_ = nullptr;
+  HBITMAP backdrop_ = nullptr, sharp_bitmap_ = nullptr, shadow_ = nullptr;
+  HDC sharp_dc_ = nullptr;
+  HGDIOBJ sharp_original_ = nullptr;
+  int sharp_width_ = 0, sharp_height_ = 0;
   HDC backdrop_cache_ = nullptr;
   HBITMAP backdrop_frame_ = nullptr;
   HGDIOBJ backdrop_original_ = nullptr;
@@ -45,14 +51,16 @@ class SettingsOverlay final {
   int clip_width_ = 0, clip_height_ = 0, clip_corner_ = 0;
   int panel_y_ = 0, shadow_panel_width_ = 0, shadow_panel_height_ = 0, shadow_radius_ = 0;
   int backdrop_width_ = 0, backdrop_height_ = 0;
-  HWND owner_ = nullptr, hwnd_ = nullptr, browser_ = nullptr;
+  HWND owner_ = nullptr, hwnd_ = nullptr;
+  CefRefPtr<ShellSurface> surface_;
+  CefRefPtr<CefBrowser> browser_;
   std::function<void()> closed_, request_close_;
   State state_ = State::Loading;
   ULONGLONG start_ = 0;
   float progress_ = 0, close_start_ = 1;
   int width_ = 1, height_ = 1, panel_width_ = 1, panel_height_ = 1;
   int duration_ = 260, ticks_ = 0;
-  bool reduced_ = false;
+  bool reduced_ = false, waiting_for_frame_ = false;
   int requested_height_ = 800;
 };
 }

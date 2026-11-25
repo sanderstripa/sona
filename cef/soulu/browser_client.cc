@@ -544,11 +544,15 @@ bool BrowserClient::OnContextMenuCommand(CefRefPtr<CefBrowser> browser,
 }
 
 CefRefPtr<CefRenderHandler> BrowserClient::GetRenderHandler() {
+  if (role_ == BrowserRole::kSettings) return owner_->settings_surface();
   return role_ == BrowserRole::kShell ? owner_->surface() : nullptr;
 }
 bool BrowserClient::OnCursorChange(CefRefPtr<CefBrowser>, CefCursorHandle cursor, cef_cursor_type_t type, const CefCursorInfo&) {
-  if (role_ != BrowserRole::kShell || !owner_->surface()) return false;
-  owner_->surface()->Cursor(type==CT_NONE?nullptr:cursor); return true;
+  auto surface = role_ == BrowserRole::kSettings ? owner_->settings_surface() :
+                 role_ == BrowserRole::kShell ? owner_->surface() : nullptr;
+  if (!surface) return false;
+  surface->Cursor(type == CT_NONE ? nullptr : cursor);
+  return true;
 }
 
 bool BrowserClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
@@ -621,7 +625,7 @@ bool BrowserClient::OnOpenURLFromTab(CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefFrame>, const CefString& url, WindowOpenDisposition disposition,
     bool) {
   CEF_REQUIRE_UI_THREAD();
-  if (role_ == BrowserRole::kShell) return false;
+  if (role_ == BrowserRole::kShell || role_ == BrowserRole::kSettings) return false;
   if (owner_->IsSettingsUrl(url)) { owner_->GuardSettingsNavigation(tab_id_, url); return true; }
   if (role_ == BrowserRole::kSettings) { owner_->GuardSettingsNavigation(tab_id_, url); return true; }
   switch (disposition) {

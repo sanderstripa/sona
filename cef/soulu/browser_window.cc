@@ -1062,10 +1062,10 @@ void BrowserWindow::OpenSettingsOverlay() {
   }
   BlockSettingsBackground(true);
   CefWindowInfo info;
-  info.SetAsChild(settings_overlay_->hwnd(), CefRect(0, -800, 1020, 800));
+  info.SetAsWindowless(settings_overlay_->surface()->hwnd());
   info.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
-  info.style &= ~WS_VISIBLE;
   CefBrowserSettings config;
+  config.windowless_frame_rate = motion::kShellMotionFrameRate;
   const std::string theme = EffectiveSettings()->GetString("theme");
   const bool dark = theme == "dark" || (theme == "system" && IsWindowsDarkMode());
   config.background_color = dark ? CefColorSetARGB(255,20,27,39) : CefColorSetARGB(255,255,255,255);
@@ -1083,13 +1083,11 @@ void BrowserWindow::AttachSettings(CefRefPtr<CefBrowser> browser) {
   settings_browser_pending_ = false;
   settings_browser_ = browser;
   if (!settings_overlay_ || closing_) { browser->GetHost()->CloseBrowser(true); return; }
-  settings_overlay_->Attach(browser->GetHost()->GetWindowHandle());
+  settings_overlay_->Attach(browser);
   if (settings_overlay_->closing()) browser->GetHost()->CloseBrowser(true);
 }
 void BrowserWindow::FocusSettings() {
   if (settings_overlay_) settings_overlay_->Focus();
-  if (settings_browser_ && settings_overlay_ && !settings_overlay_->closing())
-    settings_browser_->GetHost()->SetFocus(true);
 }
 void BrowserWindow::BlockSettingsBackground(bool block) {
   if (block) {
