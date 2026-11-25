@@ -618,6 +618,8 @@ jobs:
 
       - name: Package and verify Windows x64 CEF preview
         if: github.ref == 'refs/heads/cef-chromium-import' && !inputs.native_only && (github.event_name == 'push' || inputs.publish)
+        env:
+          RELEASE_NAME: Sona-${{ github.run_number }}-Preview-Release-x64
         shell: pwsh
         working-directory: browser
         run: |
@@ -626,7 +628,7 @@ jobs:
           New-Item -ItemType Directory -Force $out | Out-Null
           $files = Get-ChildItem -LiteralPath $env:build_dir |
             Where-Object { $_.Extension -notin @('.lib','.pdb','.exp','.ilk') }
-          $zip = Join-Path $out "Sona-Preview-$version-CEF-x64.zip"
+          $zip = Join-Path $out "${env:RELEASE_NAME}.zip"
           Compress-Archive -LiteralPath $files.FullName -DestinationPath $zip -CompressionLevel Fastest
           $expanded = Join-Path $env:RUNNER_TEMP "sona-cef-$env:GITHUB_RUN_ID"
           Expand-Archive -LiteralPath $zip -DestinationPath $expanded
@@ -637,7 +639,7 @@ jobs:
           Move-Item -LiteralPath (Join-Path $expanded 'Soulu.exe') -Destination (Join-Path $expanded 'Sona Preview.exe')
           Remove-Item -LiteralPath $zip
           Compress-Archive -Path "$expanded/*" -DestinationPath $zip -CompressionLevel Fastest
-          $setup = Join-Path $out "Sona-Preview-$version-CEF-x64-Setup.exe"
+          $setup = Join-Path $out "${env:RELEASE_NAME}.exe"
           $env:CONNECT_INSTALLER_CI_TEST = "1"
           & ./scripts/build-connect-installer.ps1 -PayloadPath $zip -Version $version -OutFile $setup
           $manifest = Get-Content -LiteralPath "$setup.build.json" -Raw | ConvertFrom-Json
@@ -645,28 +647,37 @@ jobs:
               $manifest.sha256 -ne (Get-FileHash -LiteralPath $setup).Hash.ToLowerInvariant()) {
             throw 'Installer or payload failed SHA-256 verification'
           }
-          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
           $installerHash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
-          @("$hash *$(Split-Path -Leaf $zip)", "$installerHash *$(Split-Path -Leaf $setup)") |
+          "$installerHash *$(Split-Path -Leaf $setup)" |
             Set-Content (Join-Path $out 'SHA256SUMS.txt') -Encoding ascii
           @"
-          Sona Preview $version (CEF), Windows x64. CEF 156.0.30 / Chromium 156.0.8078.96.
+          Sona CEF, Windows x64. Номер сборки: $env:GITHUB_RUN_NUMBER. Версия приложения: $version. CEF 156.0.30 / Chromium 156.0.8078.96.
           Windows-сборка из ветки cef-chromium-import.
           Исходный коммит: $env:GITHUB_SHA
           "@ | Set-Content (Join-Path $PWD 'artifacts/cef-preview-release.md') -Encoding utf8
 
-      - name: Publish Sona CEF Windows x64 prerelease
+      - name: Upload CEF packaging and verification artifacts
+        if: github.ref == 'refs/heads/cef-chromium-import' && !inputs.native_only && (github.event_name == 'push' || inputs.publish)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sona-${{ github.run_number }}-Preview-Release-x64
+          path: browser/artifacts/preview/
+          if-no-files-found: error
+
+      - name: Publish Sona CEF Windows x64 release
         if: github.ref == 'refs/heads/cef-chromium-import' && !inputs.native_only && (github.event_name == 'push' || inputs.publish)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: cef-preview-${{ env.BETA_VERSION }}-${{ github.run_id }}
-          name: Sona Preview ${{ env.BETA_VERSION }} (CEF)
+          tag_name: sona-${{ github.run_number }}
+          name: Sona-${{ github.run_number }}-Preview-Release-x64
           target_commitish: ${{ github.sha }}
-          prerelease: true
-          make_latest: false
+          prerelease: false
+          make_latest: true
           fail_on_unmatched_files: true
           body_path: browser/artifacts/cef-preview-release.md
-          files: browser/artifacts/preview/*
+          files: |
+            browser/artifacts/preview/Sona-${{ github.run_number }}-Preview-Release-x64.exe
+            browser/artifacts/preview/SHA256SUMS.txt
 
       - name: Test toolbar geometry, caption feedback, popup bounds and native drag
         if: ${{ (success() || (!cancelled() && github.ref == 'refs/heads/cef-preview-80' && steps.native_build.outcome == 'success')) && env.AUTOMATED_RELEASE != 'true' }}
