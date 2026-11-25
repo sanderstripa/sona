@@ -1,3 +1,10 @@
+@font-face {
+  font-family: Inter;
+  src: url("fonts/Inter.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: block;
+}
+
 /* The reserved column follows the native content margin. Caption controls keep
    their existing right edge while the toolbar gets the remaining width. */
 @property --sona-bookmarks-width {
@@ -52,11 +59,11 @@ body .sona-bookmarks-sidebar {
   border: 0;
   box-shadow: inset -1px 0 var(--line);
   color: var(--text);
+  font-family: Inter, "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
   line-height: 1.35;
   font-size: 13px;
 }
 body .sona-bookmarks-sidebar[hidden] { display: none; }
-body.sona-bookmarks-layout .bookmarks-bar { left: var(--sona-bookmarks-width); }
 .sona-bookmarks-sidebar[inert] { pointer-events: none; }
 .sona-bookmarks-sidebar > .bookmark-actions,
 .sona-bookmarks-sidebar .bookmark-action-menu[hidden],
@@ -237,3 +244,5 @@ body[data-desktop-glass] .sona-bookmarks-sidebar {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
+.sona-bookmarks-sidebar :is(button,input,strong) { font-family: inherit; }

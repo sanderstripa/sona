@@ -2287,6 +2287,11 @@ double BookmarksDockWidth(double client_width) {
   return std::min({276.0, std::max(156.0, client_width - 510), client_width * .35});
 }
 
+double MonotonicMilliseconds() {
+  return std::chrono::duration<double, std::milli>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
 double UnixMilliseconds() {
   return std::chrono::duration<double, std::milli>(
       std::chrono::system_clock::now().time_since_epoch()).count();
@@ -2300,7 +2305,7 @@ double BrowserWindow::BookmarksWidth(double client_width) const {
   if (Fullscreen()) return 0;
   const bool open = sidebar_visible_ && bookmarks_sidebar_;
   if (!bookmarks_motion_running_) return open ? BookmarksDockWidth(client_width) : 0;
-  const double elapsed = static_cast<double>(GetTickCount64()) - bookmarks_motion_start_;
+  const double elapsed = MonotonicMilliseconds() - bookmarks_motion_start_;
   const double progress = std::clamp(elapsed / bookmarks_motion_duration_, 0.0, 1.0);
   const double eased = progress == 0 || progress == 1 ? progress : motion::EaseOut(static_cast<float>(progress));
   return bookmarks_motion_from_ + (bookmarks_motion_to_ - bookmarks_motion_from_) * eased;
@@ -2313,7 +2318,7 @@ void BrowserWindow::StartBookmarksMotion(bool open) {
   SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animate, 0);
   bookmarks_motion_duration_ = animate && !Fullscreen() ? kBookmarksDurationMs : 0;
   const int delay = bookmarks_motion_duration_ ? kBookmarksStartDelayMs : 0;
-  bookmarks_motion_start_ = GetTickCount64() + delay;
+  bookmarks_motion_start_ = MonotonicMilliseconds() + delay;
   bookmarks_motion_epoch_ = UnixMilliseconds() + delay;
   RECT client{};
   GetClientRect(hwnd_, &client);
@@ -2331,7 +2336,7 @@ void BrowserWindow::StartBookmarksMotion(bool open) {
 
 void BrowserWindow::AdvanceBookmarksMotion(unsigned generation) {
   if (generation != bookmarks_motion_generation_ || closing_ || !hwnd_) return;
-  bookmarks_motion_running_ = GetTickCount64() < bookmarks_motion_start_ + bookmarks_motion_duration_;
+  bookmarks_motion_running_ = MonotonicMilliseconds() < bookmarks_motion_start_ + bookmarks_motion_duration_;
   Layout();
   if (!bookmarks_motion_running_) {
     UpdateShellFrameRate();

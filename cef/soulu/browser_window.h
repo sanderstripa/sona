@@ -386,7 +386,7 @@ class BrowserWindow final : public CefBaseRefCounted {
   unsigned bookmarks_motion_generation_ = 0;
   bool bookmarks_motion_running_ = false;
   int bookmarks_motion_duration_ = 0;
-  ULONGLONG bookmarks_motion_start_ = 0;
+  double bookmarks_motion_start_ = 0;
   double bookmarks_motion_epoch_ = 0;
   double bookmarks_motion_from_ = 0;
   double bookmarks_motion_to_ = 0;
