@@ -172,7 +172,7 @@ def main():
             time.sleep(.35)
             check(s.evaluate(shell,'getComputedStyle(document.querySelector("#sidebar")).visibility==="hidden"'),'Sidebar exits before OSR host shrinks')
             baseline=s.evaluate(page,'[innerWidth,innerHeight]')
-            s.evaluate(page,'window.bookmarkMotionDocument=Symbol()')
+            s.evaluate(page,'void (window.bookmarkMotionDocument=Symbol())')
             for bookmarks in [[],[{'id':i,'type':'url','title':f'Motion test {i}','url':f'https://example.com/{i}','parentId':0,'order':i} for i in range(1,100)]]:
                 s.evaluate(shell,'browserShell.replaceBookmarks('+json.dumps(bookmarks)+')')
                 geometry=s.evaluate(shell,'''(async()=>{
